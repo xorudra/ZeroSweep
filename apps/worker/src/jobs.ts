@@ -1,8 +1,10 @@
+import type { StageJobData } from "./executors/stage-executor";
+
 /**
- * Job contracts consumed by the worker. In this phase the ONLY job is a
- * harmless placeholder that proves the queue pipeline end-to-end:
- * receive job -> log its id -> wait briefly -> complete.
- * No security tool is executed here, and there is no generic "run command" job.
+ * Job contracts consumed by the worker. Payloads carry IDs/references ONLY
+ * (Prompt 4 §14): workers load trusted state from the database. There is no
+ * generic "run command" job and no payload may contain credentials, tokens or
+ * scanner output.
  */
 export interface PlaceholderJobData {
   kind: "PLACEHOLDER_TEST";
@@ -10,9 +12,19 @@ export interface PlaceholderJobData {
   note?: string;
 }
 
+/** Scan-level orchestration job: drives the persisted plan's DAG (DagRunner). */
+export interface ScanOrchestrationJobData {
+  kind: "SCAN_ORCHESTRATION";
+  scanId: string;
+  workspaceId: string;
+}
+
+/** @deprecated Phase 2 placeholder shape, kept so old queued jobs fail safe. */
 export interface OrchestrationJobData {
   kind: "ASSESSMENT_ORCHESTRATION_PLACEHOLDER";
   scanId: string;
   assessmentId: string;
   workspaceId: string;
 }
+
+export type { StageJobData };

@@ -28,4 +28,12 @@ export const QUEUES = {
   PLACEHOLDER: "dsrclone-placeholder",
   REPORTS: "report-generation",
   NORMALIZATION: "normalization",
+  // Prompt 4 §13 orchestration queues. Jobs carry IDs/references only —
+  // workers load trusted state from the database, never from payloads.
+  SCAN_ORCHESTRATION: "scan-orchestration",
+  STAGE_EXECUTION: "stage-execution",
+  TOOL_EXECUTION: "tool-execution",
+  RESULT_PROCESSING: "result-processing",
+  CORRELATION: "correlation",
+  RISK_ANALYSIS: "risk-analysis",
 } as const;

@@ -55,4 +55,15 @@ export const api = {
   reports: () => apiFetch("/reports"),
   tools: () => apiFetch("/tools"),
   auditLogs: () => apiFetch("/audit-logs"),
+  // Prompt 4 orchestration
+  planPreview: (assessmentId: string) =>
+    apiFetch(`/assessments/${assessmentId}/plan`, { method: "POST", body: JSON.stringify({}) }),
+  startScan: (assessmentId: string) =>
+    apiFetch<{ scanId: string; status: string; simulation: boolean }>(`/assessments/${assessmentId}/scans`, { method: "POST", body: JSON.stringify({}) }),
+  scanDetails: (scanId: string) => apiFetch(`/scans/${scanId}/details`),
+  scanEvents: (scanId: string) => apiFetch(`/scans/${scanId}/events?pageSize=100`),
+  pauseScan: (scanId: string) => apiFetch(`/scans/${scanId}/pause`, { method: "POST", body: JSON.stringify({}) }),
+  resumeScan: (scanId: string) => apiFetch(`/scans/${scanId}/resume`, { method: "POST", body: JSON.stringify({}) }),
+  cancelScan: (scanId: string) => apiFetch(`/scans/${scanId}/cancel`, { method: "POST", body: JSON.stringify({}) }),
+  stopScan: (scanId: string) => apiFetch(`/scans/${scanId}/stop`, { method: "POST", body: JSON.stringify({}) }),
 };

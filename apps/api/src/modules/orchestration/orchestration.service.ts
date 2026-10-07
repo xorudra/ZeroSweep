@@ -1,0 +1,299 @@
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
+import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
+import {
+  buildScanPlan, evaluateAuthorizationGate, makeEvent, type ScanPlan,
+} from "@dsrclone/orchestration";
+import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
+import type { RequestUser } from "../../common/decorators/auth.decorators";
+import { resolveWorkspace } from "../../common/tenant";
+import { AuditService } from "../audit/audit.service";
+import { QueueService } from "../../queue/queue.service";
+import { ScanEventsService } from "./scan-events.service";
+
+/** Adapters executable in this phase (Prompt 4 §65): simulation only. */
+export const EXECUTABLE_SLUGS = ["mock", "local-echo"];
+
+export function hostOf(value: string): string {
+  try {
+    if (value.includes("://")) return new URL(value).hostname;
+  } catch { /* fall through */ }
+  return value.split("/")[0]!.split(":")[0]!.toLowerCase();
+}
+
+interface LoadedAssessment {
+  assessment: {
+    id: string; workspaceId: string; profile: string; status: string; scopeId: string | null;
+    target: { id: string; type: string; value: string; verified: boolean };
+    scope: { rules: unknown } | null;
+  };
+  workspaceId: string;
+  scopeRules: ScopeRules;
+  scopeValid: boolean;
+}
+
+/**
+ * Orchestration service (Prompt 4 §2–§4, §46–§47): turns an authorized
+ * assessment into an immutable ScanPlan + persisted Scan, then queues the
+ * scan-orchestration job. The API NEVER executes tools and NEVER accepts
+ * tool commands from clients — request bodies carry no adapter input at all.
+ */
+@Injectable()
+export class OrchestrationService {
+  constructor(
+    @Inject(PRISMA) private readonly prisma: PrismaClientLike,
+    private readonly audit: AuditService,
+    private readonly queue: QueueService,
+    private readonly events: ScanEventsService,
+  ) {}
+
+  private registry(): ToolRegistry {
+    const registry = new ToolRegistry();
+    registry.register(new MockSecurityAdapter());
+    registry.register(new LocalEchoAdapter());
+    return registry;
+  }
+
+  private async load(user: RequestUser, assessmentId: string): Promise<LoadedAssessment> {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const assessment = await this.prisma.assessment.findFirst({
+      where: { id: assessmentId, workspaceId: workspace.id },
+      include: { target: true, scope: true },
+    });
+    if (!assessment) throw new NotFoundException("Assessment not found");
+    const scopeParse = scopeRulesSchema.safeParse(assessment.scope?.rules ?? {});
+    return {
+      assessment: assessment as unknown as LoadedAssessment["assessment"],
+      workspaceId: workspace.id,
+      scopeRules: scopeParse.success ? scopeParse.data : { includeHosts: [], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] },
+      scopeValid: scopeParse.success,
+    };
+  }
+
+  private buildPlan(loaded: LoadedAssessment, scanId: string, user: RequestUser): ScanPlan {
+    const { assessment } = loaded;
+    const target = assessment.target;
+    const { plan } = buildScanPlan({
+      scanId,
+      assessmentId: assessment.id,
+      targetId: target.id,
+      workspaceId: loaded.workspaceId,
+      organizationId: user.organizationId,
+      profile: assessment.profile as never,
+      targetType: target.type as never,
+      targetValue: target.value,
+      targetHost: hostOf(target.value),
+      scope: loaded.scopeRules,
+      targetVerified: target.verified,
+      assessmentApproved: assessment.status === "APPROVED",
+      registry: this.registry(),
+      selection: { executableSlugs: EXECUTABLE_SLUGS },
+    });
+    return plan;
+  }
+
+  /** PLAN PREVIEW (§46): builds and returns the plan. Persists NOTHING and
+   *  executes NOTHING. */
+  async previewPlan(user: RequestUser, assessmentId: string) {
+    const loaded = await this.load(user, assessmentId);
+    const plan = this.buildPlan(loaded, "preview", user);
+    return {
+      profile: plan.profile,
+      targetType: plan.targetType,
+      stages: plan.stages.map((s) => ({
+        type: s.type, name: s.name, dependencies: s.dependencies,
+        requiredCapabilities: s.requiredCapabilities,
+        selectedAdapters: s.selectedAdapters,
+        riskLevels: [...new Set(s.selectedAdapters.map((a) => a.riskLevel))],
+        approvalRequired: s.selectedAdapters.some((a) => a.riskLevel === "INTRUSIVE" || a.riskLevel === "RESTRICTED"),
+        timeoutSeconds: s.timeoutSeconds, weight: s.weight, networkCapable: s.networkCapable,
+      })),
+      dependencies: plan.dependencies,
+      capabilities: [...new Set(plan.stages.flatMap((s) => s.requiredCapabilities))],
+      selectedTools: plan.selectedTools,
+      simulation: plan.policySnapshot.simulation,
+      estimatedLimits: { maxConcurrency: 4, stageTimeoutSeconds: Math.max(...plan.stages.map((s) => s.timeoutSeconds)) },
+      executesScan: false,
+    };
+  }
+
+  /** START SCAN (§47): authorize → verify → gate → plan → persist → queue. */
+  async startScan(user: RequestUser, assessmentId: string) {
+    const loaded = await this.load(user, assessmentId);
+    const { assessment } = loaded;
+    const target = assessment.target;
+
+    const gate = evaluateAuthorizationGate({
+      auth: {
+        organizationId: user.organizationId, workspaceId: loaded.workspaceId, targetId: target.id,
+        targetOrganizationId: user.organizationId, assessmentId: assessment.id, scanId: "pending",
+        verificationStatus: target.verified ? "VERIFIED" : "PENDING",
+        approvalStatus: assessment.status === "APPROVED" ? "APPROVED" : "PENDING",
+        requestedBy: user.id,
+      },
+      targetHost: hostOf(target.value),
+      scopeRules: loaded.scopeRules,
+      targetExists: true,
+      targetWorkspaceId: loaded.workspaceId,
+      workspaceId: loaded.workspaceId,
+      targetVerified: target.verified,
+      assessmentApproved: assessment.status === "APPROVED",
+      scopeValid: loaded.scopeValid,
+    });
+    if (!gate.allowed) {
+      await this.audit.record({
+        actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId,
+        action: gate.reasonCode === "TARGET_OUT_OF_SCOPE" ? "SCOPE_VIOLATION" : "POLICY_DENIED",
+        resourceType: "Assessment", resourceId: assessment.id,
+        metadata: { reasonCode: gate.reasonCode },
+      });
+      throw new BadRequestException(`Scan refused: ${gate.message} (${gate.reasonCode})`);
+    }
+
+    const scan = await this.prisma.scan.create({
+      data: { workspaceId: loaded.workspaceId, assessmentId: assessment.id, status: "CREATED", requestedBy: user.id },
+    });
+    const plan = this.buildPlan(loaded, scan.id, user);
+    await this.prisma.scanPlan.create({
+      data: { scanId: scan.id, assessmentId: assessment.id, profile: assessment.profile as never, planVersion: plan.planVersion, plan: plan as never, policySnapshot: plan.policySnapshot as never },
+    });
+    await this.prisma.scanStage.createMany({
+      data: plan.stages.map((s) => ({
+        scanId: scan.id, type: s.type as never,
+        status: (s.dependencies.length === 0 ? "READY" : "BLOCKED") as never,
+        dependencies: s.dependencies, weight: s.weight,
+        metadata: { selectedAdapters: s.selectedAdapters, failureStrategy: s.failureStrategy } as never,
+      })),
+    });
+    await this.prisma.scan.update({ where: { id: scan.id }, data: { status: "QUEUED" } });
+    await this.events.record(makeEvent(scan.id, loaded.workspaceId, "scan.created", { profile: plan.profile }));
+    await this.events.record(makeEvent(scan.id, loaded.workspaceId, "scan.queued", { simulation: plan.policySnapshot.simulation }));
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "SCAN_PLANNED", resourceType: "Scan", resourceId: scan.id });
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "SCAN_REQUESTED", resourceType: "Scan", resourceId: scan.id });
+    const enqueued = await this.queue.enqueueScanOrchestration({ scanId: scan.id, workspaceId: loaded.workspaceId });
+    return { scanId: scan.id, status: "QUEUED", plan, queueEnqueued: enqueued, simulation: plan.policySnapshot.simulation };
+  }
+
+  /** SCAN DETAILS (§48) with counts — tenant-scoped by workspace. */
+  async getScanDetails(user: RequestUser, scanId: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const scan = await this.prisma.scan.findFirst({
+      where: { id: scanId, workspaceId: workspace.id },
+      include: { stages: true, executions: true, assessment: { include: { target: true } } },
+    });
+    if (!scan) throw new NotFoundException("Scan not found");
+    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+      try { return await fn(); } catch { return fallback; }
+    };
+    const [findingCounts, assetCount, workers] = await Promise.all([
+      safe(() => this.prisma.finding.groupBy({ by: ["severity"], where: { scanId }, _count: true }), []),
+      safe(() => this.prisma.asset.count({ where: { targetId: scan.assessment.targetId } }), 0),
+      safe(() => this.prisma.workerNode.findMany({ orderBy: { lastHeartbeat: "desc" }, take: 5 }), []),
+    ]);
+    const severityCounts: Record<string, number> = {};
+    for (const row of findingCounts as Array<{ severity: string; _count: number }>) severityCounts[row.severity] = row._count;
+    return { ...scan, findingCounts: severityCounts, assetCount, workers };
+  }
+
+  /** ADMIN OPERATIONS (§63): queue/worker/failed-job/stale-scan visibility.
+   *  Controller restricts this to OWNER/ADMIN — ordinary users never see it. */
+  async opsOverview(user: RequestUser) {
+    void user;
+    const staleBefore = new Date(Date.now() - 10 * 60 * 1000);
+    const [workers, deadLetters, staleScans, running, queued] = await Promise.all([
+      this.prisma.workerNode.findMany({ orderBy: { lastHeartbeat: "desc" }, take: 20 }),
+      this.prisma.deadLetterJob.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+      this.prisma.scan.findMany({ where: { status: { in: ["RUNNING", "PREPARING"] as never }, updatedAt: { lt: staleBefore } }, take: 20 }),
+      this.prisma.scan.count({ where: { status: "RUNNING" as never } }),
+      this.prisma.scan.count({ where: { status: { in: ["CREATED", "QUEUED"] as never } } }),
+    ]);
+    return { workers, failedJobs: deadLetters, staleScans, counts: { running, queued } };
+  }
+
+  /** Pause (§27): stop scheduling new work. Running mock executions are not
+   *  frozen mid-flight — the runner observes PAUSED between stages. */
+  async pauseScan(user: RequestUser, scanId: string) {
+    return this.transition(user, scanId, ["RUNNING", "QUEUED", "PREPARING"], "PAUSED", "SCAN_PAUSED", "scan.paused");
+  }
+
+  /** Resume (§27): gates are RE-EVALUATED before anything is scheduled again. */
+  async resumeScan(user: RequestUser, scanId: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const scan = await this.prisma.scan.findFirst({ where: { id: scanId, workspaceId: workspace.id }, include: { assessment: { include: { target: true, scope: true } } } });
+    if (!scan) throw new NotFoundException("Scan not found");
+    try {
+      assertScanTransition(scan.status as ScanStatus, "RUNNING");
+    } catch {
+      throw new BadRequestException(`Scan in status ${scan.status} cannot be resumed`);
+    }
+    const scopeParse = scopeRulesSchema.safeParse(scan.assessment.scope?.rules ?? {});
+    const gate = evaluateAuthorizationGate({
+      auth: {
+        organizationId: user.organizationId, workspaceId: workspace.id, targetId: scan.assessment.target.id,
+        targetOrganizationId: user.organizationId, assessmentId: scan.assessment.id, scanId,
+        verificationStatus: scan.assessment.target.verified ? "VERIFIED" : "PENDING",
+        approvalStatus: scan.assessment.status === "APPROVED" ? "APPROVED" : "PENDING",
+        requestedBy: user.id,
+      },
+      targetHost: hostOf(scan.assessment.target.value),
+      scopeRules: scopeParse.success ? scopeParse.data : { includeHosts: [], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] },
+      targetExists: true, targetWorkspaceId: workspace.id, workspaceId: workspace.id,
+      targetVerified: scan.assessment.target.verified,
+      assessmentApproved: scan.assessment.status === "APPROVED",
+      scopeValid: scopeParse.success,
+    });
+    if (!gate.allowed) throw new BadRequestException(`Resume refused: ${gate.message} (${gate.reasonCode})`);
+    const updated = await this.prisma.scan.update({ where: { id: scanId }, data: { status: "QUEUED" } });
+    await this.events.record(makeEvent(scanId, workspace.id, "scan.resumed", {}));
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: workspace.id, action: "SCAN_RESUMED", resourceType: "Scan", resourceId: scanId });
+    await this.queue.enqueueScanOrchestration({ scanId, workspaceId: workspace.id });
+    return updated;
+  }
+
+  /** Cancel (§26): idempotent. Scan → CANCELLING → CANCELLED; pending stages
+   *  are cancelled/skipped; the worker observes CANCELLED and stops. */
+  async cancelScan(user: RequestUser, scanId: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const scan = await this.prisma.scan.findFirst({ where: { id: scanId, workspaceId: workspace.id } });
+    if (!scan) throw new NotFoundException("Scan not found");
+    if (scan.status === "CANCELLED") return scan; // idempotent (§26)
+    try {
+      assertScanTransition(scan.status as ScanStatus, "CANCELLING");
+    } catch {
+      throw new BadRequestException(`Scan in status ${scan.status} cannot be cancelled`);
+    }
+    await this.prisma.scan.update({ where: { id: scanId }, data: { status: "CANCELLING" } });
+    await this.prisma.scanStage.updateMany({
+      where: { scanId, status: { in: ["PENDING", "BLOCKED", "READY", "QUEUED"] as never } },
+      data: { status: "CANCELLED" },
+    });
+    const updated = await this.prisma.scan.update({ where: { id: scanId }, data: { status: "CANCELLED", completedAt: new Date() } });
+    await this.events.record(makeEvent(scanId, workspace.id, "scan.cancelled", {}));
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: workspace.id, action: "SCAN_CANCELLED", resourceType: "Scan", resourceId: scanId });
+    return updated;
+  }
+
+  /** Emergency stop = cancel with an explicit audit marker. Same converging
+   *  semantics; distinct audit action intent via metadata. */
+  async emergencyStop(user: RequestUser, scanId: string) {
+    const result = await this.cancelScan(user, scanId);
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: result.workspaceId, action: "SCAN_CANCELLED", resourceType: "Scan", resourceId: scanId, metadata: { emergencyStop: true } });
+    return result;
+  }
+
+  private async transition(user: RequestUser, scanId: string, _from: string[], to: ScanStatus, auditAction: string, eventType: "scan.paused") {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const scan = await this.prisma.scan.findFirst({ where: { id: scanId, workspaceId: workspace.id } });
+    if (!scan) throw new NotFoundException("Scan not found");
+    try {
+      assertScanTransition(scan.status as ScanStatus, to);
+    } catch {
+      throw new BadRequestException(`Scan in status ${scan.status} cannot transition to ${to}`);
+    }
+    const updated = await this.prisma.scan.update({ where: { id: scanId }, data: { status: to } });
+    await this.events.record(makeEvent(scanId, workspace.id, eventType, {}));
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: workspace.id, action: auditAction, resourceType: "Scan", resourceId: scanId });
+    return updated;
+  }
+}

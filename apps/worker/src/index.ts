@@ -1,61 +1,144 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
-import type { OrchestrationJobData, PlaceholderJobData } from "./jobs";
+import type { OrchestrationJobData, PlaceholderJobData, ScanOrchestrationJobData } from "./jobs";
+import { StageExecutor, type StageJobData } from "./executors/stage-executor";
+import { PrismaWorkerStore } from "./store/prisma-store";
+import { DagRunner } from "./consumers/dag-runner";
+import { createBullmqStageDispatcher } from "./consumers/bullmq-dispatcher";
+import { makeWorkerId, registrationRecord } from "./heartbeat/heartbeat";
+import { recoverStaleExecutions } from "./lifecycle/recovery";
+import { metrics, METRICS } from "./telemetry/metrics";
+
+/**
+ * DSRclone worker (Prompt 4 §20–§23, §52): production queue consumer.
+ * Registers a WorkerNode, heartbeats, consumes scan-orchestration jobs and
+ * drives each plan's DAG — dispatching stage-execution jobs (IDs only) that
+ * re-evaluate authorization/scope/policy before running an adapter. In this
+ * phase ONLY the mock + local-echo adapters can execute; no real scanner
+ * exists in the registry this process builds.
+ */
 
 const logger = createLogger("dsrclone-worker");
 const connection = createRedisConnection();
+const store = new PrismaWorkerStore();
+const registry = new ToolRegistry();
+registry.register(new MockSecurityAdapter());
+registry.register(new LocalEchoAdapter());
+const executor = new StageExecutor(registry, store);
+const runner = new DagRunner(store, executor);
+const workerId = makeWorkerId();
+let activeJobs = 0;
+let draining = false;
 
 let redisConnected = false;
 connection.on("ready", () => { redisConnected = true; logger.info("redis connected"); });
 connection.on("error", (err) => { redisConnected = false; logger.error("redis connection error", { error: err.message }); });
 
 async function handlePlaceholder(job: Job<PlaceholderJobData>): Promise<{ ok: true; jobId: string }> {
-  const log = logger.child({ scanId: undefined, requestId: job.id });
-  log.info("placeholder job received", { jobId: job.id, kind: job.data.kind });
-  await new Promise((resolve) => setTimeout(resolve, 250)); // brief, harmless wait
-  log.info("placeholder job completed", { jobId: job.id });
+  logger.info("placeholder job received", { jobId: job.id, kind: job.data.kind });
+  await new Promise((resolve) => setTimeout(resolve, 250));
   return { ok: true, jobId: String(job.id) };
 }
 
-async function handleOrchestrationPlaceholder(job: Job<OrchestrationJobData>): Promise<{ ok: true; scanId: string; note: string }> {
-  // Foundation only: a real orchestration pipeline (adapter resolution,
-  // policy re-check, isolated tool containers) is built in later phases.
-  logger.info("orchestration placeholder received — no tools executed in this phase", {
-    jobId: job.id, scanId: job.data.scanId, assessmentId: job.data.assessmentId,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  return { ok: true, scanId: job.data.scanId, note: "placeholder only; scanner orchestration arrives in a later phase" };
+async function handleScanOrchestration(job: Job<ScanOrchestrationJobData | OrchestrationJobData>): Promise<{ ok: true; scanId: string; status?: string }> {
+  if (job.data.kind !== "SCAN_ORCHESTRATION") {
+    // Legacy Phase 2 placeholder jobs: acknowledge without executing anything.
+    logger.warn("legacy orchestration placeholder job ignored", { jobId: job.id, scanId: job.data.scanId });
+    return { ok: true, scanId: job.data.scanId, status: "IGNORED_LEGACY" };
+  }
+  if (draining) throw new Error("worker is draining — retry later");
+  activeJobs++;
+  metrics.inc(METRICS.scansQueued);
+  const started = Date.now();
+  try {
+    const { dispatch, close } = createBullmqStageDispatcher(connection, QUEUES.STAGE_EXECUTION);
+    try {
+      const result = await runner.run(job.data.scanId, dispatch);
+      metrics.setGauge(METRICS.scanDurationMs, Date.now() - started);
+      if (result.status === "FAILED") metrics.inc(METRICS.failures);
+      if (result.status === "CANCELLED") metrics.inc(METRICS.cancellations);
+      return { ok: true, scanId: job.data.scanId, status: result.status };
+    } finally {
+      await close();
+    }
+  } finally {
+    activeJobs--;
+  }
 }
 
-const placeholderWorker = new Worker(QUEUES.PLACEHOLDER, handlePlaceholder, { connection });
-const orchestrationWorker = new Worker(QUEUES.ORCHESTRATION, handleOrchestrationPlaceholder, { connection });
-
-for (const w of [placeholderWorker, orchestrationWorker]) {
-  w.on("failed", (job, err) => logger.error("job failed", { jobId: job?.id, error: err.message }));
-  w.on("error", (err) => logger.error("worker error", { error: err.message }));
+async function handleStageExecution(job: Job<StageJobData>): Promise<unknown> {
+  if (draining) throw new Error("worker is draining — retry later");
+  activeJobs++;
+  const started = Date.now();
+  try {
+    const outcome = await executor.run(job.data);
+    metrics.setGauge(METRICS.toolExecutionDurationMs, Date.now() - started);
+    if (outcome.status === "TIMED_OUT") metrics.inc(METRICS.timeouts);
+    return outcome;
+  } finally {
+    activeJobs--;
+  }
 }
 
-const heartbeat = setInterval(() => {
+const workers = [
+  new Worker(QUEUES.PLACEHOLDER, handlePlaceholder, { connection }),
+  new Worker(QUEUES.SCAN_ORCHESTRATION, handleScanOrchestration, { connection }),
+  new Worker(QUEUES.ORCHESTRATION, handleScanOrchestration, { connection }),
+  new Worker(QUEUES.STAGE_EXECUTION, handleStageExecution, { connection, concurrency: 4 }),
+];
+for (const w of workers) {
+  w.on("failed", (job, err) => logger.error("job failed", { jobId: job?.id, queue: w.name, error: err.message }));
+  w.on("error", (err) => logger.error("worker error", { queue: w.name, error: err.message }));
+}
+
+async function registerAndHeartbeat(): Promise<void> {
+  const record = registrationRecord(workerId, activeJobs);
+  try {
+    await prisma.workerNode.upsert({
+      where: { workerId },
+      create: record,
+      update: { lastHeartbeat: record.lastHeartbeat, status: draining ? "DRAINING" : record.status, activeJobs, capabilities: record.capabilities as never },
+    });
+  } catch (e) {
+    logger.warn("worker registration heartbeat failed (database unavailable?)", { error: e instanceof Error ? e.message : "unknown" });
+  }
   const health: WorkerHealth = {
     status: redisConnected ? "ok" : "degraded",
     redis: redisConnected ? "connected" : "disconnected",
-    queues: [QUEUES.PLACEHOLDER, QUEUES.ORCHESTRATION],
+    queues: workers.map((w) => w.name),
     at: new Date().toISOString(),
   };
   reportHealth(health);
-}, 15_000);
+}
+
+void (async () => {
+  await registerAndHeartbeat();
+  await recoverStaleExecutions().catch((e) => logger.warn("startup recovery failed", { error: e instanceof Error ? e.message : "unknown" }));
+})();
+const heartbeat = setInterval(() => void registerAndHeartbeat(), 15_000);
 heartbeat.unref?.();
 
-logger.info("worker started", { queues: [QUEUES.PLACEHOLDER, QUEUES.ORCHESTRATION] });
+logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo"] });
 
+/** Graceful drain (§52): stop taking jobs, let active work finish, flush state. */
 async function shutdown(signal: string): Promise<void> {
-  logger.info("worker shutting down", { signal });
+  if (draining) return;
+  draining = true;
+  logger.info("worker draining", { signal, activeJobs });
+  try {
+    await prisma.workerNode.update({ where: { workerId }, data: { status: "DRAINING" } }).catch(() => undefined);
+  } catch { /* best effort */ }
   clearInterval(heartbeat);
-  await Promise.allSettled([placeholderWorker.close(), orchestrationWorker.close()]);
+  const deadline = Date.now() + 30_000;
+  while (activeJobs > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 250));
+  await Promise.allSettled(workers.map((w) => w.close()));
   connection.disconnect();
+  logger.info("worker shutdown complete", { metrics: metrics.snapshot() });
   process.exit(0);
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"));

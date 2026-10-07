@@ -49,8 +49,31 @@ export class QueueService implements OnModuleDestroy {
     }
   }
 
+  private scanOrchestration?: Queue;
+
+  /** Prompt 4: enqueue the scan-orchestration job (IDs only — the worker
+   *  loads trusted state from Postgres). Job id == scanId, so a duplicate
+   *  start request can never queue the same scan twice. */
+  async enqueueScanOrchestration(data: { scanId: string; workspaceId: string }): Promise<boolean> {
+    try {
+      if (!this.connection) this.ensure();
+      if (!this.scanOrchestration) {
+        this.scanOrchestration = new Queue(QUEUES.SCAN_ORCHESTRATION, { connection: this.connection! });
+      }
+      await this.scanOrchestration.add(
+        "scan-orchestration",
+        { kind: "SCAN_ORCHESTRATION", scanId: data.scanId, workspaceId: data.workspaceId },
+        { jobId: `scan-${data.scanId}`, removeOnComplete: 100, removeOnFail: 100 },
+      );
+      return true;
+    } catch (e) {
+      logger.warn("could not enqueue scan orchestration", { error: e instanceof Error ? e.message : "unknown" });
+      return false;
+    }
+  }
+
   async onModuleDestroy(): Promise<void> {
-    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close()]);
+    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close()]);
     this.connection?.disconnect();
   }
 }

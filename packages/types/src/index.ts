@@ -18,16 +18,24 @@ export const ASSESSMENT_PROFILES = [
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 
 export const SCAN_STATUSES = [
-  "QUEUED", "PREPARING", "RUNNING", "PAUSED", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED",
+  "CREATED", "QUEUED", "PREPARING", "RUNNING", "PAUSING", "PAUSED",
+  "CANCELLING", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED",
 ] as const;
 export type ScanStatus = (typeof SCAN_STATUSES)[number];
 
-/** Legal scan state transitions. A scan may never jump outside this map. */
+/**
+ * Legal scan state transitions (Prompt 4 §17). PAUSING/CANCELLING are explicit
+ * intermediate states so pause/cancel are cooperative and observable; a scan
+ * may never jump outside this map (e.g. COMPLETED -> RUNNING always fails).
+ */
 export const SCAN_TRANSITIONS: Readonly<Record<ScanStatus, readonly ScanStatus[]>> = {
-  QUEUED: ["PREPARING", "CANCELLED", "FAILED"],
-  PREPARING: ["RUNNING", "FAILED", "CANCELLED"],
-  RUNNING: ["PAUSED", "COMPLETED", "PARTIAL", "FAILED", "CANCELLED"],
-  PAUSED: ["RUNNING", "CANCELLED", "FAILED"],
+  CREATED: ["QUEUED", "CANCELLED", "FAILED"],
+  QUEUED: ["PREPARING", "CANCELLING", "CANCELLED", "FAILED"],
+  PREPARING: ["RUNNING", "CANCELLING", "CANCELLED", "FAILED"],
+  RUNNING: ["PAUSING", "PAUSED", "CANCELLING", "CANCELLED", "COMPLETED", "PARTIAL", "FAILED"],
+  PAUSING: ["PAUSED", "CANCELLING", "FAILED"],
+  PAUSED: ["RUNNING", "CANCELLING", "CANCELLED", "FAILED"],
+  CANCELLING: ["CANCELLED", "FAILED"],
   COMPLETED: [],
   PARTIAL: [],
   FAILED: [],

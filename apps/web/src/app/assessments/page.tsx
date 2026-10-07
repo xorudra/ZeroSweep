@@ -2,6 +2,7 @@
 
 import { PageHeader } from "@/components/Shell";
 import { ResourceList, Row } from "@/components/ResourceList";
+import { AssessmentActions } from "@/components/AssessmentActions";
 import { Badge } from "@dsrclone/ui";
 
 export default function Page() {
@@ -17,6 +18,7 @@ export default function Page() {
           <Row key={i} cells={[String(item.name ?? ""), String(item.profile ?? ""), String(item.status ?? ""), String((item.target as Record<string, unknown> | undefined)?.value ?? "")]} />
         )}
       />
+      <AssessmentActions />
     </>
   );
 }

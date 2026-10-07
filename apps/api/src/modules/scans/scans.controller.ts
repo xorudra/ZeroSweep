@@ -70,11 +70,22 @@ export class ScansController {
     const workspace = await resolveWorkspace(this.prisma, user);
     const scan = await this.prisma.scan.findFirst({ where: { id, workspaceId: workspace.id } });
     if (!scan) throw new NotFoundException("Scan not found");
+    if (scan.status === "CANCELLED") return scan; // cancellation is idempotent (Prompt 4 §26)
     try {
-      assertScanTransition(scan.status as ScanStatus, "CANCELLED");
+      assertScanTransition(scan.status as ScanStatus, "CANCELLING");
     } catch {
       throw new BadRequestException(`Scan in status ${scan.status} cannot be cancelled`);
     }
+    // CANCELLING -> cancel pending stages -> CANCELLED. Running executions
+    // observe the CANCELLED scan in the worker and stop cooperatively.
+    await this.prisma.scan.update({ where: { id }, data: { status: "CANCELLING" } });
+    await this.prisma.scanStage.updateMany({
+      where: { scanId: id, status: { in: ["PENDING", "BLOCKED", "READY", "QUEUED"] as never } },
+      data: { status: "CANCELLED" },
+    });
+    await (this.prisma.scanEvent?.create({
+      data: { scanId: id, workspaceId: workspace.id, type: "scan.cancelled", payload: {} as never },
+    }) ?? Promise.resolve()).catch(() => undefined);
     const updated = await this.prisma.scan.update({ where: { id }, data: { status: "CANCELLED", completedAt: new Date() } });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: workspace.id, action: "SCAN_CANCELLED", resourceType: "Scan", resourceId: id });
     return updated;

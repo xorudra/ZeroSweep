@@ -35,6 +35,9 @@ importers:
       '@dsrclone/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@dsrclone/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
       '@dsrclone/security-sdk':
         specifier: workspace:*
         version: link:../../packages/security-sdk
@@ -160,12 +163,24 @@ importers:
       '@dsrclone/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@dsrclone/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@dsrclone/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@dsrclone/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
       '@dsrclone/security-sdk':
         specifier: workspace:*
         version: link:../../packages/security-sdk
+      '@dsrclone/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@dsrclone/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       bullmq:
         specifier: ^5.34.0
         version: 5.81.5
@@ -179,6 +194,9 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@22.20.5)
 
   packages/config:
     dependencies:
@@ -213,6 +231,28 @@ importers:
         version: 5.9.3
 
   packages/logger:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.5
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.5
+        version: 2.1.9(@types/node@22.20.5)
+
+  packages/orchestration:
+    dependencies:
+      '@dsrclone/security-sdk':
+        specifier: workspace:*
+        version: link:../security-sdk
+      '@dsrclone/types':
+        specifier: workspace:*
+        version: link:../types
+      '@dsrclone/validation':
+        specifier: workspace:*
+        version: link:../validation
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

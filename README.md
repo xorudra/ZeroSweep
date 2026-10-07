@@ -10,14 +10,16 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 3 complete (Prompts 1–3).** Production monorepo, backend and
-> database foundation, the complete Tool Adapter SDK (lifecycle contract, registry,
-> policy engine, scope/SSRF protections, parsers, limits), a 126-tool metadata
-> catalog, tool management API and Tools UI. **No security scanners are integrated
-> or executed yet** (no Nmap/Nuclei/ZAP/etc.) — the only working adapters are the
-> network-free Mock and Local Echo test adapters — there is no fake scan data
-> anywhere, and the AI service has no LLM connected yet. Real adapters arrive in
-> later phases, one at a time.
+> **Status — Phase 4 complete (Prompts 1–4).** Production monorepo, backend and
+> database foundation, the complete Tool Adapter SDK, a 126-tool metadata
+> catalog, and now the **scan orchestration engine**: profile → ScanPlan →
+> stage DAG → BullMQ queues → workers that re-check authorization/scope/policy
+> before running an adapter, with live progress (durable events + SSE), pause/
+> resume/cancel, and a Live Scan GUI. **No real security scanners are integrated
+> or executed yet** (no Nmap/Nuclei/ZAP/etc.) — pipelines execute ONLY the
+> network-free Mock and Local Echo simulation adapters, every mock result is
+> permanently labelled `isMock`, and the AI service has no LLM connected yet.
+> Real adapters arrive in later phases, one at a time.
 
 ## Architecture
 
@@ -136,12 +138,27 @@ and the AI health endpoint.
 
 1. ✅ Architecture (Prompt 1) 2. ✅ Monorepo + backend + database foundation (Prompt 2)
 3. ✅ Universal Tool Adapter SDK, registry & safe execution framework (Prompt 3)
-4. Scan orchestration engine (Prompt 4) 5. First safe adapters (passive/recon/web
+4. ✅ Production scan orchestration engine, DAG pipeline, queue workers & live progress (Prompt 4)
+5. First safe adapters (passive/recon/web
 baseline) 6. Normalization, deduplication, risk engine 7. Reporting engine
 8. API/cloud/container/source-code modules 9. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 4: Scan Orchestration Engine.** New
+  `@dsrclone/orchestration` package (stage/execution state machines, profile
+  templates, DAG builder+validator, tool selection, authorization/scope
+  gates, weighted progress, durable event contract, idempotency/retry,
+  concurrency limits, worker recovery). API orchestration module (plan
+  preview, start scan, scan details, events + tenant-isolated SSE stream,
+  pause/resume/cancel/emergency-stop, admin operations). Worker rebuilt as a
+  DAG runner + stage executor over Prisma with WorkerNode registration/
+  heartbeat, startup recovery and graceful draining; migration adds
+  ScanPlan/ScanEvent/WorkerNode/DeadLetterJob. Live Scan page at `/scans/[id]`
+  with DAG view, timeline and controls. Mock E2E (PASSIVE_RECON + WEB_BASELINE)
+  completes end-to-end in tests; still no real scanner anywhere. See
+  `docs/architecture/orchestration-engine.md` and
+  `docs/operations/worker-lifecycle.md`.
 - **2026-10-07 — Prompt 3: Tool Adapter SDK.** Completed `packages/security-sdk`
   (adapter lifecycle + base gates, registry with metadata validation, policy
   engine with all reason codes, target/scope validation with SSRF + DNS-rebinding
