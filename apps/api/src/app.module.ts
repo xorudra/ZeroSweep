@@ -22,13 +22,14 @@ import { CredentialsModule } from "./modules/credentials/credentials.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { OrchestrationModule } from "./modules/orchestration/orchestration.module";
 import { AssetsModule } from "./modules/assets/assets.module";
+import { ScannersModule } from "./modules/scanners/scanners.module";
 
 @Module({
   imports: [
     PrismaModule, QueueModule, HealthModule, AuditModule, AuthModule, UsersModule,
     OrganizationsModule, WorkspacesModule, TargetsModule, ScopesModule, AssessmentsModule,
     ScansModule, FindingsModule, ReportsModule, ToolsModule, IntegrationsModule,
-    CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule,
+    CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule, ScannersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

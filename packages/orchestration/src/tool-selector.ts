@@ -73,7 +73,10 @@ export function selectAdaptersForStage(
       continue;
     }
     const health = options.healthBySlug?.[m.slug] ?? "HEALTHY";
-    if (health === "UNAVAILABLE" || health === "MISCONFIGURED") {
+    if (health === "UNAVAILABLE" || health === "MISCONFIGURED" || health === "NOT_CONFIGURED") {
+      // NOT_CONFIGURED (Prompt 8 §66): an integration with no configured
+      // instance is a state, not a tool failure — it is never selected and
+      // never silently replaced by a simulation of the product.
       rejected.push({ slug: m.slug, reason: `adapter health is ${health}` });
       continue;
     }
@@ -107,7 +110,9 @@ export function selectAdaptersForStage(
 
   // No executable adapter covers this stage yet: fall back to the simulation
   // adapter so the pipeline can be validated end-to-end. Clearly labelled.
-  if (selected.length === 0) {
+  // Stages that forbid simulation (Prompt 8 passive proxy analysis, §66)
+  // keep the empty selection — the stage completes honestly as "skipped".
+  if (selected.length === 0 && stage.simulationFallback !== false) {
     const simSlug = options.simulationSlug ?? "mock";
     const sim = registry.resolve(simSlug);
     if (sim && sim.metadata.supportedTargetTypes.includes(options.targetType)) {

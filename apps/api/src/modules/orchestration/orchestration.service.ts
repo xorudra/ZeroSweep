@@ -1,7 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  LocalEchoAdapter, MockSecurityAdapter, RECON_SLUGS, ToolRegistry, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  reconHealthBySlug, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  LocalEchoAdapter, MockSecurityAdapter, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
+  proxyHealthBySlug, reconHealthBySlug, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
 import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
@@ -19,7 +20,7 @@ import { ScanEventsService } from "./scan-events.service";
  *  adapters. Real adapters are selected only when their health probe passes
  *  on this host; otherwise the stage falls back to the labelled simulation
  *  adapter (Prompt 5 §39/§56) — never to a fake "real" run. */
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS];
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS];
 
 export function hostOf(value: string): string {
   try {
@@ -64,6 +65,11 @@ export class OrchestrationService {
       registerReconAdapters(registry);
       registerWebDiscoveryAdapters(registry);
       registerVulnAdapters(registry);
+      // Prompt 8: proxy connectors register with an EMPTY instance
+      // snapshot on purpose — plan-time health for them is derived from
+      // the caller's registered ScannerInstance rows (scannerHealth
+      // below), never from a process-global guess (§53/§66).
+      registerProxyAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
       this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()) } };
@@ -74,6 +80,24 @@ export class OrchestrationService {
   private healthBySlug(): Record<string, string> {
     this.registry();
     return this.registryCache!.healthBySlug;
+  }
+
+  /** Prompt 8 plan-time connector health (§53/§66): the workspace's (and
+   *  org-wide) registered scanner instances decide — no rows means
+   *  NOT_CONFIGURED for every product and the passive stage plans with an
+   *  empty selection instead of a simulated scanner. */
+  private async scannerHealth(workspaceId: string, organizationId: string): Promise<Record<string, string>> {
+    const rows = await this.prisma.scannerInstance.findMany({
+      where: { organizationId, OR: [{ workspaceId }, { workspaceId: null }] },
+      include: { tool: { select: { slug: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const records = (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+      toolSlug: (r.tool as { slug: string }).slug,
+      enabled: r.enabled as boolean,
+      healthStatus: r.healthStatus as string,
+    }));
+    return proxyHealthBySlug(records as unknown as ScannerInstanceRecord[]);
   }
 
   private async load(user: RequestUser, assessmentId: string): Promise<LoadedAssessment> {
@@ -92,9 +116,10 @@ export class OrchestrationService {
     };
   }
 
-  private buildPlan(loaded: LoadedAssessment, scanId: string, user: RequestUser): ScanPlan {
+  private async buildPlan(loaded: LoadedAssessment, scanId: string, user: RequestUser): Promise<ScanPlan> {
     const { assessment } = loaded;
     const target = assessment.target;
+    const scannerHealth = await this.scannerHealth(loaded.workspaceId, user.organizationId);
     const { plan } = buildScanPlan({
       scanId,
       assessmentId: assessment.id,
@@ -109,7 +134,7 @@ export class OrchestrationService {
       targetVerified: target.verified,
       assessmentApproved: assessment.status === "APPROVED",
       registry: this.registry(),
-      selection: { executableSlugs: EXECUTABLE_SLUGS, healthBySlug: this.healthBySlug() },
+      selection: { executableSlugs: EXECUTABLE_SLUGS, healthBySlug: { ...this.healthBySlug(), ...scannerHealth } },
     });
     return plan;
   }
@@ -118,7 +143,7 @@ export class OrchestrationService {
    *  executes NOTHING. */
   async previewPlan(user: RequestUser, assessmentId: string) {
     const loaded = await this.load(user, assessmentId);
-    const plan = this.buildPlan(loaded, "preview", user);
+    const plan = await this.buildPlan(loaded, "preview", user);
     return {
       profile: plan.profile,
       targetType: plan.targetType,
@@ -175,7 +200,7 @@ export class OrchestrationService {
     const scan = await this.prisma.scan.create({
       data: { workspaceId: loaded.workspaceId, assessmentId: assessment.id, status: "CREATED", requestedBy: user.id },
     });
-    const plan = this.buildPlan(loaded, scan.id, user);
+    const plan = await this.buildPlan(loaded, scan.id, user);
     await this.prisma.scanPlan.create({
       data: { scanId: scan.id, assessmentId: assessment.id, profile: assessment.profile as never, planVersion: plan.planVersion, plan: plan as never, policySnapshot: plan.policySnapshot as never },
     });

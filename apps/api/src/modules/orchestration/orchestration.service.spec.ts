@@ -55,6 +55,9 @@ function makePrisma(overrides: { verified?: boolean; status?: string; targetValu
       findMany: async () => [],
     },
     scanPlan: { create: async () => ({ id: "plan-1" }) },
+    // Prompt 8: no scanner instances registered in this world — plan-time
+    // connector health is honestly NOT_CONFIGURED for every product.
+    scannerInstance: { findMany: async () => [] },
     scanStage: {
       createMany: async ({ data }: never) => { state.stages.push(...(data as Array<Record<string, unknown>>)); return { count: (data as unknown[]).length }; },
       updateMany: async () => ({ count: 0 }),

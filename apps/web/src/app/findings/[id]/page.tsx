@@ -129,6 +129,17 @@ export default function Page() {
                   <div key={i} className="rounded-lg border border-slate-800 p-3">
                     <p className="text-sm font-medium text-slate-200">{String(e.sourceTool ?? "tool")}</p>
                     <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-300">{String(e.summary ?? "")}</p>
+                    {e.metadata && typeof e.metadata === "object" && "scannerProduct" in (e.metadata as Record<string, unknown>) ? (
+                      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400 md:grid-cols-4">
+                        <div>Source scanner: <span className="text-slate-200">{String((e.metadata as Record<string, unknown>).scannerProduct ?? "")}</span></div>
+                        <div>Issue type: <span className="text-slate-200">{String((e.metadata as Record<string, unknown>).issueType ?? "—")}</span></div>
+                        <div>Scanner confidence: <span className="text-slate-200">{String((e.metadata as Record<string, unknown>).confidenceLabel ?? "—")}</span></div>
+                        <div>Scanner risk: <span className="text-slate-200">{String((e.metadata as Record<string, unknown>).scannerSeverity ?? "—")}</span></div>
+                        {(e.metadata as Record<string, unknown>).scannerNotes ? (
+                          <div className="md:col-span-4">Scanner notes: <span className="text-slate-300">{String((e.metadata as Record<string, unknown>).scannerNotes)}</span></div>
+                        ) : null}
+                      </dl>
+                    ) : null}
                     {e.matchedAt ? <p className="mt-1 text-xs text-slate-500">Matched at: {String(e.matchedAt)}</p> : null}
                     {e.metadata && typeof e.metadata === "object" && "request" in (e.metadata as Record<string, unknown>) ? (
                       <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-2 text-xs text-slate-400">{String((e.metadata as Record<string, unknown>).request ?? "")}</pre>

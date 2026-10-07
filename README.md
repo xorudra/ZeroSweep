@@ -10,21 +10,25 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 6 complete (Prompts 1–6).** Production monorepo, backend and
+> **Status — Phase 8 complete (Prompts 1–8).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
-> catalog, the scan orchestration engine, ten reconnaissance adapters — and
-> now the **web attack-surface discovery engine**: ffuf, Feroxbuster,
-> Gobuster (dir mode only), Wfuzz (two predefined templates only) and Arjun
-> implemented on the same SDK lifecycle, with governed wordlists (registered
-> ids/profiles, never user-supplied paths), soft-404 calibration, wildcard
-> collapse, response classification, and a canonical endpoint/parameter/form
-> inventory with provenance and scope verdicts. Content discovery is
-> intrusive-adjacent, so defaults are conservative and everything runs only
-> inside approved scans against verified, in-scope targets. Adapters whose
-> binaries are absent report UNAVAILABLE honestly and pipelines degrade —
-> nothing fakes a real run. **No vulnerability scanners are integrated yet**
-> (no Nmap/Nuclei/ZAP/etc.); discovery produces inventory only, never
-> findings, and the AI service has no LLM connected yet.
+> catalog, the scan orchestration engine, ten reconnaissance adapters, the
+> web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
+> only, Wfuzz controlled-templates only, Arjun), the first findings pipeline
+> (Nuclei under a governed SAFE template policy, Nikto, testssl.sh, SSLyze)
+> with canonical-fingerprint correlation and a deterministic risk engine —
+> and now the **interactive proxy-scanner layer**: OWASP ZAP, Burp Suite
+> Professional and Caido as API-driven connectors with isolated
+> per-assessment contexts, SSRF-safe endpoint references (never
+> client-supplied URLs), passive analysis, traffic/endpoint/issue import,
+> evidence redaction, and approval-gated active scanning (intrusive,
+> disabled by default). Burp and Caido are commercial/external products by
+> design: their connectors report NOT_CONFIGURED until an instance is
+> registered in-product, which is a product state, not an error. Everything
+> runs only inside approved scans against verified, in-scope targets.
+> Adapters whose binaries are absent report UNAVAILABLE honestly and
+> pipelines degrade — nothing fakes a real run. The AI service has no LLM
+> connected yet.
 
 ## Architecture
 
@@ -146,11 +150,56 @@ and the AI health endpoint.
 4. ✅ Production scan orchestration engine, DAG pipeline, queue workers & live progress (Prompt 4)
 5. ✅ First real adapters: reconnaissance, asset discovery & web surface mapping (Prompt 5)
 6. ✅ Web attack-surface, content, route & parameter discovery engine (Prompt 6)
-7. Normalization, deduplication, risk engine 8. Reporting engine
-8. API/cloud/container/source-code modules 9. Lab-only modules (AD, wireless, mobile)
+7. ✅ Safe vulnerability detection, TLS analysis, normalization, correlation & risk engine (Prompt 7)
+8. ✅ OWASP ZAP, Burp Suite & Caido integration layer (Prompt 8)
+9. API security testing 10. Network VAPT 11. Reporting engine
+12. API/cloud/container/source-code modules 13. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 8: OWASP ZAP, Burp Suite & Caido Integration.** A
+  dedicated `InteractiveScannerConnector` abstraction beside the CLI
+  adapters (connect, per-assessment contexts, scope configuration,
+  session authentication, endpoint/traffic import, passive analysis,
+  issue import, policy-gated active scan, guaranteed cleanup), adapted
+  into the standard adapter lifecycle so orchestration, budgets and
+  result processing treat connectors like every other tool. ZAP is
+  API-driven with context include/exclude rules derived from the approved
+  scope; Burp Suite Professional is an ADMIN_PROVIDED connector that
+  imports Burp's documented XML issue export (directly or through a
+  small admin-run bridge inside the licensed environment — no invented
+  APIs, license state read from the deployment); Caido detects
+  capabilities from the connected instance and degrades honestly.
+  Scanner instances are registered by administrators using opaque
+  endpoint REFERENCES resolved only from server configuration —
+  client-supplied scanner URLs are rejected by design (SSRF-safe).
+  Credentials are secret references resolved only in trusted boundaries.
+  New PASSIVE_SECURITY_ANALYSIS stage (skips honestly, never simulated,
+  when nothing is configured); ACTIVE_SECURITY_ANALYSIS exists in the
+  stage library only, behind verified-target + approved-assessment +
+  expiring scope-hash-bound approval + budget gates, prepared but not
+  enabled. Imported issues flow through the same Phase 7
+  normalization/correlation/risk pipeline with explicit per-product
+  severity/confidence mapping tables; HTTP transactions persist as
+  metadata + SHA-256 hashes + object-storage references with redacted
+  display copies; manual imports (ZAP JSON, Burp XML, Caido JSON, HAR)
+  are format/size/XXE-guarded; raw-evidence access is Owner/Admin and
+  audit-logged. GUI: Settings → Scanner Instances, per-tool connector
+  panels, live passive-analysis progress, scan HTTP-history page.
+  Verified entirely against recorded fixtures/mocks — no connector was
+  run against any real target. See `docs/tools/proxy/`,
+  `docs/architecture/proxy-scanner-connectors.md`,
+  `docs/security/authenticated-scanning.md` and
+  `docs/security/active-scan-approval.md`.
+- **2026-10-07 — Prompt 7: Safe Vulnerability Detection & TLS Analysis.**
+  First findings adapters: Nuclei under a governed SAFE template policy
+  (INTRUSIVE/DISABLED templates can never be selected), Nikto with
+  classified promotion (unclassifiable output stays INFORMATIONAL),
+  testssl.sh and SSLyze for TLS services. Canonical-fingerprint
+  correlation merges the same issue across tools with all evidence
+  preserved and sources unioned; a deterministic risk engine scores
+  findings with stored explanations; Findings API + GUI with review
+  workflow and history. Verified against recorded fixtures only.
 - **2026-10-07 — Prompt 6: Web Attack-Surface, Content, Route & Parameter
   Discovery Engine.** Five production adapters in the security-sdk (ffuf,
   Feroxbuster, Gobuster dir-mode-only, Wfuzz controlled-templates-only,

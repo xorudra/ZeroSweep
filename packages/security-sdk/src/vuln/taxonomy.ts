@@ -78,6 +78,13 @@ export const VULN_CLASS_TAXONOMY: Record<string, VulnClassInfo> = {
     remediation: "Set the Secure flag on cookies so they are only sent over HTTPS.",
     technicalImpact: "Cookies without Secure may be transmitted over plaintext HTTP and intercepted.",
   },
+  COOKIE_NO_SAMESITE: {
+    title: "Cookie Without SameSite Attribute",
+    cwe: "CWE-1275",
+    owaspCategory: "A05:2021 Security Misconfiguration",
+    remediation: "Set an explicit SameSite attribute (Lax or Strict) on cookies, especially session cookies.",
+    technicalImpact: "Without SameSite, cookies may be attached to cross-site requests, widening CSRF exposure.",
+  },
   EXPOSED_FILE: {
     title: "Sensitive File Exposed",
     cwe: "CWE-538",
@@ -153,6 +160,7 @@ export const VULN_CLASS_FAMILIES: Record<string, string> = {
   TLS_CONFIGURATION: "TLS",
   COOKIE_NO_HTTPONLY: "COOKIE",
   COOKIE_NO_SECURE: "COOKIE",
+  COOKIE_NO_SAMESITE: "COOKIE",
   MISSING_SECURITY_HEADERS: "HEADERS",
 };
 

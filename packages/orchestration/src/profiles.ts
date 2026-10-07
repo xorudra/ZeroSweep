@@ -14,6 +14,7 @@ export const STAGE_TYPES = [
   "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY",
   "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY",
   "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN",
+  "PASSIVE_SECURITY_ANALYSIS", "ACTIVE_SECURITY_ANALYSIS",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -46,6 +47,13 @@ export interface StageDefinition {
    *  slugs may be selected for the stage (WEB_BASELINE runs Nuclei + TLS
    *  but not Nikto; WEB_COMPREHENSIVE runs all four). */
   adapterAllowlist?: string[];
+  /** Whether an empty adapter selection may fall back to the labelled
+   *  simulation adapter (default true). Prompt 8 §37/§66: the passive
+   *  proxy-analysis stage must NEVER be simulated — when no scanner
+   *  connector is configured the stage completes honestly with an empty
+   *  selection and a passive_analysis.skipped event, instead of faking
+   *  proxy findings. */
+  simulationFallback?: boolean;
 }
 
 const S = (
@@ -71,6 +79,15 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
   SAFE_VULNERABILITY_SCAN: {
     ...S("SAFE_VULNERABILITY_SCAN", "Safe Vulnerability Scan", "Safe vulnerability detection (Nuclei governed SAFE templates + Nikto) and TLS assessment (testssl.sh + SSLyze) over the normalized web surface (Prompt 7 §14). Intrusive templates are excluded by the template policy.", ["VULNERABILITY_SCANNING"], ["WEB_SURFACE_NORMALIZATION"], 15, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
     capabilityGroups: [["VULNERABILITY_SCANNING"], ["TLS_ANALYSIS"]],
+  },
+  PASSIVE_SECURITY_ANALYSIS: {
+    ...S("PASSIVE_SECURITY_ANALYSIS", "Passive Security Analysis", "Passive proxy analysis through configured scanner connectors (OWASP ZAP / Burp Suite / Caido, Prompt 8 §37): endpoint + site-map import, passive issue import and traffic analysis over an isolated per-assessment context. No traffic is generated beyond the governed safe crawl, and NO simulation fallback exists — with no connector configured the stage is honestly skipped (§66).", ["PASSIVE_ANALYSIS"], ["SAFE_VULNERABILITY_SCAN"], 8, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["PASSIVE_ANALYSIS"], ["TRAFFIC_ANALYSIS"]],
+    simulationFallback: false,
+  },
+  ACTIVE_SECURITY_ANALYSIS: {
+    ...S("ACTIVE_SECURITY_ANALYSIS", "Active Security Analysis", "Governed ACTIVE scanning through scanner connectors (Prompt 8 §38). INTRUSIVE: disabled by default, present in NO profile template, and executable only behind target verification + approved scope + approved assessment + explicit active-testing enablement + RBAC + admin policy + a live, unexpired, scope-matching ScanApproval + a non-zero active budget (§8/§12/§40–§44).", ["ACTIVE_WEB_SCANNING"], ["PASSIVE_SECURITY_ANALYSIS"], 0, 1800, "FAIL_STAGE_CONTINUE", true),
+    simulationFallback: false,
   },
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
@@ -100,9 +117,9 @@ function template(types: StageType[]): StageDefinition[] {
  */
 export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   PASSIVE_RECON: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "ENDPOINT_DISCOVERY", ...TAIL]),
-  WEB_BASELINE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
-  WEB_COMPREHENSIVE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
-  API_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  WEB_BASELINE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", ...TAIL]),
+  WEB_COMPREHENSIVE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", ...TAIL]),
+  API_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", ...TAIL]),
   NETWORK_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "PORT_DISCOVERY", ...TAIL]),
   SOURCE_CODE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CONTAINER: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),

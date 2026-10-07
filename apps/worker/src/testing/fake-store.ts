@@ -27,6 +27,9 @@ export interface FakeStoreOptions {
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
   targetType?: "DOMAIN" | "WEB_APPLICATION";
+  /** Prompt 8: scanner bindings per connector slug, mirroring the Prisma
+   *  store's workspace resolution. Absent slug = NOT_CONFIGURED. */
+  scannerBySlug?: Record<string, { instanceId: string; sessionProfileId?: string }>;
 }
 
 export class FakeStore implements ScanRunStore {
@@ -43,6 +46,9 @@ export class FakeStore implements ScanRunStore {
   technologies: ProcessedResult["technologies"] = [];
   parameters: ProcessedResult["parameters"] = [];
   forms: ProcessedResult["forms"] = [];
+  transactions: ProcessedResult["transactions"] = [];
+  webSockets: ProcessedResult["webSockets"] = [];
+  scannerBySlug: Record<string, { instanceId: string; sessionProfileId?: string }> = {};
   deadLetters: unknown[] = [];
   reportPending = false;
   paused = false;
@@ -55,6 +61,7 @@ export class FakeStore implements ScanRunStore {
 
   constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
+    this.scannerBySlug = opts.scannerBySlug ?? {};
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
       scanId: "scan-1", assessmentId: "a-1", targetId: "t-1", workspaceId: "ws-1", organizationId: "org-1",
@@ -109,6 +116,8 @@ export class FakeStore implements ScanRunStore {
       targetVerified: this.verified, assessmentApproved: true, scopeValid: true,
       networkCapable: planned.networkCapable,
       profile: this.plan.profile,
+      assessmentId: "a-1",
+      scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
       stageInputs: {
@@ -153,7 +162,7 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number }> {
+  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number }> {
     this.assets.push(...processed.assets);
     this.findings.push(...processed.findings);
     this.endpoints.push(...processed.endpoints);
@@ -161,7 +170,9 @@ export class FakeStore implements ScanRunStore {
     this.technologies.push(...processed.technologies);
     this.parameters.push(...processed.parameters);
     this.forms.push(...processed.forms);
-    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length };
+    this.transactions.push(...processed.transactions);
+    this.webSockets.push(...processed.webSockets);
+    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length };
   }
   async recordDeadLetter(entry: unknown): Promise<void> { this.deadLetters.push(entry); }
 }

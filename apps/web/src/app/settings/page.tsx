@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Card } from "@dsrclone/ui";
 import { PageHeader } from "@/components/Shell";
 
@@ -14,6 +15,14 @@ export default function SettingsPage() {
             DSRclone stores credential <strong className="text-slate-200">metadata and secret references only</strong> —
             never plaintext secrets. Manage them via the API under <code className="text-cyan-300">/api/v1/credentials</code> (Owner/Admin).
           </p>
+        </Card>
+        <Card eyebrow="Scanners" title="Scanner instances">
+          <p className="text-sm text-slate-400">
+            OWASP ZAP, Burp Suite Professional and Caido connect as admin-registered instances (Prompt 8).
+            Register instances, run health checks, manage session profiles and active-scan approvals — by
+            reference name only, never by URL or secret.
+          </p>
+          <p className="mt-2 text-sm"><Link href="/settings/scanners" className="text-sky-300 hover:underline">Open scanner instances →</Link></p>
         </Card>
         <Card eyebrow="Schedules" title="Schedules">
           <p className="text-sm text-slate-400">Recurring assessments are configured here in a later phase. No schedule exists yet.</p>

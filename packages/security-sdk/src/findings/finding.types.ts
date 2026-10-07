@@ -118,6 +118,44 @@ export interface NormalizedTechnology {
   confidence?: number;
 }
 
+/** One observed HTTP transaction (Prompt 8 §25). Metadata + hashes live in
+ *  the database; the RAW request/response bytes live in object storage and
+ *  are referenced, never inlined into ordinary records (§26). The redacted
+ *  display copies are produced by HttpEvidenceRedactor (§27) and are the
+ *  only form normal UI surfaces may render. */
+export interface NormalizedHttpTransaction {
+  method: string;
+  /** Canonical URL; sensitive query values are redacted during processing. */
+  url: string;
+  host: string;
+  path: string;
+  statusCode?: number;
+  /** Adapter/connector slug that observed the transaction. */
+  source: string;
+  timestamp?: string;
+  durationMs?: number;
+  requestSize?: number;
+  responseSize?: number;
+  /** sha256 of the RAW request/response (integrity link to the artifact). */
+  requestHash?: string;
+  responseHash?: string;
+  /** Redacted, size-capped display copies (safe for normal UI, §27/§59). */
+  requestRedacted?: string;
+  responseRedacted?: string;
+  /** Object-storage references of the raw artifacts (§26, §60). */
+  requestArtifactRef?: string;
+  responseArtifactRef?: string;
+}
+
+/** A WebSocket endpoint observed by a proxy connector (Prompt 8 §49):
+ *  inventory only — no WebSocket attack automation exists in this phase. */
+export interface NormalizedWebSocket {
+  url: string;
+  origin?: string;
+  subprotocol?: string;
+  source: string;
+}
+
 export interface NormalizedSecurityResult {
   assets: NormalizedAsset[];
   services: NormalizedService[];
@@ -128,6 +166,10 @@ export interface NormalizedSecurityResult {
   parameters?: NormalizedEndpointParameter[];
   /** Form metadata revealed by crawlers (Prompt 6 §33). */
   forms?: NormalizedForm[];
+  /** HTTP transactions observed by proxy connectors (Prompt 8 §25). */
+  transactions?: NormalizedHttpTransaction[];
+  /** WebSocket endpoints observed by proxy connectors (Prompt 8 §49). */
+  webSockets?: NormalizedWebSocket[];
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

@@ -22,6 +22,13 @@ export const CAPABILITIES = [
   "WEB_SERVER_SECURITY_ASSESSMENT", "TLS_CONFIGURATION_ASSESSMENT", "CERTIFICATE_ANALYSIS",
   "API_DISCOVERY", "SAST", "SCA", "SECRET_SCANNING", "CONTAINER_SCANNING",
   "CLOUD_CONFIGURATION_AUDIT", "MOBILE_STATIC_ANALYSIS", "BINARY_ANALYSIS", "REPORT_EXPORT",
+  // Prompt 8: interactive proxy/scanner connector capabilities. These belong
+  // to service-style connectors (ZAP / Burp / Caido), not CLI adapters.
+  // ACTIVE_WEB_SCANNING is INTRUSIVE and approval-gated — capability metadata
+  // existing here never makes it selectable by default (§8/§12/§38).
+  "PROXY", "PASSIVE_ANALYSIS", "CONTEXT_MANAGEMENT", "ENDPOINT_IMPORT",
+  "ISSUE_IMPORT", "SITE_MAP_IMPORT", "TRAFFIC_ANALYSIS", "REQUEST_COLLECTION",
+  "ACTIVE_WEB_SCANNING",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

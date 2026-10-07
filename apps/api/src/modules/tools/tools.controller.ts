@@ -4,8 +4,11 @@ import {
   CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
 } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
-import { Roles } from "../../common/decorators/auth.decorators";
+import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
+
+/** Prompt 8: interactive proxy scanner products (health is instance-driven). */
+const PROXY_TOOL_SLUGS: string[] = ["owasp-zap", "burp-suite-professional", "caido"];
 
 const updateToolSchema = z.object({ enabled: z.boolean().optional() });
 
@@ -100,9 +103,39 @@ export class ToolsController {
   }
 
   @Get(":id/health")
-  async health(@Param("id") id: string) {
+  async health(@Param("id") id: string, @CurrentUser() user?: RequestUser) {
     const tool = await this.prisma.tool.findFirst({ where: { OR: [{ id }, { slug: id }] }, select: { slug: true, healthStatus: true, installed: true } });
     if (!tool) throw new NotFoundException("Tool not found");
+    // Prompt 8 §53/§56/§66: proxy connectors have no binary to probe —
+    // their health comes from the caller's registered scanner instances.
+    // No instance in the caller's organization => NOT_CONFIGURED, an
+    // honest state, never a fake HEALTHY.
+    if (PROXY_TOOL_SLUGS.includes(tool.slug)) {
+      const delegate = (this.prisma as unknown as {
+        scannerInstance?: {
+          findMany: (args: unknown) => Promise<Array<{ healthStatus: string; version: string | null; licenseState: string | null; lastHealthDetail: string | null }>>;
+        };
+      }).scannerInstance;
+      const instances = delegate && user?.organizationId
+        ? await delegate.findMany({ where: { organizationId: user.organizationId, enabled: true, tool: { slug: tool.slug } }, orderBy: { createdAt: "asc" } })
+        : [];
+      if (instances.length === 0) {
+        return {
+          slug: tool.slug, healthStatus: "NOT_CONFIGURED", installed: false, configuredInstances: 0,
+          detail: "No scanner instance is registered for your organization — an administrator registers one under Settings → Scanner Instances (Prompt 8 §54)",
+          source: "scanner instance registry",
+        };
+      }
+      const first = instances[0]!;
+      return {
+        slug: tool.slug, healthStatus: first.healthStatus,
+        installed: first.healthStatus === "HEALTHY" || first.healthStatus === "DEGRADED",
+        configuredInstances: instances.length,
+        version: first.version, licenseState: first.licenseState,
+        detail: first.lastHealthDetail ?? "Health as of the last administrator health check",
+        source: "scanner instance registry (administrator health checks; workers re-probe at execution time)",
+      };
+    }
     // Prompt 5 §39: for adapters implemented in code, report LIVE health —
     // real version when the binary is present, honest UNAVAILABLE when not.
     const adapter = this.reconAdapters.find((a) => a.metadata.slug === tool.slug);

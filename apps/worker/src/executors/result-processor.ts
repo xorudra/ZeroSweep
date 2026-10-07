@@ -1,5 +1,5 @@
 import {
-  canonicalizeHostname, canonicalizeUrl, classifyEndpointType, correlateFindings as sdkCorrelateFindings,
+  canonicalizeHostname, canonicalizeUrl, classifyApiKind, classifyEndpointType, correlateFindings as sdkCorrelateFindings,
   detectCrawlerTrap, detectWildcardGroups,
   endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sensitiveRouteLabel,
   ScopeMatcher, type CorrelationStats, type DnsRecordSet, type NormalizedFinding,
@@ -139,12 +139,47 @@ export interface ProcessedFinding {
   lastSeenAt?: string;
 }
 
+/** Prompt 8 §25/§26: observed HTTP traffic — metadata, hashes, sizes,
+ *  artifact references and REDACTED display copies. Raw bodies never
+ *  appear here; they live in the execution's raw artifact in object
+ *  storage, and the refs point into it. */
+export interface ProcessedTransaction {
+  method: string;
+  url: string;
+  host: string;
+  statusCode?: number;
+  source: string;
+  scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+  apiKind?: string;
+  requestHash?: string;
+  responseHash?: string;
+  requestSize?: number;
+  responseSize?: number;
+  requestArtifactRef?: string;
+  responseArtifactRef?: string;
+  requestRedacted?: string;
+  responseRedacted?: string;
+  observedAt?: string;
+}
+
+/** Prompt 8 §49: WebSocket inventory (no attack automation). */
+export interface ProcessedWebSocket {
+  url: string;
+  origin?: string;
+  subprotocol?: string;
+  source: string;
+  scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+}
+
 export interface ProcessedResult {
   assets: ProcessedAsset[];
   endpoints: ProcessedEndpoint[];
   services: ProcessedService[];
   technologies: ProcessedTechnology[];
   findings: ProcessedFinding[];
+  /** Prompt 8: proxy-observed traffic + WebSocket inventory. */
+  transactions: ProcessedTransaction[];
+  webSockets: ProcessedWebSocket[];
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -171,7 +206,7 @@ function mergeDns(a: DnsRecordSet[] | undefined, b: DnsRecordSet[] | undefined):
 
 export function processNormalizedResult(
   result: NormalizedSecurityResult,
-  ctx: { scopeRules: ScopeRules; toolExecutionId: string; toolSlug?: string },
+  ctx: { scopeRules: ScopeRules; toolExecutionId: string; toolSlug?: string; artifactKey?: string },
 ): ProcessedResult {
   const matcher = new ScopeMatcher(ctx.scopeRules);
   const tool = ctx.toolSlug ?? "unknown";
@@ -396,7 +431,63 @@ export function processNormalizedResult(
       verificationStatus: "UNVERIFIED",
     };
   });
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, suppressedEndpoints, isMock: result.mock };
+
+  // --- transactions (Prompt 8 §25/§30): canonicalized + scope-verdicted
+  //     like endpoints. URLs persist with sensitive values redacted (§22
+  //     rules apply to traffic too); display copies arrive already
+  //     redacted from the parsers; raw bytes stay in the raw artifact,
+  //     referenced per transaction (§26). ---
+  const transactions: ProcessedTransaction[] = [];
+  (result.transactions ?? []).forEach((tx, i) => {
+    const canonical = canonicalizeUrl(tx.url);
+    if (!canonical) return;
+    const artifactRef = ctx.artifactKey ? `${ctx.artifactKey}#tx-${i}` : undefined;
+    transactions.push({
+      method: tx.method.toUpperCase(),
+      url: redactUrl(canonical),
+      host: tx.host,
+      ...(tx.statusCode !== undefined ? { statusCode: tx.statusCode } : {}),
+      source: tx.source,
+      scopeStatus: matcher.isUrlAllowed(canonical) ? "IN_SCOPE" : "OUT_OF_SCOPE",
+      apiKind: classifyApiKind(canonical),
+      ...(tx.requestHash ? { requestHash: tx.requestHash } : {}),
+      ...(tx.responseHash ? { responseHash: tx.responseHash } : {}),
+      ...(tx.requestSize !== undefined ? { requestSize: tx.requestSize } : {}),
+      ...(tx.responseSize !== undefined ? { responseSize: tx.responseSize } : {}),
+      ...(tx.requestArtifactRef ?? artifactRef ? { requestArtifactRef: tx.requestArtifactRef ?? artifactRef } : {}),
+      ...(tx.responseArtifactRef ?? artifactRef ? { responseArtifactRef: tx.responseArtifactRef ?? artifactRef } : {}),
+      ...(tx.requestRedacted ? { requestRedacted: tx.requestRedacted } : {}),
+      ...(tx.responseRedacted ? { responseRedacted: tx.responseRedacted } : {}),
+      ...(tx.timestamp ? { observedAt: tx.timestamp } : {}),
+    });
+  });
+
+  // --- websockets (Prompt 8 §49): inventory with scope verdicts ---
+  const webSockets: ProcessedWebSocket[] = [];
+  for (const ws of result.webSockets ?? []) {
+    // canonicalizeUrl is http(s)-only by design; ws/wss URLs are
+    // normalized here (lowercase host, default port stripped).
+    let canonical = canonicalizeUrl(ws.url);
+    if (!canonical) {
+      try {
+        const u = new URL(ws.url);
+        if ((u.protocol === "ws:" || u.protocol === "wss:") && u.hostname && !u.username && !u.password) {
+          const port = u.port && !((u.protocol === "wss:" && u.port === "443") || (u.protocol === "ws:" && u.port === "80")) ? `:${u.port}` : "";
+          canonical = `${u.protocol}//${u.hostname.toLowerCase()}${port}${u.pathname || "/"}`;
+        }
+      } catch { /* not a URL — dropped */ }
+    }
+    if (!canonical) continue;
+    webSockets.push({
+      url: canonical,
+      ...(ws.origin ? { origin: ws.origin } : {}),
+      ...(ws.subprotocol ? { subprotocol: ws.subprotocol } : {}),
+      source: ws.source,
+      scopeStatus: matcher.isUrlAllowed(canonical) ? "IN_SCOPE" : "OUT_OF_SCOPE",
+    });
+  }
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original

@@ -76,6 +76,9 @@ describe("Prompt 6 stages in profile templates (§48/§49)", () => {
     const content = defs.find((d) => d.type === "CONTENT_DISCOVERY")!;
     expect(content.requiredCapabilities).toEqual(["CONTENT_DISCOVERY"]);
     const norm = defs.find((d) => d.type === "NORMALIZATION")!;
-    expect(norm.dependencies).toEqual(["SAFE_VULNERABILITY_SCAN"]);
+    // Prompt 8: PASSIVE_SECURITY_ANALYSIS now sits between the vuln scan
+    // and NORMALIZATION in web profiles, and the dependency-rewriting rule
+    // (NORMALIZATION follows the last stage before it) points here.
+    expect(norm.dependencies).toEqual(["PASSIVE_SECURITY_ANALYSIS"]);
   });
 });

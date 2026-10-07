@@ -15,6 +15,11 @@ export const SCAN_EVENT_TYPES = [
   "asset.discovered", "asset.out_of_scope", "endpoint.discovered",
   "scan.completed", "scan.failed", "scan.cancelled",
   "policy.denied", "scope.violation",
+  // Prompt 8 — proxy scanner connector lifecycle + passive analysis.
+  // Payloads carry ids/counts/statuses only: never secrets, never traffic.
+  "scanner.context_created", "scanner.context_destroyed",
+  "passive_analysis.started", "passive_analysis.completed", "passive_analysis.skipped",
+  "auth_session.expired", "active_scan.denied",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

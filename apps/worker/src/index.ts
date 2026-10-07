@@ -1,13 +1,14 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
 import type { OrchestrationJobData, PlaceholderJobData, ScanOrchestrationJobData } from "./jobs";
 import { StageExecutor, type StageJobData } from "./executors/stage-executor";
 import { PrismaWorkerStore } from "./store/prisma-store";
+import { prismaScannerDeps } from "./store/scanner-deps";
 import { DagRunner } from "./consumers/dag-runner";
 import { createBullmqStageDispatcher } from "./consumers/bullmq-dispatcher";
 import { makeWorkerId, registrationRecord } from "./heartbeat/heartbeat";
@@ -34,6 +35,10 @@ registry.register(new LocalEchoAdapter());
 registerReconAdapters(registry);
 registerWebDiscoveryAdapters(registry);
 registerVulnAdapters(registry);
+// Prompt 8: interactive scanner connectors (ZAP / Burp / Caido) backed by
+// admin-registered ScannerInstance rows. With none registered they report
+// NOT_CONFIGURED and the passive stage is honestly skipped (§66).
+registerProxyAdapters(registry, prismaScannerDeps());
 const executor = new StageExecutor(registry, store);
 const runner = new DagRunner(store, executor);
 const workerId = makeWorkerId();
@@ -128,7 +133,7 @@ void (async () => {
 const heartbeat = setInterval(() => void registerAndHeartbeat(), 15_000);
 heartbeat.unref?.();
 
-logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo", "subfinder", "amass", "assetfinder", "findomain", "dnsx", "httpx", "whatweb", "gau", "waybackurls", "katana", "ffuf", "feroxbuster", "gobuster", "wfuzz", "arjun"] });
+logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo", "subfinder", "amass", "assetfinder", "findomain", "dnsx", "httpx", "whatweb", "gau", "waybackurls", "katana", "ffuf", "feroxbuster", "gobuster", "wfuzz", "arjun", "nuclei", "nikto", "testssl", "sslyze", "owasp-zap", "burp-suite-professional", "caido"] });
 
 /** Graceful drain (§52): stop taking jobs, let active work finish, flush state. */
 async function shutdown(signal: string): Promise<void> {

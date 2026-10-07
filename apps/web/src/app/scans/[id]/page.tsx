@@ -235,6 +235,39 @@ export default function Page() {
             </Card>
           </div>
 
+          {(() => {
+            const passive = (scan.stages ?? []).find((s) => s.type === "PASSIVE_SECURITY_ANALYSIS");
+            if (!passive) return null;
+            const connectors = (scan.executions ?? []).filter((ex) => ["owasp-zap", "burp-suite-professional", "caido"].includes(ex.tool?.slug ?? ""));
+            return (
+              <Card>
+                <h3 className="text-sm font-semibold text-slate-200">Passive proxy analysis (Prompt 8)</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Stage status: <span className="text-slate-200">{passive.status}</span>
+                  {passive.status === "COMPLETED" && connectors.length === 0
+                    ? " — no scanner instance was configured, so this stage was honestly skipped (nothing simulated)."
+                    : ""}
+                </p>
+                <div className="mt-2 space-y-1">
+                  {connectors.map((ex) => (
+                    <p key={ex.id} className="text-xs text-slate-400">
+                      {ex.tool?.name ?? ex.tool?.slug} — {ex.status}
+                      {ex.metrics ? ` · issues imported ${ex.metrics.passiveIssues ?? 0} · transactions ${ex.metrics.transactionsAnalyzed ?? 0} · endpoints ${ex.metrics.endpointsImported ?? 0}${ex.metrics.sessionExpired ? " · authenticated session EXPIRED (scan continues with anonymous coverage)" : ""}` : ""}
+                      {ex.error ? ` · ${ex.error}` : ""}
+                    </p>
+                  ))}
+                </div>
+                <p className="mt-2 text-sm text-slate-400">
+                  Active Scan — <span className="text-slate-200">Not Requested</span>. Active scanning is intrusive,
+                  disabled by default, and runs only under a separate expiring approval (Settings → Scanner Instances).
+                </p>
+                <p className="mt-2 text-sm">
+                  <Link href={`/scans/${scan.id}/http-history`} className="text-sky-300 hover:underline">HTTP history &amp; proxy evidence →</Link>
+                </p>
+              </Card>
+            );
+          })()}
+
           <Card>
             <h3 className="text-sm font-semibold text-slate-200">Pipeline (DAG)</h3>
             <div className="mt-3 flex flex-wrap items-center gap-2">

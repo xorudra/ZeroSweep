@@ -223,6 +223,21 @@ export class DagRunner {
         return "FAILED";
       }
     }
+    // Prompt 8 §37/§66: the passive stage reached the platform path
+    // because NO connector was selected (none configured/healthy for this
+    // workspace). It completes honestly as SKIPPED — never simulated.
+    if (stageId === "PASSIVE_SECURITY_ANALYSIS") {
+      await emit("passive_analysis.skipped", { stageId, reasonCode: "NO_CONNECTOR_CONFIGURED" });
+      return "COMPLETED";
+    }
+    // Prompt 8 §38/§57: an active stage with no adapters selected means
+    // active scanning was not requested/approved for this scan — recorded
+    // as a denial event, and the scan proceeds (active scanning is an
+    // opt-in extra, never a pipeline requirement).
+    if (stageId === "ACTIVE_SECURITY_ANALYSIS") {
+      await emit("active_scan.denied", { stageId, reasonCode: "ACTIVE_SCAN_NOT_REQUESTED" });
+      return "COMPLETED";
+    }
     // Prompt 7 §14: the finding pipeline stages do real deterministic work
     // over persisted findings when the store supports it.
     if (stageId === "NORMALIZATION" && this.store.summarizeFindings) {

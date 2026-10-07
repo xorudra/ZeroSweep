@@ -116,6 +116,8 @@ enum ScanStageType {
   PARAMETER_DISCOVERY
   WEB_SURFACE_NORMALIZATION
   SAFE_VULNERABILITY_SCAN
+  PASSIVE_SECURITY_ANALYSIS
+  ACTIVE_SECURITY_ANALYSIS
   NORMALIZATION
   CORRELATION
   RISK_ANALYSIS
@@ -290,6 +292,21 @@ enum AuditAction {
   CREDENTIAL_CREATED
   ROLE_CHANGED
   TOOL_UPDATED
+  // Prompt 8 §72: proxy scanner lifecycle, approvals and raw-evidence
+  // access. Metadata for these actions never contains secrets (§20).
+  SCANNER_CONTEXT_CREATED
+  SCANNER_CONTEXT_DESTROYED
+  PASSIVE_ANALYSIS_STARTED
+  PASSIVE_ANALYSIS_COMPLETED
+  AUTH_SESSION_CREATED
+  AUTH_SESSION_EXPIRED
+  ACTIVE_SCAN_APPROVAL_GRANTED
+  ACTIVE_SCAN_APPROVAL_REVOKED
+  ACTIVE_SCAN_DENIED
+  RAW_EVIDENCE_ACCESSED
+  SCANNER_INSTANCE_REGISTERED
+  SCANNER_INSTANCE_UPDATED
+  SCANNER_IMPORT_COMPLETED
 }
 
 enum NotificationType {
@@ -342,16 +359,19 @@ model Membership {
 }
 
 model Workspace {
-  id             String       @id @default(uuid())
-  organizationId String
-  name           String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  targets        Target[]
-  assessments    Assessment[]
-  credentials    Credential[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  deletedAt      DateTime?
+  id               String            @id @default(uuid())
+  organizationId   String
+  name             String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targets          Target[]
+  assessments      Assessment[]
+  credentials      Credential[]
+  scannerInstances ScannerInstance[]
+  sessionProfiles  SessionProfile[]
+  scanApprovals    ScanApproval[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
 
   @@index([organizationId])
 }
@@ -467,32 +487,32 @@ model Service {
 }
 
 model Endpoint {
-  id             String   @id @default(uuid())
-  assetId        String
-  url            String
-  method         String   @default("GET")
-  statusCode     Int?
+  id               String              @id @default(uuid())
+  assetId          String
+  url              String
+  method           String              @default("GET")
+  statusCode       Int?
   // Prompt 5 §21/§33: parameter NAMES only (values are redacted before
   // persistence), the discovering adapter, and this endpoint's own scope
   // verdict — third-party historical URLs are stored OUT_OF_SCOPE.
-  parameterNames String[] @default([])
-  source         String?
-  scopeStatus    String   @default("IN_SCOPE")
+  parameterNames   String[]            @default([])
+  source           String?
+  scopeStatus      String              @default("IN_SCOPE")
   // Prompt 6 §16/§26/§41-§42: response-classification metadata (safe fields
   // only — never bodies), route classification label (SENSITIVE_ROUTE is an
   // inventory label, not a finding), full provenance, and resource typing.
-  contentType     String?
-  contentLength   Int?
-  title           String?
+  contentType      String?
+  contentLength    Int?
+  title            String?
   redirectLocation String?
-  endpointType    String   @default("UNKNOWN")
-  classification  String?
-  sources         String[] @default([])
-  parameters      EndpointParameter[]
-  forms           EndpointForm[]
-  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  endpointType     String              @default("UNKNOWN")
+  classification   String?
+  sources          String[]            @default([])
+  parameters       EndpointParameter[]
+  forms            EndpointForm[]
+  asset            Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@index([assetId])
 }
@@ -593,25 +613,28 @@ model Assessment {
 }
 
 model Scan {
-  id           String          @id @default(uuid())
-  workspaceId  String
-  assessmentId String
-  status       ScanStatus      @default(QUEUED)
-  currentStage ScanStageType?
-  progress     Int             @default(0)
-  startedAt    DateTime?
-  completedAt  DateTime?
-  errorSummary String?
-  requestedBy  String
-  assessment   Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  stages       ScanStage[]
-  executions   ToolExecution[]
-  findings     Finding[]
-  reports      Report[]
-  plan         ScanPlan?
-  events       ScanEvent[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                 String              @id @default(uuid())
+  workspaceId        String
+  assessmentId       String
+  status             ScanStatus          @default(QUEUED)
+  currentStage       ScanStageType?
+  progress           Int                 @default(0)
+  startedAt          DateTime?
+  completedAt        DateTime?
+  errorSummary       String?
+  requestedBy        String
+  assessment         Assessment          @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  stages             ScanStage[]
+  executions         ToolExecution[]
+  findings           Finding[]
+  reports            Report[]
+  plan               ScanPlan?
+  events             ScanEvent[]
+  httpTransactions   HttpTransaction[]
+  webSocketEndpoints WebSocketEndpoint[]
+  scanApprovals      ScanApproval[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([workspaceId])
   @@index([assessmentId])
@@ -641,22 +664,23 @@ model ScanStage {
 
 // ------------------------------- Tools -------------------------------
 model Tool {
-  id               String           @id @default(uuid())
-  slug             String           @unique
+  id               String            @id @default(uuid())
+  slug             String            @unique
   name             String
   category         ToolCategory
   description      String?
   version          String?
-  enabled          Boolean          @default(true)
-  installed        Boolean          @default(false)
-  healthStatus     ToolHealthStatus @default(UNKNOWN)
-  riskLevel        RiskLevel        @default(LOW)
-  requiresApproval Boolean          @default(false)
-  licenseType      LicenseType      @default(OPEN_SOURCE)
+  enabled          Boolean           @default(true)
+  installed        Boolean           @default(false)
+  healthStatus     ToolHealthStatus  @default(UNKNOWN)
+  riskLevel        RiskLevel         @default(LOW)
+  requiresApproval Boolean           @default(false)
+  licenseType      LicenseType       @default(OPEN_SOURCE)
   adapters         ToolAdapter[]
   executions       ToolExecution[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  scannerInstances ScannerInstance[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([category])
 }
@@ -792,15 +816,15 @@ model Finding {
 // changed, reviewed, confirmed, false positive, accepted risk, resolved,
 // reopened — the audit trail retesting relies on. Rows are append-only.
 model FindingHistory {
-  id        String   @id @default(uuid())
-  findingId String
+  id          String   @id @default(uuid())
+  findingId   String
   workspaceId String
-  event     String // CREATED | SEVERITY_CHANGED | REVIEWED | CONFIRMED | FALSE_POSITIVE | ACCEPTED_RISK | RESOLVED | REOPENED | CORRELATED | RISK_RECALCULATED
-  actorId   String?
-  notes     String?
-  metadata  Json?
-  finding   Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  event       String // CREATED | SEVERITY_CHANGED | REVIEWED | CONFIRMED | FALSE_POSITIVE | ACCEPTED_RISK | RESOLVED | REOPENED | CORRELATED | RISK_RECALCULATED
+  actorId     String?
+  notes       String?
+  metadata    Json?
+  finding     Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
 
   @@index([findingId])
   @@index([workspaceId])
@@ -885,6 +909,197 @@ model Integration {
   updatedAt   DateTime        @updatedAt
 
   @@index([workspaceId])
+}
+
+// --------------- Proxy scanners: instances, sessions, traffic, approvals (Prompt 8) ---------------
+enum ScannerDeploymentType {
+  MANAGED_DAEMON
+  ADMIN_PROVIDED
+  IMPORT_ONLY
+}
+
+enum ScannerHealthStatus {
+  NOT_CONFIGURED
+  HEALTHY
+  DEGRADED
+  UNAVAILABLE
+  MISCONFIGURED
+}
+
+enum SessionProfileType {
+  ANONYMOUS
+  AUTHENTICATED
+  API_AUTHENTICATED
+}
+
+enum AuthenticationMode {
+  FORM
+  BASIC
+  BEARER
+  API_KEY
+  COOKIE
+  OAUTH
+  CUSTOM_HEADER
+}
+
+enum ScanApprovalStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  INVALIDATED
+}
+
+// A registered scanner deployment (§15). endpointReference is an OPAQUE
+// name resolved only from server-side configuration — never a URL, and
+// URL-shaped values are rejected at the API. credentialReference is the
+// NAME of a secret in the secret store; secret values are never stored
+// here, never logged and never returned by any API (§15/§20).
+model ScannerInstance {
+  id                   String                @id @default(uuid())
+  organizationId       String
+  workspaceId          String?
+  toolId               String
+  name                 String
+  endpointReference    String
+  deploymentType       ScannerDeploymentType @default(MANAGED_DAEMON)
+  credentialReference  String?
+  declaredCapabilities Json                  @default("[]")
+  detectedCapabilities Json                  @default("[]")
+  healthStatus         ScannerHealthStatus   @default(NOT_CONFIGURED)
+  version              String?
+  licenseState         String?
+  lastHealthCheckAt    DateTime?
+  lastHealthDetail     String?
+  enabled              Boolean               @default(true)
+  createdBy            String
+  workspace            Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tool                 Tool                  @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([organizationId])
+  @@index([workspaceId])
+  @@index([toolId])
+}
+
+// A reusable scan session (§18): metadata + credential REFERENCE only.
+// Cookie/header policies name NAMES, never values (§20).
+model SessionProfile {
+  id                  String                  @id @default(uuid())
+  workspaceId         String
+  name                String
+  type                SessionProfileType      @default(ANONYMOUS)
+  credentialReference String?
+  cookiePolicy        Json?
+  headerPolicy        Json?
+  validation          Json?
+  createdBy           String
+  workspace           Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  authProfiles        AuthenticationProfile[]
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([workspaceId])
+}
+
+// How a session authenticates (§19): modes + field/header NAMES only.
+// There is deliberately no script field — arbitrary login scripts are
+// never accepted or executed.
+model AuthenticationProfile {
+  id                  String             @id @default(uuid())
+  sessionProfileId    String
+  mode                AuthenticationMode
+  loginUrl            String?
+  usernameField       String?
+  passwordField       String?
+  tokenHeaderName     String?
+  credentialReference String?
+  config              Json?
+  sessionProfile      SessionProfile     @relation(fields: [sessionProfileId], references: [id], onDelete: Cascade)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([sessionProfileId])
+}
+
+// Observed HTTP traffic (§25/§26): metadata, hashes, sizes, object-storage
+// references and REDACTED display copies only. Raw bodies live in object
+// storage; they are never stored in Postgres.
+model HttpTransaction {
+  id                  String   @id @default(uuid())
+  scanId              String
+  workspaceId         String
+  assetId             String?
+  endpointId          String?
+  toolExecutionId     String?
+  method              String
+  url                 String
+  host                String
+  statusCode          Int?
+  source              String // connector slug that observed the transaction
+  scopeStatus         String   @default("IN_SCOPE")
+  apiKind             String?
+  requestHash         String?
+  responseHash        String?
+  requestSize         Int?
+  responseSize        Int?
+  requestArtifactRef  String?
+  responseArtifactRef String?
+  requestRedacted     String?
+  responseRedacted    String?
+  observedAt          DateTime @default(now())
+  scan                Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+
+  @@index([scanId])
+  @@index([workspaceId])
+  @@index([host])
+}
+
+// WebSocket endpoints observed by proxy connectors (§49): inventory only.
+model WebSocketEndpoint {
+  id          String   @id @default(uuid())
+  scanId      String
+  workspaceId String
+  url         String
+  origin      String?
+  subprotocol String?
+  source      String
+  scopeStatus String   @default("IN_SCOPE")
+  scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([scanId, url])
+  @@index([scanId])
+}
+
+// A human approval for an intrusive capability (§41–§43): bound to a scope
+// snapshot hash — any later scope change invalidates it at gate time.
+model ScanApproval {
+  id                String             @id @default(uuid())
+  workspaceId       String
+  assessmentId      String
+  scanId            String?
+  capability        String
+  scannerInstanceId String?
+  scopeId           String?
+  scopeSnapshot     Json
+  scopeSnapshotHash String
+  policySnapshot    Json?
+  status            ScanApprovalStatus @default(ACTIVE)
+  approvedBy        String
+  approvedAt        DateTime           @default(now())
+  expiresAt         DateTime
+  revokedBy         String?
+  revokedAt         DateTime?
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan              Scan?              @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([workspaceId])
+  @@index([assessmentId])
+  @@index([scanId])
 }
 
 // ------------------------------- Audit & notifications -------------------------------

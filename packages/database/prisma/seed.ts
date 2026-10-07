@@ -30,9 +30,9 @@ interface CatalogTool {
 }
 
 const TOOLS: CatalogTool[] = [
-  { slug: "burp-suite-professional", name: "Burp Suite Professional", category: "WEB", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["WEB_CRAWLING", "VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Commercial web proxy/scanner; admin supplies license and installation." },
-  { slug: "caido", name: "Caido", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "HTTP_PROBING"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Modern web security proxy toolkit." },
-  { slug: "owasp-zap", name: "OWASP ZAP", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Open-source web application scanner and proxy." },
+  { slug: "burp-suite-professional", name: "Burp Suite Professional", category: "WEB", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["PROXY", "PASSIVE_ANALYSIS", "SITE_MAP_IMPORT", "ISSUE_IMPORT", "WEB_CRAWLING", "ACTIVE_WEB_SCANNING"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Commercial web proxy/scanner — ADMIN_PROVIDED licensed environment (Prompt 8 §9). Passive site-map + issue import via the administrator's bridge; active scanning INTRUSIVE, approval-gated, disabled by default. Unconfigured = NOT_CONFIGURED." },
+  { slug: "caido", name: "Caido", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PROXY", "TRAFFIC_ANALYSIS", "ENDPOINT_DISCOVERY", "REQUEST_COLLECTION", "ISSUE_IMPORT"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Modern web security proxy (Prompt 8 §13): traffic analysis, endpoint/request collection and issue import where the installed version supports it; capabilities detected per deployment." },
+  { slug: "owasp-zap", name: "OWASP ZAP", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PROXY", "PASSIVE_ANALYSIS", "CONTEXT_MANAGEMENT", "ENDPOINT_IMPORT", "ISSUE_IMPORT", "WEB_CRAWLING", "ENDPOINT_DISCOVERY", "VULNERABILITY_SCANNING", "ACTIVE_WEB_SCANNING"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Open-source web proxy/scanner via its daemon API (Prompt 8 §4): passive analysis first, per-assessment contexts, endpoint + alert import. Active scanning INTRUSIVE, approval-gated, disabled by default." },
   { slug: "nuclei", name: "Nuclei", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "MISCONFIGURATION_DETECTION", "EXPOSURE_DETECTION", "TECHNOLOGY_VALIDATION"], supportedTargets: ["WEB_APPLICATION", "DOMAIN", "API"], requiresCredentials: [], description: "Template-based vulnerability scanner, restricted to the governed SAFE template policy (Prompt 7 §4)." },
   { slug: "nikto", name: "Nikto", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "WEB_SERVER_SECURITY_ASSESSMENT", "MISCONFIGURATION_DETECTION", "EXPOSURE_DETECTION"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web server security assessment: dangerous files, outdated software, misconfigurations (Prompt 7 §9)." },
   { slug: "ffuf", name: "ffuf", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "DIRECTORY_DISCOVERY", "FILE_DISCOVERY", "VHOST_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast content discovery (directories, files, routes; vhost only when separately enabled). Implemented Prompt 6." },
@@ -160,6 +160,7 @@ const TOOLS: CatalogTool[] = [
 
 const MODE: Record<string, "CONTAINER" | "EXTERNAL_API" | "ADMIN_PROVIDED"> = {
   "shodan-cli": "EXTERNAL_API", "censys-cli": "EXTERNAL_API",
+  "owasp-zap": "EXTERNAL_API", "caido": "EXTERNAL_API",
   "burp-suite-professional": "ADMIN_PROVIDED", "nessus-professional": "ADMIN_PROVIDED",
   "binary-ninja": "ADMIN_PROVIDED", "ida": "ADMIN_PROVIDED", "plextrac": "ADMIN_PROVIDED",
 };
@@ -247,6 +248,26 @@ async function main(): Promise<void> {
       where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
       update: { enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, inputSchema: { note: "Implemented adapter (Prompt 7) — Nuclei templates selected by the governed template policy in code; templates are never user-supplied paths", implementedPhase: 7 } },
       create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 7)", implementedPhase: 7 } },
+    });
+  }
+  // Implemented connectors (Prompt 8): interactive proxy scanners. These
+  // are NOT containers — they execute through admin-registered scanner
+  // instances (ScannerInstance rows) resolved from server configuration.
+  // With no instance registered, health is honestly NOT_CONFIGURED (§66);
+  // the seed only marks the connector implemented + enabled.
+  const IMPLEMENTED_PROXY: Array<{ slug: string; executionMode: "EXTERNAL_API" | "ADMIN_PROVIDED"; outputFormat: string; parser: string; defaultTimeout: number; networkPolicy: string }> = [
+    { slug: "owasp-zap", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "zap-json", defaultTimeout: 1200, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "burp-suite-professional", executionMode: "ADMIN_PROVIDED", outputFormat: "JSON", parser: "burp-xml", defaultTimeout: 1200, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "caido", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "caido-json", defaultTimeout: 1200, networkPolicy: "CUSTOM_ALLOWLIST" },
+  ];
+  for (const impl of IMPLEMENTED_PROXY) {
+    const tool = await prisma.tool.findUnique({ where: { slug: impl.slug } });
+    const catalog = TOOLS.find((x) => x.slug === impl.slug);
+    if (!tool || !catalog) continue;
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, inputSchema: { note: "Interactive scanner connector (Prompt 8) — executes only against admin-registered scanner instances; endpoints are opaque references resolved from server configuration, credentials are secret references only", implementedPhase: 8 } },
+      create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Interactive scanner connector (Prompt 8)", implementedPhase: 8 } },
     });
   }
   // Prompt 6 §10: wordlists are governed platform data, seeded from the

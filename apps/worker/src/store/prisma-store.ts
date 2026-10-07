@@ -1,7 +1,7 @@
 import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
-import { computeRisk } from "@dsrclone/security-sdk";
+import { PROXY_SLUGS, computeRisk } from "@dsrclone/security-sdk";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
@@ -81,11 +81,31 @@ export class PrismaWorkerStore implements ScanRunStore {
       scopeValid: scopeParse.success,
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
+      assessmentId: graph.assessmentId,
+      scanner: await this.loadScannerBinding(exec.tool.slug, graph.workspaceId, graph.workspace.organizationId),
       stageInputs: await this.loadStageInputs(target.id),
       simulation: {
         fixture: (plan.profile === "PASSIVE_RECON" || plan.profile === "WEB_BASELINE") && stageType === "PASSIVE_RECON",
       },
     };
+  }
+
+  /** Prompt 8 scanner binding (§16): the workspace's admin-registered
+   *  instance for this connector — workspace-specific rows win over
+   *  org-wide ones. Resolved from trusted DB state only; the queue
+   *  payload and the client never name an instance or an endpoint. */
+  private async loadScannerBinding(toolSlug: string, workspaceId: string, organizationId: string): Promise<{ instanceId?: string } | undefined> {
+    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug)) return undefined;
+    const own = await prisma.scannerInstance.findFirst({
+      where: { workspaceId, enabled: true, tool: { slug: toolSlug } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (own) return { instanceId: own.id };
+    const orgWide = await prisma.scannerInstance.findFirst({
+      where: { workspaceId: null, organizationId, enabled: true, tool: { slug: toolSlug } },
+      orderBy: { createdAt: "asc" },
+    });
+    return orgWide ? { instanceId: orgWide.id } : {};
   }
 
   /** Discovery inputs for downstream stages (Prompt 5 §26): the target's
@@ -138,9 +158,9 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number }> {
+  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
-    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0 };
+    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0 };
     const assetIdByHost = new Map<string, string>();
     for (const asset of processed.assets) {
       const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: asset.host } });
@@ -296,7 +316,39 @@ export class PrismaWorkerStore implements ScanRunStore {
       void created;
       findings++;
     }
-    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms };
+    // HTTP transactions (Prompt 8 §25/§26): metadata, hashes, sizes,
+    // artifact references and redacted display copies — raw bodies are
+    // never written to Postgres.
+    let transactions = 0;
+    for (const tx of processed.transactions) {
+      await prisma.httpTransaction.create({
+        data: {
+          scanId, workspaceId: scan.workspaceId,
+          assetId: assetIdByHost.get(tx.host),
+          endpointId: endpointIdByUrl.get(tx.url) ?? endpointIdByUrl.get(tx.url.split("?")[0]!),
+          toolExecutionId: executionId,
+          method: tx.method, url: tx.url, host: tx.host, statusCode: tx.statusCode,
+          source: tx.source, scopeStatus: tx.scopeStatus, apiKind: tx.apiKind,
+          requestHash: tx.requestHash, responseHash: tx.responseHash,
+          requestSize: tx.requestSize, responseSize: tx.responseSize,
+          requestArtifactRef: tx.requestArtifactRef, responseArtifactRef: tx.responseArtifactRef,
+          requestRedacted: tx.requestRedacted, responseRedacted: tx.responseRedacted,
+          ...(tx.observedAt ? { observedAt: new Date(tx.observedAt) } : {}),
+        },
+      });
+      transactions++;
+    }
+    // WebSocket inventory (§49): upserted per scan+URL.
+    let webSockets = 0;
+    for (const ws of processed.webSockets) {
+      await prisma.webSocketEndpoint.upsert({
+        where: { scanId_url: { scanId, url: ws.url } },
+        create: { scanId, workspaceId: scan.workspaceId, url: ws.url, origin: ws.origin, subprotocol: ws.subprotocol, source: ws.source, scopeStatus: ws.scopeStatus },
+        update: { origin: ws.origin, subprotocol: ws.subprotocol, source: ws.source, scopeStatus: ws.scopeStatus },
+      });
+      webSockets++;
+    }
+    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets };
   }
 
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */

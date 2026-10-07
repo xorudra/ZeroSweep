@@ -1,6 +1,6 @@
 import {
-  NucleiAdapter, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
-  approvedReviewIdsForProfile, evaluateToolPolicy, type AuthorizationContext,
+  NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS] as const;
 
 export interface ExecutionContextRecord {
   executionId: string;
@@ -56,6 +56,13 @@ export interface ExecutionContextRecord {
    *  Prompt 6 wordlist profile selection: WEB_BASELINE → SMALL, anything
    *  broader → STANDARD. COMPREHENSIVE is never selected automatically. */
   profile?: string;
+  /** The scan's assessment id (trusted state, for connector context
+   *  binding — Prompt 8 §6). */
+  assessmentId?: string;
+  /** Prompt 8 scanner binding, resolved by the STORE from admin-registered
+   *  ScannerInstance rows for this workspace — never from queue payloads
+   *  or client input (§16/§17). Absent instanceId = NOT_CONFIGURED. */
+  scanner?: { instanceId?: string; sessionProfileId?: string };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -64,7 +71,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -132,6 +139,25 @@ export class StageExecutor {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
         await this.failExecution(ctx, "POLICY", `Adapter ${ctx.adapterSlug} is not executable in this phase`);
         return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      // Prompt 8 (§16/§66): a scanner connector executes ONLY against an
+      // admin-registered instance resolved for THIS workspace by the
+      // store. No instance → NOT_CONFIGURED → TOOL_UNAVAILABLE denial;
+      // the DAG degrades the stage instead of inventing scanner output.
+      const isConnector = isScannerConnectorAdapter(adapter);
+      // Defense in depth (§37/§38): connectors execute ONLY in the
+      // passive stage in this phase — never as crawl/vuln-stage tools,
+      // and the ACTIVE stage's execution lands behind the approval gate
+      // in a later phase.
+      if (isConnector && ctx.stageId !== "PASSIVE_SECURITY_ANALYSIS") {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: scanner connectors execute only in PASSIVE_SECURITY_ANALYSIS in this phase`);
+        return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      if (isConnector && !ctx.scanner?.instanceId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no scanner instance is configured for this workspace (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
       }
       // Real health (§2/§55): a recon adapter whose binary is absent is
       // denied by policy as TOOL_UNAVAILABLE — never executed, never faked.
@@ -203,6 +229,24 @@ export class StageExecutor {
       if (declared.has("template")) {
         config.template = ctx.stageId === "PARAMETER_DISCOVERY" ? "PARAMETER" : "CONTENT";
       }
+      // Prompt 8 derived configuration — trusted worker state only (§6/
+      // §16): the workspace's registered scanner instance + session
+      // profile binding (store-resolved), tenancy ids for context
+      // isolation, and the persisted scope snapshot the connector checks
+      // its context against. Clients can supply none of this.
+      if (isConnector) {
+        if (declared.has("instanceId") && ctx.scanner?.instanceId) config.instanceId = ctx.scanner.instanceId;
+        if (declared.has("sessionProfileId") && ctx.scanner?.sessionProfileId) config.sessionProfileId = ctx.scanner.sessionProfileId;
+        if (declared.has("workspaceId")) config.workspaceId = ctx.workspaceId;
+        if (declared.has("assessmentId") && ctx.assessmentId) config.assessmentId = ctx.assessmentId;
+        if (declared.has("scanId")) config.scanId = ctx.scanId;
+        if (declared.has("scopeIncludeHosts")) config.scopeIncludeHosts = ctx.scopeRules.includeHosts;
+        if (declared.has("scopeExcludeHosts")) config.scopeExcludeHosts = ctx.scopeRules.excludeHosts;
+        if (declared.has("scopeAllowedPorts")) config.scopeAllowedPorts = ctx.scopeRules.allowedPorts;
+        if (declared.has("scopeAllowedPaths")) config.scopeAllowedPaths = ctx.scopeRules.allowedPaths;
+        if (declared.has("scopeExcludedPaths")) config.scopeExcludedPaths = ctx.scopeRules.excludedPaths;
+        await emit("passive_analysis.started", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -245,8 +289,23 @@ export class StageExecutor {
       );
       await this.transition(ctx, "NORMALIZING");
       const normalized = await adapter.normalize(parsed);
-      const processed = processNormalizedResult(normalized, { scopeRules: ctx.scopeRules, toolExecutionId: ctx.executionId, toolSlug: ctx.adapterSlug });
+      const processed = processNormalizedResult(normalized, { scopeRules: ctx.scopeRules, toolExecutionId: ctx.executionId, toolSlug: ctx.adapterSlug, artifactKey: artifact.storageKey });
       const counts = await this.store.persistResult(ctx.scanId, ctx.executionId, processed);
+      // Prompt 8 connector lifecycle events (§72): ids + counts only —
+      // never secrets, never traffic (§20).
+      if (isConnector) {
+        await emit("scanner.context_created", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
+        if (normalized.metrics.sessionExpired === 1) {
+          await emit("auth_session.expired", { stageId: ctx.stageId, tool: ctx.adapterSlug });
+        }
+        await emit("passive_analysis.completed", {
+          stageId: ctx.stageId, tool: ctx.adapterSlug,
+          transactions: counts.transactions ?? processed.transactions.length,
+          issues: normalized.metrics.passiveIssues ?? processed.findings.length,
+          endpointsImported: normalized.metrics.endpointsImported ?? processed.endpoints.length,
+        });
+        await emit("scanner.context_destroyed", { stageId: ctx.stageId, tool: ctx.adapterSlug });
+      }
       // §59: aggregated recon events, never one record per discovered URL.
       for (const a of processed.assets) {
         if (a.scopeStatus === "IN_SCOPE") await emit("asset.discovered", { stageId: ctx.stageId, host: a.host, tool: ctx.adapterSlug });
@@ -266,6 +325,8 @@ export class StageExecutor {
           technologies: counts.technologies ?? processed.technologies.length,
           parameters: counts.parameters ?? processed.parameters.length,
           forms: counts.forms ?? processed.forms.length,
+          transactions: counts.transactions ?? processed.transactions.length,
+          webSockets: counts.webSockets ?? processed.webSockets.length,
           suppressedEndpoints: processed.suppressedEndpoints,
           ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
           ...normalized.metrics,
