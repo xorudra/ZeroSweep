@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnpm-store/
+# builds
+dist/
+.next/
+out/
+*.tsbuildinfo
+turbo/
+.turbo/
+# env & secrets — NEVER commit real secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*
+*secret*
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+# data / storage
+data/
+minio-data/
+pgdata/
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+*.log

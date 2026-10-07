@@ -1,0 +1,21 @@
+{
+  "name": "@dsrclone/worker",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@dsrclone/config": "workspace:*",
+    "@dsrclone/logger": "workspace:*",
+    "@dsrclone/security-sdk": "workspace:*",
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.2"
+  },
+  "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.2" }
+}

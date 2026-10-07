@@ -1,0 +1,731 @@
+// DSRclone — single Prisma schema (packages/database owns it; no competing schemas).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------- Enums -------------------------------
+enum Role {
+  OWNER
+  ADMIN
+  SECURITY_ENGINEER
+  ANALYST
+  VIEWER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum TargetType {
+  DOMAIN
+  WEB_APPLICATION
+  IP_ADDRESS
+  CIDR
+  API
+  GRAPHQL
+  SOURCE_REPOSITORY
+  APK
+  CONTAINER_IMAGE
+  DOCKER
+  KUBERNETES
+  AWS
+  AZURE
+  GCP
+  ACTIVE_DIRECTORY
+  BINARY
+  WIRELESS_LAB
+}
+
+enum TargetStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  ARCHIVED
+}
+
+enum VerificationMethod {
+  DNS_TXT
+  HTTP_FILE
+  MANUAL_APPROVAL
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  REJECTED
+}
+
+enum AssessmentProfile {
+  PASSIVE_RECON
+  WEB_BASELINE
+  WEB_COMPREHENSIVE
+  API_ASSESSMENT
+  NETWORK_ASSESSMENT
+  SOURCE_CODE
+  CONTAINER
+  CLOUD
+  MOBILE
+  CUSTOM
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum ScanStatus {
+  QUEUED
+  PREPARING
+  RUNNING
+  PAUSED
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum ScanStageType {
+  AUTHORIZATION_CHECK
+  SCOPE_VALIDATION
+  PASSIVE_RECON
+  ASSET_DISCOVERY
+  DNS_RESOLUTION
+  HTTP_DISCOVERY
+  TECHNOLOGY_DETECTION
+  PORT_DISCOVERY
+  CRAWLING
+  ENDPOINT_DISCOVERY
+  PARAMETER_DISCOVERY
+  SAFE_VULNERABILITY_SCAN
+  NORMALIZATION
+  CORRELATION
+  RISK_ANALYSIS
+  REPORT_GENERATION
+}
+
+enum ScanStageStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum ToolCategory {
+  RECON
+  WEB
+  NETWORK
+  API
+  ACTIVE_DIRECTORY
+  PASSWORD_AUDIT
+  MOBILE
+  CLOUD
+  CONTAINER
+  SOURCE_CODE
+  BINARY
+  WIRELESS
+  REPORTING
+}
+
+enum ToolHealthStatus {
+  UNKNOWN
+  HEALTHY
+  DEGRADED
+  UNAVAILABLE
+  MISCONFIGURED
+}
+
+enum RiskLevel {
+  PASSIVE
+  LOW
+  MODERATE
+  INTRUSIVE
+  RESTRICTED
+}
+
+enum ExecutionMode {
+  CONTAINER
+  EXTERNAL_API
+  ADMIN_PROVIDED
+  MOCK
+}
+
+enum LicenseType {
+  OPEN_SOURCE
+  COMMERCIAL
+  EXTERNAL_API
+  ADMIN_PROVIDED
+}
+
+enum ToolExecutionStatus {
+  QUEUED
+  PREPARING
+  RUNNING
+  CANCELLING
+  CANCELLED
+  COMPLETED
+  FAILED
+  TIMED_OUT
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFORMATIONAL
+}
+
+enum FindingStatus {
+  OPEN
+  CONFIRMED
+  ACCEPTED_RISK
+  RESOLVED
+  FALSE_POSITIVE
+}
+
+enum FindingVerificationStatus {
+  UNVERIFIED
+  LIKELY
+  CONFIRMED
+  REJECTED
+}
+
+enum ReportFormat {
+  PDF
+  HTML
+  JSON
+  CSV
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+enum CredentialType {
+  API_KEY
+  CLOUD
+  SCM_TOKEN
+  TOOL_LICENSE
+  OTHER
+}
+
+enum IntegrationType {
+  DEFECTDOJO
+  FARADAY
+  DRADIS
+  PLEXTRAC
+  SERPICO
+  SHODAN
+  CENSYS
+  CUSTOM
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  REGISTER
+  TARGET_CREATED
+  TARGET_UPDATED
+  TARGET_VERIFIED
+  SCOPE_CHANGED
+  ASSESSMENT_CREATED
+  ASSESSMENT_APPROVED
+  SCAN_REQUESTED
+  SCAN_STARTED
+  SCAN_CANCELLED
+  REPORT_GENERATED
+  CREDENTIAL_CREATED
+  ROLE_CHANGED
+  TOOL_UPDATED
+}
+
+enum NotificationType {
+  SCAN_COMPLETED
+  SCAN_FAILED
+  FINDING_CRITICAL
+  APPROVAL_REQUESTED
+  SYSTEM
+}
+
+// ------------------------------- Identity & tenancy -------------------------------
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  name         String
+  passwordHash String // bcrypt hash only — never a plaintext password
+  isActive     Boolean      @default(true)
+  memberships  Membership[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime?
+
+  @@index([email])
+}
+
+model Organization {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  memberships Membership[]
+  workspaces  Workspace[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+}
+
+model Membership {
+  id             String           @id @default(uuid())
+  userId         String
+  organizationId String
+  role           Role             @default(VIEWER)
+  status         MembershipStatus @default(ACTIVE)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model Workspace {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targets        Target[]
+  assessments    Assessment[]
+  credentials    Credential[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([organizationId])
+}
+
+// ------------------------------- Targets, verification, scope -------------------------------
+model Target {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  name            String
+  type            TargetType
+  value           String
+  description     String?
+  status          TargetStatus       @default(DRAFT)
+  verified        Boolean            @default(false)
+  createdBy       String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  verifications   TargetVerification[]
+  scopes          Scope[]
+  assets          Asset[]
+  assessments     Assessment[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
+
+  @@index([workspaceId])
+  @@index([workspaceId, type])
+}
+
+model TargetVerification {
+  id         String             @id @default(uuid())
+  targetId   String
+  method     VerificationMethod
+  challenge  String // e.g. the DNS TXT value the owner must publish
+  status     VerificationStatus @default(PENDING)
+  verifiedAt DateTime?
+  expiresAt  DateTime?
+  target     Target             @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([targetId])
+}
+
+model Scope {
+  id           String     @id @default(uuid())
+  workspaceId  String
+  targetId     String
+  name         String
+  // Structured rules only (validated by @dsrclone/validation): includeHosts,
+  // excludeHosts, includeCidrs, allowedPorts, allowedPaths, excludedPaths.
+  rules        Json
+  target       Target     @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  assessments  Assessment[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([targetId])
+  @@index([workspaceId])
+}
+
+// ------------------------------- Discovered surface -------------------------------
+model Asset {
+  id          String     @id @default(uuid())
+  workspaceId String
+  targetId    String
+  host        String
+  ip          String?
+  type        String     @default("HOST")
+  target      Target     @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  services    Service[]
+  endpoints   Endpoint[]
+  technologies Technology[]
+  findings    Finding[]
+  firstSeen   DateTime   @default(now())
+  lastSeen    DateTime   @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([workspaceId])
+  @@index([targetId, host])
+}
+
+model Service {
+  id        String   @id @default(uuid())
+  assetId   String
+  port      Int
+  protocol  String   @default("tcp")
+  name      String?
+  product   String?
+  version   String?
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([assetId, port, protocol])
+  @@index([assetId])
+}
+
+model Endpoint {
+  id         String   @id @default(uuid())
+  assetId    String
+  url        String
+  method     String   @default("GET")
+  statusCode Int?
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([assetId])
+}
+
+model Technology {
+  id        String   @id @default(uuid())
+  assetId   String
+  name      String
+  version   String?
+  category  String?
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assetId])
+}
+
+// ------------------------------- Assessments & scans -------------------------------
+model Assessment {
+  id          String            @id @default(uuid())
+  workspaceId String
+  targetId    String
+  scopeId     String?
+  name        String
+  profile     AssessmentProfile
+  status      AssessmentStatus  @default(DRAFT)
+  createdBy   String
+  approvedBy  String?
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target      Target            @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  scope       Scope?            @relation(fields: [scopeId], references: [id])
+  scans       Scan[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([workspaceId])
+  @@index([targetId])
+}
+
+model Scan {
+  id           String      @id @default(uuid())
+  workspaceId  String
+  assessmentId String
+  status       ScanStatus  @default(QUEUED)
+  currentStage ScanStageType?
+  progress     Int         @default(0)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  errorSummary String?
+  requestedBy  String
+  assessment   Assessment  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  stages       ScanStage[]
+  executions   ToolExecution[]
+  findings     Finding[]
+  reports      Report[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([workspaceId])
+  @@index([assessmentId])
+  @@index([status])
+}
+
+model ScanStage {
+  id          String          @id @default(uuid())
+  scanId      String
+  type        ScanStageType
+  status      ScanStageStatus @default(QUEUED)
+  progress    Int             @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  metadata    Json?
+  scan        Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  executions  ToolExecution[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([scanId, type])
+  @@index([scanId])
+}
+
+// ------------------------------- Tools -------------------------------
+model Tool {
+  id               String          @id @default(uuid())
+  slug             String          @unique
+  name             String
+  category         ToolCategory
+  description      String?
+  version          String?
+  enabled          Boolean         @default(true)
+  installed        Boolean         @default(false)
+  healthStatus     ToolHealthStatus @default(UNKNOWN)
+  riskLevel        RiskLevel       @default(LOW)
+  requiresApproval Boolean         @default(false)
+  licenseType      LicenseType     @default(OPEN_SOURCE)
+  adapters         ToolAdapter[]
+  executions       ToolExecution[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([category])
+}
+
+model ToolAdapter {
+  id                 String       @id @default(uuid())
+  toolId             String
+  adapterVersion     String
+  executionMode      ExecutionMode @default(CONTAINER)
+  dockerImage        String?
+  supportedTargets   Json // TargetType[]
+  capabilities       Json // Capability[]
+  inputSchema        Json?
+  outputFormat       String       @default("JSON")
+  parser             String?
+  defaultTimeout     Int          @default(600) // seconds
+  cpuLimit           String       @default("1")
+  memoryLimit        String       @default("512Mi")
+  networkPolicy      String       @default("SCOPE_ONLY")
+  enabled            Boolean      @default(true)
+  tool               Tool         @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  executions         ToolExecution[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([toolId, adapterVersion])
+  @@index([toolId])
+}
+
+model ToolExecution {
+  id              String              @id @default(uuid())
+  scanId          String
+  scanStageId     String?
+  toolId          String
+  toolAdapterId   String?
+  worker          String?
+  status          ToolExecutionStatus @default(QUEUED)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  exitCode        Int?
+  timeoutSeconds  Int?
+  outputLocation  String? // object-storage key — never bulk raw output in Postgres
+  error           String?
+  metrics         Json?
+  scan            Scan                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanStage       ScanStage?          @relation(fields: [scanStageId], references: [id])
+  tool            Tool                @relation(fields: [toolId], references: [id])
+  toolAdapter     ToolAdapter?        @relation(fields: [toolAdapterId], references: [id])
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([scanId])
+  @@index([toolId])
+}
+
+// ------------------------------- Findings -------------------------------
+model Finding {
+  id                 String                    @id @default(uuid())
+  workspaceId        String
+  scanId             String
+  assetId            String?
+  title              String
+  description        String
+  severity           Severity
+  confidence         Float                     @default(0.5)
+  cvssScore          Float?
+  cvssVector         String?
+  cve                String?
+  cwe                String?
+  owaspCategory      String?
+  endpoint           String?
+  host               String?
+  port               Int?
+  protocol           String?
+  parameter          String?
+  technicalImpact    String?
+  businessImpact     String?
+  remediation        String?
+  status             FindingStatus             @default(OPEN)
+  verificationStatus FindingVerificationStatus @default(UNVERIFIED)
+  duplicateOfId      String?
+  fingerprint        String?
+  firstSeen          DateTime                  @default(now())
+  lastSeen           DateTime                  @updatedAt
+  scan               Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  asset              Asset?                    @relation(fields: [assetId], references: [id])
+  duplicateOf        Finding?                  @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates         Finding[]                 @relation("FindingDuplicates")
+  evidence           FindingEvidence[]
+  references         FindingReference[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@index([workspaceId])
+  @@index([scanId])
+  @@index([severity])
+  @@index([fingerprint])
+}
+
+model FindingEvidence {
+  id               String   @id @default(uuid())
+  findingId        String
+  sourceTool       String
+  evidenceType     String   @default("TEXT")
+  requestRef       String? // object-storage reference, redacted before display
+  responseRef      String?
+  artifactLocation String?
+  summary          String?
+  fingerprint      String?
+  finding          Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  @@index([findingId])
+}
+
+model FindingReference {
+  id        String   @id @default(uuid())
+  findingId String
+  type      String   @default("URL") // CVE | CWE | OWASP | VENDOR | URL
+  label     String
+  url       String
+  finding   Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([findingId])
+}
+
+// ------------------------------- Reports, credentials, integrations -------------------------------
+model Report {
+  id              String       @id @default(uuid())
+  workspaceId     String
+  scanId          String
+  format          ReportFormat @default(PDF)
+  status          ReportStatus @default(PENDING)
+  storageLocation String?
+  checksum        String?
+  generatedBy     String
+  generatedAt     DateTime?
+  scan            Scan         @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([workspaceId])
+  @@index([scanId])
+}
+
+model Credential {
+  id              String         @id @default(uuid())
+  workspaceId     String
+  name            String
+  type            CredentialType @default(API_KEY)
+  provider        String
+  // METADATA ONLY: a reference into a secret manager. Secret values are never
+  // stored in this table and never returned by the API.
+  secretReference String
+  createdBy       String
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([workspaceId])
+}
+
+model Integration {
+  id          String          @id @default(uuid())
+  workspaceId String
+  type        IntegrationType
+  name        String
+  config      Json? // non-secret configuration only
+  enabled     Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([workspaceId])
+}
+
+// ------------------------------- Audit & notifications -------------------------------
+model AuditLog {
+  id             String      @id @default(uuid())
+  actorId        String?
+  organizationId String?
+  workspaceId    String?
+  action         AuditAction
+  resourceType   String
+  resourceId     String?
+  metadata       Json? // never contains passwords, tokens or raw credentials
+  ipAddress      String?
+  createdAt      DateTime    @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([workspaceId])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  workspaceId String?
+  type        NotificationType @default(SYSTEM)
+  title       String
+  body        String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([userId, read])
+}

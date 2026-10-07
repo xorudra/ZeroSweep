@@ -1,0 +1,143 @@
+# DSRclone — Authorized Automated VAPT Platform
+
+DSRclone is a **GUI-first** automated VAPT (Vulnerability Assessment & Penetration
+Testing) and security-assessment orchestration platform. An authorized user registers
+a target, **verifies ownership**, defines **scope**, chooses an assessment profile,
+and DSRclone orchestrates security tools through standard adapters, normalizes and
+deduplicates their findings, scores risk, and generates professional reports.
+
+The user never touches a command line: every workflow is clicks, forms and buttons.
+Security tools run only inside isolated workers — never in the web server, and never
+without verified scope and approval.
+
+> **Status — Phase 1/2 foundation.** This repository currently contains the production
+> monorepo, backend foundation, database schema, tool-adapter SDK skeleton, GUI
+> dashboard shell and queue/worker foundation. **No security scanners are integrated
+> or executed yet** (no Nmap/Nuclei/ZAP/etc.), there is no fake scan data anywhere,
+> and the AI service has no LLM connected yet. Those arrive in later phases, one at a time.
+
+## Architecture
+
+```
+Web UI (Next.js) ──> API Gateway / Backend (NestJS, /api/v1)
+                        │
+                        ├─ Authorization & Scope Service
+                        ├─ Assessment Service ──> Job Queue (BullMQ / Redis)
+                        │                              │
+                        │                              v
+                        │                     Security Workers (isolated)
+                        │                              │  Tool Adapters (SDK)
+                        │                              v
+                        │                     Parser / Normalizer ─> Correlation/Dedup
+                        │                              │
+                        ├─ Risk Engine <───────────────┘
+                        ├─ AI Analysis Service (FastAPI — normalized findings only)
+                        └─ Reporting Engine
+Supporting: PostgreSQL · Redis · MinIO (S3) · Audit · Notifications · Scheduler · Secrets references
+```
+
+See `docs/architecture/` for service boundaries, database ownership, queue
+architecture, object storage, authorization boundaries and the GUI page map.
+
+## Safety architecture (non-negotiable)
+
+- Every intrusive assessment requires **explicit authorization**: target ownership
+  verification (DNS TXT / HTTP file / manual approval), scope, and approvals.
+- Scope can never silently expand beyond what was verified.
+- Default scans are non-destructive. Destructive, exploitative, credential-based,
+  brute-force, persistence or lateral-movement capabilities **never** run merely
+  because a URL was entered — they need an isolated lab / separately approved profile
+  and are disabled by default in the policy engine (`packages/security-sdk`).
+- Internal, loopback, link-local and cloud-metadata targets are blocked unless an
+  internal engagement is explicitly approved (SSRF protection).
+- There is **no API that accepts a raw command**. Users submit assessments; workers
+  resolve trusted adapters internally.
+- Credentials are stored as **metadata + secret references only** — never plaintext.
+
+## Monorepo structure
+
+```
+dsrclone/
+├── apps/
+│   ├── web/        Next.js dashboard (GUI)
+│   ├── api/        NestJS API (/api/v1) — never executes tools
+│   ├── ai/         FastAPI AI service (foundation; no LLM yet)
+│   └── worker/     BullMQ worker foundation (placeholder job only)
+├── packages/
+│   ├── database/       Prisma schema + client (single source of truth)
+│   ├── types/          Shared types + scan state machine
+│   ├── validation/     Zod schemas (target, scope, assessment, scan, pagination)
+│   ├── security-sdk/   Tool adapter SDK: metadata, policy engine, scope matcher, mock adapter
+│   ├── logger/         Structured logging with secret redaction
+│   ├── config/         Shared env schema + constants
+│   └── ui/             Shared UI components
+├── infrastructure/  Docker, Postgres, Redis, MinIO, worker notes
+├── docs/architecture/
+├── docker-compose.yml
+├── pnpm-workspace.yaml
+└── turbo.json
+```
+
+## Prerequisites
+
+- Node.js ≥ 20 and pnpm 9 (`npm i -g pnpm@9` or corepack)
+- Docker + Docker Compose (for PostgreSQL / Redis / MinIO)
+- Python 3.11+ (for `apps/ai`)
+
+## Setup
+
+```bash
+cp .env.example .env          # local values only — never commit .env
+pnpm install
+docker compose up -d postgres redis minio minio-init
+pnpm db:generate              # Prisma client
+pnpm db:migrate               # apply migrations to the local database
+pnpm db:seed                  # tool catalog metadata (no commands, nothing executed)
+```
+
+## Development commands
+
+```bash
+pnpm dev          # all apps (turbo)
+pnpm build        # build everything
+pnpm lint
+pnpm typecheck
+pnpm test         # TS test suites (validation, scope/policy, RBAC, state machine, API)
+pnpm test:ai      # Python tests for apps/ai
+```
+
+Run one app: `pnpm --filter @dsrclone/web dev` (port 3000),
+`pnpm --filter @dsrclone/api dev` (port 4000), `pnpm --filter @dsrclone/worker dev`,
+`cd apps/ai && uvicorn app.main:app --port 8000`.
+
+Health checks: API `GET /api/v1/health` (API/Postgres/Redis/MinIO/AI), AI `GET /health`,
+worker heartbeat file + structured logs.
+
+## API (versioned, /api/v1)
+
+`auth` (register/login/me) · `users` · `organizations` · `workspaces` · `targets`
+(+ `/verifications`) · `scopes` · `assessments` (+ `/approve`) · `scans` (+ `/cancel`) ·
+`findings` · `reports` · `tools` (+ `/categories`, `/capabilities`, `/:id/health`) ·
+`integrations` · `credentials` (metadata only) · `audit-logs` · `notifications` · `health`.
+
+There is deliberately **no** execute/command endpoint.
+
+## Testing
+
+Unit/integration tests cover: target & scope validation, the scope matcher and
+policy engine (incl. cross-organization denial), RBAC guards, organization
+isolation, scan state transitions, API validation and health, the mock adapter,
+and the AI health endpoint.
+
+## Roadmap (from the master spec)
+
+1. ✅ Architecture (Prompt 1) 2. ✅ Monorepo + backend + database foundation (Prompt 2)
+3. Tool adapter SDK hardening + registry 4. First safe adapters (passive/recon/web
+baseline) 5. Normalization, deduplication, risk engine 6. Reporting engine
+7. API/cloud/container/source-code modules 8. Lab-only modules (AD, wireless, mobile)
+
+## Changelog
+
+- **2026-10-07 — v0.1.0 foundation.** New pnpm/Turborepo monorepo supersedes the
+  earlier standalone scaffold (Flask backend + React/Vite frontend), which was
+  removed; this codebase is the single DSRclone going forward.

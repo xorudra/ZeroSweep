@@ -1,0 +1,14 @@
+{
+  "name": "@dsrclone/ui",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": { "react": "^18.3.1" },
+  "devDependencies": { "@types/react": "^18.3.11", "react": "^18.3.1", "typescript": "^5.7.2" }
+}
