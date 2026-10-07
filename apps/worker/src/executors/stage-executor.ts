@@ -1,6 +1,6 @@
 import {
-  ALL_DIRECTORY_SLUGS, API_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
-  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext,
+  ALL_DIRECTORY_SLUGS, API_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, MOBILE_DYNAMIC_SLUGS, MOBILE_SLUGS, MOBILE_STATIC_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  activeKillSwitch, approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext, type KillSwitchContext, type KillSwitchRecord,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS, ...MOBILE_SLUGS] as const;
 
 /** Prompt 15 §10/§15: directory connectors resolve a registered domain
  *  through the store context — they never take an endpoint or a
@@ -143,6 +143,24 @@ export interface ExecutionContextRecord {
     identityKind?: string;
     dcHosts?: string[];
   };
+  /** Prompt 17: the scan's mobile context, resolved by the STORE from
+   *  the registered MobileApplication / MobileBuild rows — application
+   *  + build identity (the artifact SHA-256, §5), the artifact
+   *  reference, and the APPROVED lab session ids for dynamic stages
+   *  (§58/§73). Never client input. */
+  mobile?: {
+    applicationId?: string;
+    applicationRef?: string;
+    platform?: string;
+    environment?: string;
+    buildId?: string;
+    buildHash?: string;
+    artifactReference?: string;
+    deviceId?: string;
+    dynamicSessionId?: string;
+    dynamicSessionApproved?: boolean;
+    trafficSessionId?: string;
+  };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -154,6 +172,10 @@ export interface ExecutionStore {
   persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number; packetCaptures?: number; components?: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number; attackPaths?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
+  /** Prompt 16/17 (§92): active kill switches for the mobile dynamic
+   *  gate — optional: stores that do not implement it leave the gate
+   *  to the session-approval checks. */
+  activeKillSwitches?(ctx: KillSwitchContext): Promise<KillSwitchRecord[]>;
 }
 
 export interface StageJobData {
@@ -305,6 +327,68 @@ export class StageExecutor {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
         await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no Active Directory domain is registered for this scan (NOT_CONFIGURED)`);
         return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      // Prompt 17 gates (§10/§14/§58/§73/§92): the two mobile worker
+      // capabilities stay SEPARATE — static adapters run ONLY on
+      // MOBILE_STATIC_ANALYSIS workers in the static/binary stages;
+      // the MobSF connector additionally requires the admin-registered
+      // instance the store resolved (absent = NOT_CONFIGURED); dynamic
+      // lab adapters run ONLY on MOBILE_DYNAMIC_ANALYSIS workers in
+      // the dynamic/traffic stages, only with an APPROVED lab session
+      // resolved by the store, and never under an active kill switch.
+      const isMobileStatic = (MOBILE_STATIC_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      const isMobileDynamic = (MOBILE_DYNAMIC_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      if (isMobileStatic && !["MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS"].includes(ctx.stageId)) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: mobile static adapters execute only in MOBILE_STATIC_ANALYSIS / MOBILE_BINARY_ANALYSIS (§10)`);
+        return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      if (isMobileStatic && !this.workerCapabilities.includes("MOBILE_STATIC_ANALYSIS")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: mobile static analysis runs only on MOBILE_STATIC_ANALYSIS workers (§10) — this worker does not hold MOBILE_STATIC_ANALYSIS`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (isMobileStatic && !ctx.mobile?.buildId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no mobile build is registered for this scan (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      if (ctx.adapterSlug === "mobsf" && !ctx.scanner?.instanceId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", "mobsf: no MobSF ScannerInstance is registered for this workspace (NOT_CONFIGURED, §14)");
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      if (isMobileDynamic && !["MOBILE_DYNAMIC_SESSION", "MOBILE_TRAFFIC_ANALYSIS"].includes(ctx.stageId)) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: mobile lab adapters execute only in MOBILE_DYNAMIC_SESSION / MOBILE_TRAFFIC_ANALYSIS (§58)`);
+        return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      if (isMobileDynamic && !this.workerCapabilities.includes("MOBILE_DYNAMIC_ANALYSIS")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: mobile dynamic analysis runs only on MOBILE_DYNAMIC_ANALYSIS workers (§10) — this worker does not hold MOBILE_DYNAMIC_ANALYSIS`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (isMobileDynamic && ctx.mobile?.dynamicSessionApproved !== true) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no APPROVED dynamic lab session exists for this scan (NOT_CONFIGURED, §58/§73)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      if (isMobileDynamic && this.store.activeKillSwitches) {
+        const switches = await this.store.activeKillSwitches({
+          organizationId: ctx.organizationId, workspaceId: ctx.workspaceId,
+          scanId: ctx.scanId, targetId: ctx.auth.targetId,
+          ...(ctx.mobile?.dynamicSessionId ? { sessionId: ctx.mobile.dynamicSessionId } : {}),
+        }).catch(() => []);
+        const active = activeKillSwitch(switches, {
+          organizationId: ctx.organizationId, workspaceId: ctx.workspaceId,
+          scanId: ctx.scanId, targetId: ctx.auth.targetId,
+          ...(ctx.mobile?.dynamicSessionId ? { sessionId: ctx.mobile.dynamicSessionId } : {}),
+        });
+        if (active) {
+          await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "KILL_SWITCH_ACTIVE" });
+          await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: a ${active.level} kill switch is active — dynamic work is terminated (§92)`);
+          return { status: "DENIED", reasonCode: "KILL_SWITCH_ACTIVE" };
+        }
       }
       if ((PRIVILEGED_CLOUD_SLUGS as readonly string[]).includes(ctx.adapterSlug)
         && !this.workerCapabilities.includes("PRIVILEGED_HOST_ASSESSMENT")) {
@@ -569,6 +653,27 @@ export class StageExecutor {
         if (declared.has("mode") && ctx.adapterSlug === "pingcastle") config.mode = "healthcheck";
         if (declared.has("action") && ctx.adapterSlug === "certipy-posture") config.action = "find";
       }
+      // Prompt 17 derived configuration — worker-computed from the
+      // scan's mobile context (store-resolved), never client input
+      // (§5/§14/§58): application + build identity, the artifact
+      // reference (mounted read-only in the sandbox), the MobSF
+      // instance id (from the scanner binding, like other connectors)
+      // and the APPROVED lab session ids for dynamic stages.
+      if ((MOBILE_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        const mobCtx = ctx.mobile;
+        if (mobCtx) {
+          if (declared.has("mobileApplicationId") && mobCtx.applicationId) config.mobileApplicationId = mobCtx.applicationId;
+          if (declared.has("mobileBuildId") && mobCtx.buildId) config.mobileBuildId = mobCtx.buildId;
+          if (declared.has("mobileBuildHash") && mobCtx.buildHash) config.mobileBuildHash = mobCtx.buildHash;
+          if (declared.has("mobileApplicationRef") && mobCtx.applicationRef) config.mobileApplicationRef = mobCtx.applicationRef;
+          if (declared.has("mobilePlatform") && mobCtx.platform) config.mobilePlatform = mobCtx.platform;
+          if (declared.has("mobileArtifactReference") && mobCtx.artifactReference) config.mobileArtifactReference = mobCtx.artifactReference;
+          if (declared.has("mobileDeviceId") && mobCtx.deviceId) config.mobileDeviceId = mobCtx.deviceId;
+          if (declared.has("mobileDynamicSessionId") && mobCtx.dynamicSessionId) config.mobileDynamicSessionId = mobCtx.dynamicSessionId;
+          if (declared.has("mobileTrafficSessionId") && mobCtx.trafficSessionId) config.mobileTrafficSessionId = mobCtx.trafficSessionId;
+        }
+        if (declared.has("mobileScannerInstanceId") && ctx.scanner?.instanceId) config.mobileScannerInstanceId = ctx.scanner.instanceId;
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -715,6 +820,22 @@ export class StageExecutor {
           await emit("ad.adcs_risk_detected", { stageId: ctx.stageId, tool: ctx.adapterSlug, templates: dirPayload.certificateTemplates.filter((t) => (t.riskClasses ?? []).length > 0).length });
         }
       }
+      // Prompt 17 §117 scan events — counts/ids only, never secret
+      // values, never decompiled source, never traffic bodies (§28/§66).
+      const mobPayload = processed.mobile;
+      const mobInventoryCount = mobPayload.permissions.length + mobPayload.components.length
+        + mobPayload.deepLinks.length + mobPayload.endpoints.length + mobPayload.nativeLibraries.length;
+      if (mobInventoryCount > 0) {
+        await emit("mobile.inventory_recorded", {
+          stageId: ctx.stageId, tool: ctx.adapterSlug,
+          permissions: mobPayload.permissions.length, components: mobPayload.components.length,
+          deepLinks: mobPayload.deepLinks.length, endpoints: mobPayload.endpoints.length,
+          nativeLibraries: mobPayload.nativeLibraries.length,
+        });
+        if (mobPayload.endpoints.length > 0) {
+          await emit("mobile.endpoints_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: mobPayload.endpoints.length, classification: "DISCOVERED_REFERENCE" });
+        }
+      }
 
       await this.store.updateExecution(ctx.executionId, {
         status: "COMPLETED", completedAt: new Date(), exitCode: 0,
@@ -738,6 +859,10 @@ export class StageExecutor {
           cloudResources: processed.cloud.resources.length,
           cloudIdentities: processed.cloud.identities.length,
           cloudRelationships: processed.cloud.relationships.length,
+          mobilePermissions: processed.mobile.permissions.length,
+          mobileComponents: processed.mobile.components.length,
+          mobileEndpoints: processed.mobile.endpoints.length,
+          mobileNativeLibraries: processed.mobile.nativeLibraries.length,
           suppressedEndpoints: processed.suppressedEndpoints,
           ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
           ...(nseSelection ? { nseSnapshot: nseSelection.snapshot, nseScriptsSelected: nseSelection.selected } : {}),

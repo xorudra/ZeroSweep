@@ -2,12 +2,13 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, type CvssRecord, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, analyzeMobilePosture, extractMobileArtifacts, buildSpdxSbom, emptyMobileData, evaluateMobileSecurityGate, mergeMobileData, planMobileRetest, summarizeMobileForGate, type CvssRecord, type KillSwitchRecord, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
-import { correlateProcessedFindings, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
+import { correlateProcessedFindings, processNormalizedResult, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
+import { isMobileProcessedFinding, stampMobileFindings, type MobileScanIdentity } from "../executors/mobile-stamp";
 
 /**
  * Prisma implementation of the worker stores. Workers load ALL trusted state
@@ -106,6 +107,11 @@ export class PrismaWorkerStore implements ScanRunStore {
       // REFERENCE name only; the value is resolved inside the
       // DIRECTORY_ANALYSIS worker.
       directory: await this.loadDirectoryContext(graph.workspaceId, target.id, target.type),
+      // Prompt 17 (§5/§58): mobile context resolved from the
+      // registered MobileApplication + latest MobileBuild rows — the
+      // build's SHA-256 identity, the artifact reference and the
+      // APPROVED lab session ids. Never client input.
+      mobile: await this.loadMobileContext(graph.workspaceId, target.id, target.type),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -220,6 +226,65 @@ export class PrismaWorkerStore implements ScanRunStore {
     };
   }
 
+  /** Prompt 17: mobile context for a scan's target — the registered
+   *  MobileApplication and its LATEST build (the artifact SHA-256 is
+   *  the build identity, §5), plus the APPROVED dynamic session state
+   *  for the controlled profiles (§58/§73). Retests (§89) therefore
+   *  resolve the NEWEST build automatically. */
+  private async loadMobileContext(workspaceId: string, targetId: string, targetType: string): Promise<ExecutionContextRecord["mobile"]> {
+    if (targetType !== "MOBILE_APP") return undefined;
+    const app = await prisma.mobileApplication.findFirst({
+      where: { workspaceId, targetId },
+      include: { builds: { orderBy: { createdAt: "desc" }, take: 1 } },
+    });
+    if (!app) return {};
+    const build = app.builds[0];
+    const session = build
+      ? await prisma.mobileDynamicSession.findFirst({
+          where: { buildId: build.id, status: { in: ["APPROVED", "RUNNING"] } },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+    const traffic = build
+      ? await prisma.mobileTrafficSession.findFirst({
+          where: { buildId: build.id, status: { in: ["APPROVED", "RUNNING"] } },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+    return {
+      applicationId: app.id,
+      applicationRef: app.packageName ?? app.bundleId ?? app.name,
+      platform: app.platform,
+      environment: app.environment,
+      ...(build ? { buildId: build.id, buildHash: build.artifactHash } : {}),
+      ...(build?.artifactReference ? { artifactReference: build.artifactReference } : {}),
+      ...(session?.deviceId ? { deviceId: session.deviceId } : {}),
+      ...(session ? { dynamicSessionId: session.id, dynamicSessionApproved: session.status === "APPROVED" || session.status === "RUNNING" } : {}),
+      ...(traffic ? { trafficSessionId: traffic.id } : {}),
+    };
+  }
+
+  /** Prompt 17: the scan's registered application + latest build rows
+   *  (shared by the mobile hooks and payload persistence). */
+  private async mobileBuildForScan(scanId: string) {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment || graph.assessment.target.type !== "MOBILE_APP") return null;
+    const app = await prisma.mobileApplication.findFirst({
+      where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId },
+      include: { builds: { orderBy: { createdAt: "desc" }, take: 1 } },
+    });
+    if (!app || !app.builds[0]) return null;
+    return { graph, app, build: app.builds[0] };
+  }
+
+  private mobileIdentityOf(app: { id: string; name: string; packageName: string | null; bundleId: string | null; platform: string; environment: string }, build: { id: string; artifactHash: string }): MobileScanIdentity {
+    return {
+      applicationId: app.id, applicationRef: app.packageName ?? app.bundleId ?? app.name,
+      buildId: build.id, buildHash: build.artifactHash,
+      platform: app.platform as "ANDROID" | "IOS", environment: app.environment,
+    };
+  }
+
   /** Prompt 10 §45: latest packet-capture artifact reference for a scan. */
   private async loadCaptureRef(scanId: string): Promise<string | undefined> {
     const capture = await prisma.packetCaptureArtifact.findFirst({
@@ -235,7 +300,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  org-wide ones. Resolved from trusted DB state only; the queue
    *  payload and the client never name an instance or an endpoint. */
   private async loadScannerBinding(toolSlug: string, workspaceId: string, organizationId: string): Promise<{ instanceId?: string } | undefined> {
-    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug) && !(VULN_SCANNER_SLUGS as readonly string[]).includes(toolSlug) && toolSlug !== "sonarqube") return undefined;
+    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug) && !(VULN_SCANNER_SLUGS as readonly string[]).includes(toolSlug) && toolSlug !== "sonarqube" && toolSlug !== "mobsf") return undefined;
     const own = await prisma.scannerInstance.findFirst({
       where: { workspaceId, enabled: true, tool: { slug: toolSlug } },
       orderBy: { createdAt: "asc" },
@@ -322,9 +387,20 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
+  async persistResult(scanId: string, executionId: string, processedIn: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
     if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0, packetCaptures: 0, components: 0 };
+    // Prompt 17 §50: mobile findings are stamped with their canonical
+    // identity (application + build hash + platform + rule + class)
+    // BEFORE persistence so correlation, the quality gate and retests
+    // all key on the same fingerprint.
+    let processed = processedIn;
+    if (processedIn.findings.some(isMobileProcessedFinding)) {
+      const mobileCtx = await this.mobileBuildForScan(scanId);
+      if (mobileCtx) {
+        processed = { ...processedIn, findings: stampMobileFindings(processedIn.findings, this.mobileIdentityOf(mobileCtx.app, mobileCtx.build)) };
+      }
+    }
     const assetIdByHost = new Map<string, string>();
     for (const asset of processed.assets) {
       const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: asset.host } });
@@ -688,6 +764,16 @@ export class PrismaWorkerStore implements ScanRunStore {
           // Prompt 15 (§61/§67): directory identity — domain row +
           // directory object the finding concerns.
           directoryDomainId: f.directoryDomainId, directoryObjectId: f.directoryObjectId,
+          // Prompt 17 (§49–§52): mobile identity — application + build
+          // rows resolved from the stamped identity, platform, finding
+          // type, OWASP Mobile / MASVS mappings, cross-build key and
+          // the dynamic-confirmation flag (§88).
+          mobileApplicationId: f.mobileApplicationId, mobileBuildId: f.mobileBuildId,
+          mobileBuildHash: f.mobileBuildHash, mobilePlatform: f.mobilePlatform,
+          mobileFindingType: f.mobileFindingType as never, mobileComponent: f.mobileComponent,
+          owaspMobile: f.owaspMobile, masvsControl: f.masvsControl,
+          crossBuildFingerprint: f.crossBuildFingerprint,
+          dynamicConfirmed: f.dynamicConfirmed ?? false,
           ...(f.secret ? {
             secretMetadata: {
               create: {
@@ -961,7 +1047,8 @@ export class PrismaWorkerStore implements ScanRunStore {
     // join the scan deduped by canonical fingerprint (§61). Drift is
     // diffed against the pre-collection persisted state (§79/§80).
     const directoryCounts = await this.persistDirectoryPayload(scan, processed);
-    return { assets: processed.assets.length, findings: findings + directoryCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
+    const mobileCounts = await this.persistMobilePayload(scan, processed);
+    return { assets: processed.assets.length, findings: findings + directoryCounts.findings + mobileCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
   }
 
   /** Reconstruct the normalized directory inventory for a domain from
@@ -1033,6 +1120,205 @@ export class PrismaWorkerStore implements ScanRunStore {
 
   /** Persist one result's directory payload + run the posture analysis
    *  over the persisted inventory (§57–§78). Returns row counts. */
+  /** Prompt 17 mobile payload persistence (§20–§52): build inventory
+   *  (deep links, components, endpoints, native libraries) upserts by
+   *  identity key; build components + SBOM records (§42–§45); platform
+   *  posture findings over the merged inventory (stamped, deduped by
+   *  canonical fingerprint) and OWASP MASVS control assessments.
+   *  Extracted endpoints persist as DISCOVERED_REFERENCE — they never
+   *  expand scope (§30). */
+  private async persistMobilePayload(
+    scan: { id: string; workspaceId: string },
+    processed: ProcessedResult,
+  ): Promise<{ findings: number }> {
+    const payload = processed.mobile;
+    const hasPayload = payload.permissions.length + payload.components.length + payload.deepLinks.length
+      + payload.endpoints.length + payload.nativeLibraries.length + payload.signing.length > 0;
+    if (!hasPayload && processed.components.length === 0) return { findings: 0 };
+    const ctx = await this.mobileBuildForScan(scan.id);
+    if (!ctx) return { findings: 0 };
+    const { app, build } = ctx;
+    const scanId = scan.id;
+    for (const link of payload.deepLinks) {
+      const existing = await prisma.mobileDeepLink.findFirst({
+        where: { buildId: build.id, scheme: link.scheme, host: link.host ?? "", pathPrefix: link.pathPrefix ?? "" },
+      });
+      if (!existing) {
+        await prisma.mobileDeepLink.create({
+          data: {
+            workspaceId: scan.workspaceId, buildId: build.id,
+            scheme: link.scheme, host: link.host, pathPrefix: link.pathPrefix,
+            autoVerify: link.autoVerify ?? false, source: payload.source,
+          },
+        });
+      }
+    }
+    for (const component of payload.components) {
+      const existing = await prisma.mobileAppComponent.findFirst({
+        where: { buildId: build.id, kind: component.kind, name: component.name },
+      });
+      const data = {
+        workspaceId: scan.workspaceId, buildId: build.id,
+        kind: component.kind, name: component.name,
+        exported: component.exported, permission: component.permission,
+        intentActions: component.intentActions ?? [],
+      };
+      if (existing) await prisma.mobileAppComponent.update({ where: { id: existing.id }, data });
+      else await prisma.mobileAppComponent.create({ data });
+    }
+    for (const endpoint of payload.endpoints) {
+      const existing = await prisma.mobileEndpoint.findFirst({ where: { buildId: build.id, url: endpoint.url } });
+      if (!existing) {
+        await prisma.mobileEndpoint.create({
+          data: {
+            workspaceId: scan.workspaceId, buildId: build.id, url: endpoint.url,
+            host: endpoint.host, kind: endpoint.kind,
+            classification: "DISCOVERED_REFERENCE", source: endpoint.source,
+          },
+        });
+      }
+    }
+    for (const lib of payload.nativeLibraries) {
+      const existing = await prisma.mobileNativeLibrary.findFirst({ where: { buildId: build.id, path: lib.path } });
+      const data = {
+        workspaceId: scan.workspaceId, buildId: build.id, path: lib.path,
+        architecture: lib.architecture, sha256: lib.sha256,
+        pie: lib.pie, nx: lib.nx, stackCanary: lib.stackCanary,
+        relro: lib.relro, stripped: lib.stripped,
+      };
+      if (existing) await prisma.mobileNativeLibrary.update({ where: { id: existing.id }, data });
+      else await prisma.mobileNativeLibrary.create({ data });
+    }
+    // §42–§45: build components + SBOM records (versions only as
+    // reported — never invented).
+    if (processed.components.length > 0) {
+      for (const c of processed.components) {
+        await prisma.softwareComponent.upsert({
+          where: { buildId_purl: { buildId: build.id, purl: c.purl } },
+          create: {
+            buildId: build.id,
+            name: c.name, version: c.version, ecosystem: c.ecosystem, purl: c.purl,
+            sourceManifest: c.sourceManifest,
+            scope: c.scope as never, dependencyScope: c.dependencyScope as never, licenses: c.licenses ?? [],
+          },
+          update: { version: c.version, licenses: c.licenses ?? [] },
+        });
+      }
+      const cyclonedx = buildCycloneDxSbom(processed.components, {
+        snapshotHash: build.artifactHash, repositoryName: app.packageName ?? app.bundleId ?? app.name, timestamp: new Date().toISOString(),
+      });
+      const spdx = buildSpdxSbom(processed.components, {
+        snapshotHash: build.artifactHash, repositoryName: app.packageName ?? app.bundleId ?? app.name, timestamp: new Date().toISOString(),
+      });
+      for (const doc of [cyclonedx.sbom, spdx.sbom]) {
+        const existing = await prisma.softwareBillOfMaterials.findFirst({ where: { buildId: build.id, format: doc.format as never } });
+        if (!existing) {
+          await prisma.softwareBillOfMaterials.create({
+            data: {
+              buildId: build.id, scanId, format: doc.format as never,
+              specVersion: doc.specVersion, checksum: doc.checksum,
+              artifactRef: `sbom://mobile-build/${build.id}/${doc.checksum}`,
+              componentCount: doc.componentCount,
+            },
+          });
+        }
+      }
+    }
+    // Platform posture over the merged persisted inventory.
+    const inventory = await this.loadMobileInventory(build.id);
+    const posture = analyzeMobilePosture(inventory, {
+      applicationId: app.id, applicationRef: app.packageName ?? app.bundleId ?? app.name, buildId: build.id,
+      buildHash: build.artifactHash, platform: app.platform as "ANDROID" | "IOS",
+      environment: app.environment, toolSlug: "mobile-platform-analysis",
+    });
+    const identity = this.mobileIdentityOf(app, build);
+    const stamped = stampMobileFindings(
+      processNormalizedResult({
+        assets: [], services: [], endpoints: [], technologies: [], findings: posture.findings,
+        artifacts: [], metrics: {}, mock: false,
+      }, { scopeRules: { includeHosts: [], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] }, toolExecutionId: "platform-mobile-analysis", toolSlug: "mobile-platform-analysis" }).findings,
+      identity,
+    );
+    let created = 0;
+    for (const f of stamped) {
+      const existing = await prisma.finding.findFirst({ where: { scanId, fingerprint: f.fingerprint } });
+      if (existing) continue;
+      await prisma.finding.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId,
+          title: f.title, description: f.description, severity: f.severity as never, confidence: f.confidence,
+          fingerprint: f.fingerprint, isMock: false, status: "OPEN", verificationStatus: "UNVERIFIED",
+          sources: f.sources, ruleId: f.ruleId, cwe: f.cwe, remediation: f.remediation,
+          mobileApplicationId: app.id, mobileBuildId: build.id, mobileBuildHash: build.artifactHash,
+          mobilePlatform: app.platform, mobileFindingType: f.mobileFindingType as never,
+          mobileComponent: f.mobileComponent, owaspMobile: f.owaspMobile, masvsControl: f.masvsControl,
+          crossBuildFingerprint: f.crossBuildFingerprint, dynamicConfirmed: false,
+          evidence: { create: f.evidenceRows.map((e) => ({ sourceTool: e.sourceTool, evidenceType: "TEXT", summary: e.summary, fingerprint: e.fingerprint })) },
+          history: { create: { workspaceId: scan.workspaceId, event: "CREATED", metadata: { sourceTool: f.sourceTool, stage: "MOBILE_MANIFEST_ANALYSIS" } as never } },
+        },
+      });
+      created++;
+    }
+    for (const a of posture.controlAssessments) {
+      const existing = await prisma.controlAssessment.findFirst({
+        where: { scanId, frameworkKey: a.frameworkKey, controlId: a.controlId, subjectRef: a.subjectRef },
+      });
+      if (!existing) {
+        await prisma.controlAssessment.create({
+          data: {
+            workspaceId: scan.workspaceId, scanId, frameworkKey: a.frameworkKey, controlId: a.controlId,
+            subjectRef: a.subjectRef, status: a.status as never, evidence: a.evidence,
+          },
+        });
+      }
+    }
+    return { findings: created };
+  }
+
+  /** Prompt 17: rebuild the normalized mobile inventory for a build
+   *  from its persisted rows (shared by posture + hooks). The build's
+   *  registered analysis artifacts carry the manifest facts (they are
+   *  the extraction record); inventory rows carry the rest. */
+  private async loadMobileInventory(buildId: string): Promise<NormalizedMobileData> {
+    const build = await prisma.mobileBuild.findUnique({ where: { id: buildId } });
+    if (!build) return emptyMobileData("mobile-platform-analysis");
+    const app = await prisma.mobileApplication.findUnique({ where: { id: build.applicationId } });
+    const artifacts = (build.analysisArtifacts ?? {}) as Record<string, unknown>;
+    const base = extractMobileArtifacts(artifacts, {
+      applicationId: build.applicationId, applicationRef: app?.packageName ?? app?.bundleId ?? app?.name ?? build.id, buildId: build.id,
+      buildHash: build.artifactHash, platform: (app?.platform ?? "ANDROID") as "ANDROID" | "IOS",
+      environment: app?.environment ?? "PRODUCTION", toolSlug: "mobile-platform-analysis",
+    }).data;
+    const links = await prisma.mobileDeepLink.findMany({ where: { buildId } });
+    const components = await prisma.mobileAppComponent.findMany({ where: { buildId } });
+    const endpoints = await prisma.mobileEndpoint.findMany({ where: { buildId } });
+    const libs = await prisma.mobileNativeLibrary.findMany({ where: { buildId } });
+    return mergeMobileData(base, {
+      permissions: [], deepLinks: links.map((l) => ({
+        scheme: l.scheme, ...(l.host ? { host: l.host } : {}), ...(l.pathPrefix ? { pathPrefix: l.pathPrefix } : {}),
+        autoVerify: l.autoVerify, source: l.source,
+      })),
+      components: components.map((c) => ({
+        kind: c.kind as never, name: c.name, exported: c.exported,
+        ...(c.permission ? { permission: c.permission } : {}),
+        intentActions: c.intentActions ?? [], source: "mobile-platform-analysis",
+      })),
+      endpoints: endpoints.map((e) => ({ url: e.url, host: e.host, kind: e.kind as never, classification: "DISCOVERED_REFERENCE" as const, source: e.source })),
+      nativeLibraries: libs.map((l) => ({
+        path: l.path,
+        ...(l.architecture ? { architecture: l.architecture } : {}),
+        ...(l.sha256 ? { sha256: l.sha256 } : {}),
+        ...(l.pie !== null ? { pie: l.pie } : {}),
+        ...(l.nx !== null ? { nx: l.nx } : {}),
+        ...(l.stackCanary !== null ? { stackCanary: l.stackCanary } : {}),
+        ...(l.relro === "NONE" || l.relro === "PARTIAL" || l.relro === "FULL" ? { relro: l.relro } : {}),
+        ...(l.stripped !== null ? { stripped: l.stripped } : {}),
+        source: "mobile-platform-analysis",
+      })),
+      signing: [], sdkInventory: [], source: "mobile-platform-analysis",
+    });
+  }
+
   private async persistDirectoryPayload(
     scan: { id: string; workspaceId: string; requestedBy: string; assessment: { targetId: string } },
     processed: ProcessedResult,
@@ -1990,6 +2276,104 @@ export class PrismaWorkerStore implements ScanRunStore {
     return { paths: total, findings: 0 };
   }
 
+  // ── Prompt 17 platform hooks (§5/§6/§10/§90/§92) ──────────────────
+
+  /** MOBILE_ARTIFACT_INTAKE (§5/§6): validate the registered build —
+   *  the artifact hash IS the build identity; the upload-time intake
+   *  verdict (format + archive security) is recorded on the build
+   *  row. An unregistered build is honestly NOT_CONFIGURED — the DAG
+   *  fails the scan, never fakes. */
+  async validateMobileBuild(scanId: string): Promise<{ buildHash: string; platform: string; artifactFormat: string } | null> {
+    const ctx = await this.mobileBuildForScan(scanId);
+    if (!ctx) return null;
+    return { buildHash: ctx.build.artifactHash, platform: ctx.app.platform, artifactFormat: ctx.build.artifactFormat };
+  }
+
+  /** MOBILE_METADATA_EXTRACTION (§6/§20): run the platform extraction
+   *  over the build's registered analysis artifacts — manifest/plist
+   *  parse, endpoint/secret/code-pattern analysis, SDK inventory, SCA
+   *  — and persist through the ordinary result path (stamping,
+   *  inventory upserts, posture). Nothing is executed. */
+  async extractMobileMetadata(scanId: string): Promise<{ permissions: number; components: number; endpoints: number; secrets: number; componentsScanned: number } | null> {
+    const ctx = await this.mobileBuildForScan(scanId);
+    if (!ctx) return null;
+    const { app, build } = ctx;
+    const artifacts = (build.analysisArtifacts ?? {}) as Record<string, unknown>;
+    if (Object.keys(artifacts).length === 0) return null;
+    const extracted = extractMobileArtifacts(artifacts, {
+      applicationId: app.id, applicationRef: app.packageName ?? app.bundleId ?? app.name, buildId: build.id,
+      buildHash: build.artifactHash, platform: app.platform as "ANDROID" | "IOS",
+      environment: app.environment, toolSlug: "mobile-platform-analysis",
+    });
+    const processedExtracted = processNormalizedResult({
+      assets: [], services: [], endpoints: [], technologies: [], findings: extracted.findings,
+      artifacts: [], metrics: {}, mock: false,
+      components: extracted.components, mobile: extracted.data,
+    }, { scopeRules: { includeHosts: [], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] }, toolExecutionId: "platform-mobile-metadata", toolSlug: "mobile-platform-analysis" });
+    await this.persistResult(scanId, "platform-mobile-metadata", processedExtracted);
+    return {
+      permissions: extracted.data.permissions.length,
+      components: extracted.data.components.length,
+      endpoints: extracted.data.endpoints.length,
+      secrets: extracted.findings.filter((f) => f.mobileFindingType === "MOBILE_SECRET").length,
+      componentsScanned: extracted.components.length,
+    };
+  }
+
+  /** MOBILE_MANIFEST_ANALYSIS (§20–§41): posture over the persisted
+   *  build inventory — findings were persisted at collection time
+   *  (deduped by canonical fingerprint); this hook reports the
+   *  section's findings + MASVS assessments. */
+  async analyzeMobileManifest(scanId: string): Promise<{ findings: number; assessments: number } | null> {
+    const ctx = await this.mobileBuildForScan(scanId);
+    if (!ctx) return null;
+    const findings = await prisma.finding.count({ where: { scanId, mobileBuildId: ctx.build.id } });
+    const assessments = await prisma.controlAssessment.count({ where: { scanId, frameworkKey: "OWASP_MASVS" } });
+    if (findings === 0 && assessments === 0) return null;
+    return { findings, assessments };
+  }
+
+  /** QUALITY_GATE — mobile gate (§90): no Critical findings, no
+   *  verified secrets, no KEV dependencies, no critical exported-
+   *  component issue, no critical network-security misconfiguration.
+   *  KEV membership comes from the local intelligence dataset (empty
+   *  in this build ⇒ no KEV matches — honest, never invented). */
+  async evaluateMobileQualityGate(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const ctx = await this.mobileBuildForScan(scanId);
+    if (!ctx) return null;
+    const rows = await prisma.finding.findMany({
+      where: { scanId, duplicateOfId: null },
+      include: { secretMetadata: true },
+    });
+    if (rows.length === 0) return null;
+    const dataset = new InMemoryIntelligenceDataset();
+    const isKevListed = (cve: string) => dataset.getKev(cve) !== undefined;
+    const summary = summarizeMobileForGate(rows.map((r) => ({
+      severity: r.severity,
+      ...(r.mobileFindingType ? { mobileFindingType: r.mobileFindingType } : {}),
+      ...(r.ruleId ? { ruleId: r.ruleId } : {}),
+      ...(r.secretMetadata ? { secretVerified: r.secretMetadata.verificationStatus === "VERIFIED_ACTIVE" } : {}),
+      ...(r.cve ? { kevListed: isKevListed(r.cve) } : {}),
+    })));
+    const evaluation = evaluateMobileSecurityGate(summary);
+    await prisma.qualityGateResult.create({
+      data: {
+        scanId, buildId: ctx.build.id,
+        policyVersion: "mobile-gate-v1", status: evaluation.status as never,
+        summary: summary as never,
+        failedRules: evaluation.failedRules, warningRules: evaluation.warningRules,
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: ctx.graph.requestedBy, organizationId: ctx.graph.workspace.organizationId, workspaceId: ctx.graph.workspaceId,
+        action: "MOBILE_STATIC_SCAN_COMPLETED" as never, resourceType: "MOBILE_BUILD", resourceId: ctx.build.id,
+        metadata: { scanId, gateStatus: evaluation.status } as never,
+      },
+    });
+    return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
+  }
+
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
   async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
     const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
@@ -2316,6 +2700,56 @@ export class PrismaWorkerStore implements ScanRunStore {
         ...(adPlan.section ? { directoryAnalysisSection: adPlan.section } : {}),
       };
     }
+    // Prompt 17 §89: mobile findings retest BUILD-OVER-BUILD — the
+    // child scan runs the targeted static check in its original stage
+    // family; the store resolves the application's LATEST build (the
+    // fixed Build B) for the child scan, and judgement compares the
+    // CROSS-BUILD fingerprint (§51), which deliberately excludes the
+    // build hash. A failed stage is never a pass (§58 discipline).
+    if (finding.mobileBuildId && finding.crossBuildFingerprint) {
+      const mobilePlan = planMobileRetest({
+        ...(finding.ruleId ? { ruleId: finding.ruleId } : {}),
+        sourceTool: retest.sourceTool,
+        ...(finding.mobileFindingType ? { mobileFindingType: finding.mobileFindingType } : {}),
+      });
+      const scopeParseMobile = scopeRulesSchema.safeParse(graph.assessment.scope?.rules ?? {});
+      const childMobile = await prisma.scan.create({
+        data: { workspaceId: finding.workspaceId, assessmentId: graph.assessmentId, requestedBy: retest.requestedBy, status: "QUEUED" },
+      });
+      const stagePlanMobile = {
+        id: mobilePlan.stageType, type: mobilePlan.stageType, name: "Targeted Mobile Retest",
+        description: "Prompt 17 §89 targeted mobile retest: re-run the original static check against the NEW build only.",
+        requiredCapabilities: [], dependencies: [] as string[],
+        selectedAdapters: [{ slug: mobilePlan.adapterSlug, adapterId: mobilePlan.adapterSlug, name: mobilePlan.adapterSlug, riskLevel: "LOW", preference: "REQUIRED", simulation: false, reason: mobilePlan.reason }],
+        weight: 100, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: false, status: "QUEUED",
+      };
+      await prisma.scanPlan.create({
+        data: {
+          scanId: childMobile.id, assessmentId: graph.assessmentId, profile: "CUSTOM",
+          plan: {
+            scanId: childMobile.id, assessmentId: graph.assessmentId, targetId: graph.assessment.targetId,
+            workspaceId: finding.workspaceId, organizationId: graph.workspace.organizationId,
+            profile: "CUSTOM", targetType: graph.assessment.target.type, targetValue: graph.assessment.target.value,
+            targetHost: graph.assessment.target.value, scope: scopeParseMobile.success ? scopeParseMobile.data : {},
+            stages: [stagePlanMobile], dependencies: {}, selectedTools: [mobilePlan.adapterSlug],
+            policySnapshot: { targetVerified: graph.assessment.target.verified, assessmentApproved: graph.assessment.status === "APPROVED", executableSlugs: [mobilePlan.adapterSlug], simulation: false },
+          } as never,
+          policySnapshot: { retest: true, retestId, mobileRetest: true } as never,
+        },
+      });
+      await prisma.scanStage.create({
+        data: { scanId: childMobile.id, type: mobilePlan.stageType as never, status: "QUEUED", dependencies: [], weight: 100, metadata: { retestId } as never },
+      });
+      const execution = await this.ensureExecution(childMobile.id, mobilePlan.stageType, mobilePlan.adapterSlug, 1);
+      await prisma.retestRequest.update({
+        where: { id: retestId },
+        data: { status: "RUNNING", scanId: childMobile.id, startedAt: new Date() },
+      });
+      return {
+        executionId: execution.id, scanId: childMobile.id,
+        canonicalFingerprint: finding.crossBuildFingerprint, stageId: mobilePlan.stageType,
+      };
+    }
     // Prompt 13 §77: cloud-native findings retest in their original
     // stage kind; everything else keeps the Prompt 11 stage.
     const cloudRetest = finding.origin ? planCloudNativeRetest({ origin: finding.origin, sourceTool: retest.sourceTool, controlId: finding.controlId ?? undefined }) : null;
@@ -2360,8 +2794,10 @@ export class PrismaWorkerStore implements ScanRunStore {
 
   /** Canonical fingerprints the retest scan actually produced. */
   async retestScanFingerprints(scanId: string): Promise<string[]> {
-    const rows = await prisma.finding.findMany({ where: { scanId }, select: { fingerprint: true } });
-    return rows.map((r) => r.fingerprint).filter((x): x is string => !!x);
+    const rows = await prisma.finding.findMany({ where: { scanId }, select: { fingerprint: true, crossBuildFingerprint: true } });
+    // Prompt 17 §89/§51: mobile retests compare CROSS-BUILD keys —
+    // both identities are offered; other families match on fingerprint.
+    return rows.flatMap((r) => [r.fingerprint, r.crossBuildFingerprint]).filter((x): x is string => !!x);
   }
 
   /**

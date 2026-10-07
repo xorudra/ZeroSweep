@@ -396,3 +396,87 @@ export const startAdScanSchema = z.object({
   ]).default("AD_BASELINE"),
 }).strict();
 export type StartAdScanInput = z.input<typeof startAdScanSchema>;
+
+// ── Prompt 17: mobile application VAPT (§100) ─────────────────────
+// Registration records identity only; build upload carries artifact
+// METADATA + the bounded extracted-artifact record (the binary bytes
+// themselves move through object storage, never this API); dynamic
+// session requests name governed ACTIONS only — a shell command, a
+// script body or a device serial can never be expressed here (§59/
+// §72/§75), and the strict object shape rejects unknown keys.
+const mobilePlatformSchema = z.enum(["ANDROID", "IOS"]);
+
+export const registerMobileAppSchema = z.object({
+  name: z.string().min(1).max(200),
+  platform: mobilePlatformSchema,
+  packageName: z.string().min(1).max(255).regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/, "packageName must be a dotted application id").optional(),
+  bundleId: z.string().min(1).max(255).regex(/^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)+$/, "bundleId must be a dotted bundle identifier").optional(),
+  owner: z.string().min(1).max(200).optional(),
+  projectRef: z.string().min(1).max(200).optional(),
+  environment: z.enum(["PRODUCTION", "STAGING", "DEVELOPMENT", "LAB", "UNKNOWN"]).default("UNKNOWN"),
+  criticality: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("HIGH"),
+}).strict().refine((v) => (v.platform === "ANDROID" ? !!v.packageName : !!v.bundleId), {
+  message: "ANDROID applications require packageName; IOS applications require bundleId",
+});
+export type RegisterMobileAppInput = z.input<typeof registerMobileAppSchema>;
+
+const archiveEntrySchema = z.object({
+  name: z.string().min(1).max(1024),
+  uncompressedSize: z.number().int().min(0),
+  compressedSize: z.number().int().min(0),
+  isDirectory: z.boolean(),
+  isSymlink: z.boolean(),
+  unixMode: z.number().int().optional(),
+}).strict();
+
+export const uploadMobileBuildSchema = z.object({
+  versionName: z.string().min(1).max(64).optional(),
+  versionCode: z.number().int().min(0).optional(),
+  buildNumber: z.string().min(1).max(64).optional(),
+  fileName: z.string().min(1).max(255),
+  declaredSha256: z.string().regex(/^[a-f0-9]{64}$/, "declaredSha256 must be a SHA-256 hex digest").optional(),
+  artifactSizeBytes: z.number().int().min(0),
+  artifactReference: z.string().min(1).max(512).optional(),
+  // The pre-read archive central directory (zip-slip/bomb discipline
+  // runs over it at intake, §6/§107).
+  archiveEntries: z.array(archiveEntrySchema).max(20000).optional(),
+  // Bounded extracted artifacts registered at intake (§6) — manifest /
+  // plist text, decompiled snippets, library inventory. Sanitized +
+  // secret-redacted by the service before persistence (§24/§28).
+  analysisArtifacts: z.record(z.string(), z.unknown()).optional(),
+  signingMetadata: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+export type UploadMobileBuildInput = z.input<typeof uploadMobileBuildSchema>;
+
+export const startMobileScanSchema = z.object({
+  profile: z.enum([
+    "MOBILE_STATIC_BASELINE", "MOBILE_STATIC_COMPREHENSIVE", "MOBILE_SECRETS_ONLY",
+    "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_CONTROLLED", "MOBILE_FULL_CONTROLLED", "MOBILE",
+  ]).default("MOBILE_STATIC_BASELINE"),
+  buildId: z.string().min(1).optional(),
+}).strict();
+export type StartMobileScanInput = z.input<typeof startMobileScanSchema>;
+
+export const createMobileDynamicSessionSchema = z.object({
+  buildId: z.string().min(1),
+  deviceId: z.string().min(1).optional(),
+  profile: z.enum(["MOBILE_DYNAMIC_CONTROLLED", "MOBILE_FULL_CONTROLLED"]).default("MOBILE_DYNAMIC_CONTROLLED"),
+  // Governed action NAMES only (§58/§73). Shell/script/command-shaped
+  // requests are refused + audited by the service; prohibited actions
+  // (§75) can never execute.
+  requestedActions: z.array(z.string().min(1).max(128)).max(32).default([]),
+  moduleIds: z.array(z.string().min(1)).max(16).default([]),
+  instrumentationApproved: z.boolean().default(false),
+  trafficCapture: z.boolean().default(false),
+}).strict();
+export type CreateMobileDynamicSessionInput = z.input<typeof createMobileDynamicSessionSchema>;
+
+export const registerMobileDeviceSchema = z.object({
+  name: z.string().min(1).max(200),
+  platform: mobilePlatformSchema,
+  deviceKind: z.enum(["EMULATOR", "PHYSICAL"]).default("EMULATOR"),
+  osVersion: z.string().min(1).max(64).optional(),
+  capabilities: z.array(z.string().min(1).max(64)).max(32).default([]),
+  dedicatedNetwork: z.boolean().default(true),
+}).strict();
+export type RegisterMobileDeviceInput = z.input<typeof registerMobileDeviceSchema>;

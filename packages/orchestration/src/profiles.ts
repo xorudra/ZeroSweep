@@ -39,6 +39,10 @@ export const STAGE_TYPES = [
   // Prompt 15: Active Directory pipeline stages (§86).
   "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "LDAP_POSTURE", "SMB_POSTURE",
   "GRAPH_COLLECTION", "PINGCASTLE_POSTURE", "ADCS_POSTURE", "ATTACK_PATH_ANALYSIS",
+  // Prompt 17: mobile pipeline stages (§10/§11).
+  "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS",
+  "MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_SESSION",
+  "MOBILE_TRAFFIC_ANALYSIS",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -254,6 +258,41 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     simulationFallback: false,
   },
   ATTACK_PATH_ANALYSIS: S("ATTACK_PATH_ANALYSIS", "Attack-Path Analysis", "Defensive attack-path MODELING over the identity graph (Prompt 15 §34–§37): bounded graph computation with confidence and explained risk. Paths are analysis results — never executed, never labelled COMPROMISED. Platform stage.", [], ["GRAPH_COLLECTION"], 6, 900, "FAIL_STAGE_CONTINUE"),
+  // Prompt 17 §10/§11: mobile stage library. Intake validates the
+  // registered build (hash identity, §5); metadata + manifest stages
+  // are platform analysis over the build's extracted artifacts; the
+  // static/binary stages are tool stages on MOBILE_STATIC_ANALYSIS
+  // workers; dynamic + traffic stages exist only in the CONTROLLED
+  // profiles and run on MOBILE_DYNAMIC_ANALYSIS workers with an
+  // approved lab session (§58/§73). No stage anywhere selects Frida
+  // or Objection — they have no adapters (§69–§74).
+  MOBILE_ARTIFACT_INTAKE: S("MOBILE_ARTIFACT_INTAKE", "Mobile Artifact Intake", "Validate the registered build for this scan: artifact hash identity, format, archive-security verdict recorded at upload (Prompt 17 §5/§6). Platform stage: a scan without a registered build fails honestly as NOT_CONFIGURED.", [], ["SCOPE_VALIDATION"], 3, 120, "FAIL_SCAN"),
+  MOBILE_METADATA_EXTRACTION: S("MOBILE_METADATA_EXTRACTION", "Mobile Metadata Extraction", "Platform extraction over the build's registered artifacts (§6/§20): manifest/plist facts, permissions, components, deep links, endpoints, native-library inventory, signing metadata, dependency + SDK inventory, secret scan and SCA over extracted artifacts. Nothing is executed.", [], ["MOBILE_ARTIFACT_INTAKE"], 8, 900, "FAIL_STAGE_CONTINUE"),
+  MOBILE_MANIFEST_ANALYSIS: S("MOBILE_MANIFEST_ANALYSIS", "Manifest / Plist Analysis", "AndroidManifest + network-security-config / Info.plist + ATS posture analysis (Prompt 17 §20–§41) over persisted build inventory: exported components, cleartext policy, backup/debuggable posture, MASVS control assessments. Platform stage.", [], ["MOBILE_METADATA_EXTRACTION"], 6, 600, "FAIL_STAGE_CONTINUE"),
+  MOBILE_STATIC_ANALYSIS: {
+    ...S("MOBILE_STATIC_ANALYSIS", "Mobile Static Analysis", "Governed static analysis (Prompt 17 §13–§19): the MobSF connector (admin-registered instance only), JADX decompilation output and apktool resource/manifest analysis in the static sandbox. App code is never executed (§8).", ["MOBILE_STATIC_ANALYSIS"], ["MOBILE_MANIFEST_ANALYSIS"], 16, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["MOBILE_STATIC_ANALYSIS"], ["ANDROID_DECOMPILATION", "STATIC_CODE_EXTRACTION"], ["APK_RESOURCE_ANALYSIS", "MANIFEST_EXTRACTION"]],
+    adapterAllowlist: ["mobsf", "jadx", "apktool"],
+    simulationFallback: false,
+  },
+  MOBILE_BINARY_ANALYSIS: {
+    ...S("MOBILE_BINARY_ANALYSIS", "Mobile Binary Analysis", "Ghidra headless static analysis of native libraries (Prompt 17 §34–§36): hardening properties (PIE/NX/canaries/RELRO/symbols) from administrator-approved scripts only. Native binaries are never executed.", ["BINARY_STATIC_ANALYSIS"], ["MOBILE_STATIC_ANALYSIS"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["BINARY_STATIC_ANALYSIS", "NATIVE_LIBRARY_ANALYSIS"]],
+    adapterAllowlist: ["ghidra"],
+    simulationFallback: false,
+  },
+  MOBILE_DYNAMIC_SESSION: {
+    ...S("MOBILE_DYNAMIC_SESSION", "Mobile Dynamic Session (Lab)", "Controlled device-lab session (Prompt 17 §53–§61): install the authorized build (hash verified, §60) on an approved DSRclone-managed device and collect governed observations. Runs only on MOBILE_DYNAMIC_ANALYSIS workers with an approved session; personal devices are never targeted (§55). No generic shell exists (§59).", ["DEVICE_MANAGEMENT"], ["MOBILE_STATIC_ANALYSIS"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["DEVICE_MANAGEMENT", "APP_INSTALLATION", "LOG_COLLECTION", "CONTROLLED_APP_INTERACTION"]],
+    adapterAllowlist: ["adb"],
+    simulationFallback: false,
+  },
+  MOBILE_TRAFFIC_ANALYSIS: {
+    ...S("MOBILE_TRAFFIC_ANALYSIS", "Mobile Traffic Analysis (Lab)", "Lab proxy analysis (Prompt 17 §62–§68): sanitized flow metadata + API endpoint discovery from the governed mitmproxy session. TLS interception exists only in the lab with a temporary CA (§67); bodies never enter platform records (§66).", ["MOBILE_TRAFFIC_CAPTURE"], ["MOBILE_DYNAMIC_SESSION"], 8, 1200, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["MOBILE_TRAFFIC_CAPTURE", "HTTP_ANALYSIS", "API_DISCOVERY"]],
+    adapterAllowlist: ["mitmproxy"],
+    simulationFallback: false,
+  },
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -352,7 +391,22 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   IDENTITY_GRAPH: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "GRAPH_COLLECTION", "NORMALIZATION", "CORRELATION", "ATTACK_PATH_ANALYSIS", "RISK_ANALYSIS", "REPORT_GENERATION"]),
   ATTACK_PATH_ANALYSIS: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "GRAPH_COLLECTION", "NORMALIZATION", "CORRELATION", "ATTACK_PATH_ANALYSIS", "RISK_ANALYSIS", "REPORT_GENERATION"]),
   CLOUD: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
-  MOBILE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  // Prompt 17 §12: mobile profiles follow the governed chain
+  //  MOBILE_ARTIFACT_INTAKE → MOBILE_METADATA_EXTRACTION →
+  //  MOBILE_MANIFEST_ANALYSIS → MOBILE_STATIC_ANALYSIS →
+  //  (MOBILE_BINARY_ANALYSIS) → (MOBILE_DYNAMIC_SESSION →
+  //  MOBILE_TRAFFIC_ANALYSIS) → NORMALIZATION → CORRELATION →
+  //  RISK_ANALYSIS → QUALITY_GATE → REPORT_GENERATION.
+  //  Static is the default; dynamic stages exist ONLY in the two
+  //  CONTROLLED profiles. The legacy MOBILE profile resolves to the
+  //  MOBILE_STATIC_BASELINE chain.
+  MOBILE_STATIC_BASELINE: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  MOBILE_STATIC_COMPREHENSIVE: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS", "DEPENDENCY_INVENTORY", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  MOBILE_SECRETS_ONLY: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_STATIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  MOBILE_BINARY_ANALYSIS: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_BINARY_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  MOBILE_DYNAMIC_CONTROLLED: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_DYNAMIC_SESSION", "MOBILE_TRAFFIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  MOBILE_FULL_CONTROLLED: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_SESSION", "MOBILE_TRAFFIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  MOBILE: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   CUSTOM: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
 };
 

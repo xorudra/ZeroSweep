@@ -53,6 +53,12 @@ export const SCAN_EVENT_TYPES = [
   "ad.ldap_posture_completed", "ad.graph_built", "ad.privileged_identity_detected",
   "ad.attack_paths_analyzed", "ad.attack_path_detected", "ad.adcs_risk_detected",
   "ad.drift_detected", "ad.scan_completed",
+  // Prompt 17 — mobile events (§117-adjacent scan events).
+  // Counts/ids/verdicts only; never secret values, decompiled source
+  // or traffic bodies.
+  "mobile.build_validated", "mobile.metadata_extracted", "mobile.secrets_detected",
+  "mobile.endpoints_discovered", "mobile.manifest_analyzed", "mobile.inventory_recorded",
+  "mobile.dynamic_session_skipped", "mobile.quality_gate_evaluated", "mobile.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

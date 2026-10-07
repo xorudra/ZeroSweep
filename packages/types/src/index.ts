@@ -14,6 +14,9 @@ export const TARGET_TYPES = [
   // Prompt 15 §3: Active Directory target kinds. ACTIVE_DIRECTORY above
   // remains as the legacy alias resolving to ACTIVE_DIRECTORY_DOMAIN.
   "ACTIVE_DIRECTORY_DOMAIN", "ACTIVE_DIRECTORY_FOREST", "DOMAIN_CONTROLLER", "LDAP_DIRECTORY",
+  // Prompt 17: a registered mobile application (Android / iOS). APK
+  // above remains as the legacy alias for MOBILE_APP.
+  "MOBILE_APP",
 ] as const;
 export type TargetType = (typeof TARGET_TYPES)[number];
 
@@ -39,6 +42,10 @@ export const ASSESSMENT_PROFILES = [
   // profile performs credential attacks (§120).
   "AD_INVENTORY", "AD_BASELINE", "AD_COMPREHENSIVE", "ADCS_POSTURE",
   "SMB_POSTURE", "IDENTITY_GRAPH", "ATTACK_PATH_ANALYSIS",
+  // Prompt 17 §12: mobile profiles. MOBILE above remains as the
+  // legacy alias and resolves to the MOBILE_STATIC_BASELINE chain.
+  "MOBILE_STATIC_BASELINE", "MOBILE_STATIC_COMPREHENSIVE", "MOBILE_SECRETS_ONLY",
+  "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_CONTROLLED", "MOBILE_FULL_CONTROLLED",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

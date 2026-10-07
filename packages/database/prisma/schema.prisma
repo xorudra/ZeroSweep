@@ -52,6 +52,9 @@ enum TargetType {
   // remains as the legacy alias for ACTIVE_DIRECTORY_DOMAIN.
   ACTIVE_DIRECTORY_DOMAIN
   ACTIVE_DIRECTORY_FOREST
+  // Prompt 17: a registered mobile application (Android/iOS). The APK
+  // value above remains as the legacy alias for MOBILE_APP.
+  MOBILE_APP
   DOMAIN_CONTROLLER
   LDAP_DIRECTORY
 }
@@ -132,6 +135,16 @@ enum AssessmentProfile {
   SMB_POSTURE
   IDENTITY_GRAPH
   ATTACK_PATH_ANALYSIS
+  // Prompt 17 §12: mobile assessment profiles. The legacy MOBILE
+  // profile above remains as the alias for MOBILE_STATIC_BASELINE.
+  // Static analysis is the default; the CONTROLLED profiles add the
+  // governed device-lab dynamic session + traffic stages.
+  MOBILE_STATIC_BASELINE
+  MOBILE_STATIC_COMPREHENSIVE
+  MOBILE_SECRETS_ONLY
+  MOBILE_BINARY_ANALYSIS
+  MOBILE_DYNAMIC_CONTROLLED
+  MOBILE_FULL_CONTROLLED
 }
 
 enum AssessmentStatus {
@@ -230,6 +243,20 @@ enum ScanStageType {
   PINGCASTLE_POSTURE
   ADCS_POSTURE
   ATTACK_PATH_ANALYSIS
+  // Prompt 17 §10/§11: mobile pipeline stages. MOBILE_ARTIFACT_INTAKE,
+  // MOBILE_METADATA_EXTRACTION and MOBILE_MANIFEST_ANALYSIS are
+  // PLATFORM stages (engine work over the registered build);
+  // MOBILE_STATIC_ANALYSIS and MOBILE_BINARY_ANALYSIS are tool stages
+  // on MOBILE_STATIC_ANALYSIS workers only; MOBILE_DYNAMIC_SESSION and
+  // MOBILE_TRAFFIC_ANALYSIS run only on MOBILE_DYNAMIC_ANALYSIS
+  // workers with an approved lab session (§53–§74).
+  MOBILE_ARTIFACT_INTAKE
+  MOBILE_METADATA_EXTRACTION
+  MOBILE_MANIFEST_ANALYSIS
+  MOBILE_STATIC_ANALYSIS
+  MOBILE_BINARY_ANALYSIS
+  MOBILE_DYNAMIC_SESSION
+  MOBILE_TRAFFIC_ANALYSIS
   QUALITY_GATE
   NORMALIZATION
   CORRELATION
@@ -533,6 +560,22 @@ enum AuditAction {
   VALIDATION_EVIDENCE_ACCESSED
   MANUAL_VALIDATION_ADDED
   KILL_SWITCH_ACTIVATED
+  // Prompt 17 §116: mobile security audit actions. Metadata for these
+  // actions NEVER contains secret values, test credentials, traffic
+  // bodies or decompiled source (§28/§66/§116).
+  MOBILE_APP_CREATED
+  MOBILE_BUILD_UPLOADED
+  MOBILE_STATIC_SCAN_STARTED
+  MOBILE_STATIC_SCAN_COMPLETED
+  MOBILE_DYNAMIC_SESSION_REQUESTED
+  MOBILE_DYNAMIC_SESSION_APPROVED
+  MOBILE_DYNAMIC_SESSION_STARTED
+  MOBILE_DYNAMIC_SESSION_COMPLETED
+  MOBILE_ARTIFACT_ACCESSED
+  MOBILE_TRAFFIC_ACCESSED
+  MOBILE_INSTRUMENTATION_STARTED
+  MOBILE_INSTRUMENTATION_STOPPED
+  MOBILE_DYNAMIC_ACTION_BLOCKED
 }
 
 enum NotificationType {
@@ -585,20 +628,22 @@ model Membership {
 }
 
 model Workspace {
-  id               String             @id @default(uuid())
-  organizationId   String
-  name             String
-  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  targets          Target[]
-  assessments      Assessment[]
-  credentials      Credential[]
-  scannerInstances ScannerInstance[]
-  sessionProfiles  SessionProfile[]
-  scanApprovals    ScanApproval[]
-  repositories     SourceRepository[]
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  deletedAt        DateTime?
+  id                 String              @id @default(uuid())
+  organizationId     String
+  name               String
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targets            Target[]
+  assessments        Assessment[]
+  credentials        Credential[]
+  scannerInstances   ScannerInstance[]
+  sessionProfiles    SessionProfile[]
+  scanApprovals      ScanApproval[]
+  repositories       SourceRepository[]
+  mobileApplications MobileApplication[]
+  mobileDevices      MobileTestDevice[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
 
   @@index([organizationId])
 }
@@ -1177,6 +1222,21 @@ model Finding {
   // overwritten (§37).
   validationConfidence    String? // UNVERIFIED | LIKELY | VERIFIED | INCONCLUSIVE (§36)
   lastValidatedAt         DateTime?
+  // Prompt 17 §49–§52: mobile finding identity. The build hash is the
+  // immutable build identity (§5); crossBuildFingerprint deliberately
+  // EXCLUDES it so the same root issue correlates across builds while
+  // build-specific observations stay separate (§51). Dynamic
+  // confirmation is recorded, never merged away (§88).
+  mobileApplicationId     String?
+  mobileBuildId           String?
+  mobileBuildHash         String?
+  mobilePlatform          String? // ANDROID | IOS
+  mobileFindingType       String? // MOBILE_MISCONFIGURATION | MOBILE_CODE_FINDING | MOBILE_SECRET | MOBILE_DEPENDENCY_VULNERABILITY | MOBILE_BINARY_FINDING | MOBILE_NETWORK_FINDING | MOBILE_RUNTIME_FINDING
+  mobileComponent         String? // app component / file the finding concerns
+  owaspMobile             String? // OWASP Mobile Top 10 category (§46)
+  masvsControl            String? // OWASP MASVS control id (§47)
+  crossBuildFingerprint   String?
+  dynamicConfirmed        Boolean                   @default(false)
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1218,6 +1278,9 @@ model Finding {
   @@index([providerResourceId])
   @@index([directoryDomainId])
   @@index([directoryObjectId])
+  @@index([mobileApplicationId])
+  @@index([mobileBuildId])
+  @@index([crossBuildFingerprint])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -2130,6 +2193,9 @@ model SoftwareComponent {
   // Prompt 13 §13/§14: image package inventory (Syft) binds components
   // to the image instead of a source snapshot — same component model.
   imageId         String?
+  // Prompt 17 §42: mobile dependency inventory binds components to the
+  // mobile build — same component model, never invented versions (§45).
+  buildId         String?
   name            String
   version         String?
   ecosystem       String
@@ -2141,12 +2207,15 @@ model SoftwareComponent {
   supplier        String?
   snapshot        SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   image           ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  build           MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
   createdAt       DateTime        @default(now())
 
   @@unique([snapshotId, purl])
   @@unique([imageId, purl])
+  @@unique([buildId, purl])
   @@index([snapshotId])
   @@index([imageId])
+  @@index([buildId])
   @@index([ecosystem, name])
 }
 
@@ -2157,6 +2226,9 @@ model SoftwareBillOfMaterials {
   snapshotId     String?
   // Prompt 13 §12: image SBOMs bind to the image (Syft), not a snapshot.
   imageId        String?
+  // Prompt 17 §43: mobile SBOMs bind to the build (MobileBuild → SBOM
+  // → Components → CVEs, §44).
+  buildId        String?
   scanId         String?
   format         SbomFormat
   specVersion    String
@@ -2165,10 +2237,12 @@ model SoftwareBillOfMaterials {
   componentCount Int             @default(0)
   snapshot       SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   image          ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  build          MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
   createdAt      DateTime        @default(now())
 
   @@index([snapshotId])
   @@index([imageId])
+  @@index([buildId])
   @@index([scanId])
 }
 
@@ -2216,6 +2290,8 @@ model QualityGateResult {
   id            String            @id @default(uuid())
   scanId        String
   snapshotId    String?
+  // Prompt 17 §90: mobile gate verdicts bind to the assessed build.
+  buildId       String?
   status        QualityGateStatus
   policyVersion String
   failedRules   Json              @default("[]")
@@ -2224,6 +2300,7 @@ model QualityGateResult {
   evaluatedAt   DateTime          @default(now())
 
   @@index([scanId])
+  @@index([buildId])
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -3413,4 +3490,274 @@ model ValidationCallbackEvent {
 
   @@index([workspaceId])
   @@index([tokenId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Prompt 17 — Mobile application security (§4–§92). Uploaded app
+// binaries are HOSTILE content: they are hashed, validated by magic
+// bytes + archive security, and analyzed STATICALLY only — never
+// installed, executed, emulated or instrumented outside the governed
+// device lab (§8/§53). Secrets found inside apps persist as metadata
+// only (SecretFindingMetadata, §28); signing keys and store
+// credentials NEVER exist here — references only (§31).
+// ─────────────────────────────────────────────────────────────────────
+
+enum MobilePlatform {
+  ANDROID
+  IOS
+}
+
+// A registered mobile application (§4). Registration records identity
+// only; the application becomes a verified MOBILE_APP target through
+// the ordinary target verification flow before any scan (§3).
+model MobileApplication {
+  id          String         @id @default(uuid())
+  workspaceId String
+  targetId    String?
+  name        String
+  platform    MobilePlatform
+  packageName String? // Android applicationId
+  bundleId    String? // iOS bundle identifier
+  owner       String?
+  projectRef  String?
+  environment String         @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | LAB | UNKNOWN
+  criticality String         @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  status      String         @default("REGISTERED") // REGISTERED | NOT_CONFIGURED
+  createdBy   String
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  builds      MobileBuild[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([workspaceId, platform, packageName])
+  @@index([workspaceId])
+  @@index([targetId])
+}
+
+// One uploaded build of an application (§5). Build identity is the
+// SHA-256 of the artifact — NEVER the filename. Builds are immutable:
+// a re-upload of different bytes is a different build.
+model MobileBuild {
+  id                String                    @id @default(uuid())
+  applicationId     String
+  workspaceId       String
+  versionName       String?
+  versionCode       Int?
+  buildNumber       String?
+  artifactHash      String // SHA-256 hex of the uploaded artifact (§5)
+  artifactFormat    String // APK | AAB | IPA | DEX | UNKNOWN
+  artifactReference String? // object-storage reference — bytes never live in Postgres
+  artifactSizeBytes BigInt                    @default(0)
+  // Signing metadata (§31): subject/issuer/validity/algorithm/
+  // fingerprint of the signing certificate. Private keys never exist.
+  signingMetadata   Json                      @default("{}")
+  minOsVersion      String?
+  targetOsVersion   String?
+  architectures     String[]                  @default([])
+  // Bounded extracted artifacts registered at intake (manifest/plist
+  // text, network security config, decompiled snippets, native library
+  // inventory) — the static pipeline's input. Sanitized at intake;
+  // access is RBAC-gated and audited (§24/§116).
+  analysisArtifacts Json                      @default("{}")
+  status            String                    @default("UPLOADED") // UPLOADED | ANALYZED
+  firstSeenAt       DateTime                  @default(now())
+  lastScanAt        DateTime?
+  application       MobileApplication         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  deepLinks         MobileDeepLink[]
+  appComponents     MobileAppComponent[]
+  endpoints         MobileEndpoint[]
+  nativeLibraries   MobileNativeLibrary[]
+  components        SoftwareComponent[]
+  sboms             SoftwareBillOfMaterials[]
+  trafficSessions   MobileTrafficSession[]
+  dynamicSessions   MobileDynamicSession[]
+  createdAt         DateTime                  @default(now())
+
+  @@unique([applicationId, artifactHash])
+  @@index([workspaceId])
+  @@index([applicationId])
+  @@index([artifactHash])
+}
+
+// A deep link / app link declared by the build (§26). Inventoried
+// (scheme/host/path) — never invoked (§26).
+model MobileDeepLink {
+  id          String      @id @default(uuid())
+  buildId     String
+  workspaceId String
+  scheme      String
+  host        String?
+  pathPrefix  String?
+  autoVerify  Boolean     @default(false)
+  source      String // MANIFEST | INFO_PLIST | MOBSF | JADX
+  build       MobileBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+
+  @@index([buildId])
+  @@index([workspaceId])
+}
+
+// An application component from the manifest/plist (§21): activity,
+// service, receiver, provider (Android) or extension (iOS).
+model MobileAppComponent {
+  id            String      @id @default(uuid())
+  buildId       String
+  workspaceId   String
+  kind          String // ACTIVITY | SERVICE | RECEIVER | PROVIDER | EXTENSION
+  name          String
+  exported      Boolean     @default(false)
+  permission    String?
+  intentActions String[]    @default([])
+  build         MobileBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@index([buildId])
+  @@index([workspaceId])
+}
+
+// An endpoint extracted from the app (§29/§30). Classification is
+// always DISCOVERED_REFERENCE: extraction NEVER authorizes a target
+// and NEVER expands scope.
+model MobileEndpoint {
+  id             String      @id @default(uuid())
+  buildId        String
+  workspaceId    String
+  url            String
+  host           String
+  kind           String      @default("HTTPS") // HTTP | HTTPS | WEBSOCKET | DOMAIN
+  classification String      @default("DISCOVERED_REFERENCE")
+  linkedAssetId  String? // set only when the host is ALREADY in authorized scope
+  source         String // MANIFEST | DECOMPILED_CODE | MOBSF | TRAFFIC
+  build          MobileBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  createdAt      DateTime    @default(now())
+
+  @@index([buildId])
+  @@index([workspaceId])
+  @@index([host])
+}
+
+// A native library inside the build (§33): inventory + hardening
+// properties from static inspection. Never executed (§34).
+model MobileNativeLibrary {
+  id           String      @id @default(uuid())
+  buildId      String
+  workspaceId  String
+  path         String
+  architecture String?
+  sha256       String?
+  pie          Boolean?
+  nx           Boolean?
+  stackCanary  Boolean?
+  relro        String? // NONE | PARTIAL | FULL
+  stripped     Boolean?
+  build        MobileBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+
+  @@index([buildId])
+  @@index([workspaceId])
+}
+
+// The controlled device lab (§53/§54). Devices are DSRclone-managed
+// emulators or dedicated test devices — NEVER personal devices. No
+// unnecessary personal device identifiers are stored (§54).
+model MobileTestDevice {
+  id               String                 @id @default(uuid())
+  workspaceId      String
+  name             String
+  platform         MobilePlatform
+  deviceKind       String                 @default("EMULATOR") // EMULATOR | PHYSICAL
+  osVersion        String?
+  capabilities     String[]               @default([])
+  availability     String                 @default("AVAILABLE") // AVAILABLE | BUSY | OFFLINE
+  health           String                 @default("UNKNOWN")
+  dedicatedNetwork Boolean                @default(true) // isolated test networking (§56)
+  lastResetAt      DateTime?
+  status           String                 @default("REGISTERED")
+  createdBy        String
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  trafficSessions  MobileTrafficSession[]
+  dynamicSessions  MobileDynamicSession[]
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([workspaceId])
+}
+
+// A governed proxy capture session in the lab (§64). Metadata only:
+// captured HOSTS, counts and sizes — bodies live in object storage
+// behind artifactRef, sanitized, access-audited (§66).
+model MobileTrafficSession {
+  id                String            @id @default(uuid())
+  workspaceId       String
+  buildId           String
+  deviceId          String?
+  proxyTool         String // MITMPROXY | BURP_SUITE
+  status            String            @default("REQUESTED") // REQUESTED | APPROVED | RUNNING | COMPLETED | BLOCKED | TERMINATED
+  startedAt         DateTime?
+  endedAt           DateTime?
+  hosts             Json              @default("[]") // sanitized host metadata only
+  requestCount      Int               @default(0)
+  bytesCaptured     BigInt            @default(0)
+  artifactRef       String?
+  sanitizationState String            @default("PENDING") // PENDING | SANITIZED
+  createdBy         String
+  build             MobileBuild       @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  device            MobileTestDevice? @relation(fields: [deviceId], references: [id])
+  createdAt         DateTime          @default(now())
+
+  @@index([workspaceId])
+  @@index([buildId])
+}
+
+// An administrator-reviewed, versioned instrumentation module (§71).
+// Only modules registered here — with hash + risk classification —
+// may ever run, and only inside an approved dynamic session. There is
+// no row shape for arbitrary user-supplied scripts (§72).
+model MobileInstrumentationModule {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  name               String
+  tool               String // FRIDA | OBJECTION
+  version            String
+  moduleHash         String // SHA-256 of the reviewed module artifact
+  capability         String   @default("DYNAMIC_INSTRUMENTATION")
+  riskClassification String   @default("REVIEW_REQUIRED")
+  approved           Boolean  @default(false)
+  approvedBy         String?
+  status             String   @default("REGISTERED") // REGISTERED | APPROVED | DISABLED
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([workspaceId, name, version])
+  @@index([workspaceId])
+}
+
+// A controlled dynamic session request (§58/§73). A session exists
+// only with: authorized build + approved lab device + approved
+// profile + valid authorization + instrumentation policy approval.
+// Prohibited actions (§75) are recorded as blocked, never executed.
+model MobileDynamicSession {
+  id                String            @id @default(uuid())
+  workspaceId       String
+  applicationId     String
+  buildId           String
+  deviceId          String?
+  profile           String
+  status            String            @default("REQUESTED") // REQUESTED | APPROVED | BLOCKED | RUNNING | COMPLETED | TERMINATED
+  requestedActions  Json              @default("[]")
+  blockedReasons    Json              @default("[]")
+  moduleIds         String[]          @default([])
+  killSwitchChecked Boolean           @default(false)
+  cleanupState      String            @default("PENDING") // PENDING | RESET_DONE (§57)
+  createdBy         String
+  approvedBy        String?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  build             MobileBuild       @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  device            MobileTestDevice? @relation(fields: [deviceId], references: [id])
+  createdAt         DateTime          @default(now())
+
+  @@index([workspaceId])
+  @@index([buildId])
 }

@@ -111,12 +111,13 @@ const TOOLS: CatalogTool[] = [
   { slug: "medusa", name: "Medusa", category: "PASSWORD_AUDIT", riskLevel: "RESTRICTED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS"], requiresCredentials: [], description: "Online credential attacks — restricted and disabled by default." },
   { slug: "cewl", name: "CeWL", category: "PASSWORD_AUDIT", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Custom wordlist generator from target content (offline auditing aid)." },
   { slug: "crunch", name: "Crunch", category: "PASSWORD_AUDIT", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Wordlist generator for offline auditing." },
-  { slug: "mobsf", name: "MobSF", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Mobile security framework for APK static analysis." },
-  { slug: "frida", name: "Frida", category: "MOBILE", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Dynamic instrumentation on authorized test devices only." },
-  { slug: "objection", name: "Objection", category: "MOBILE", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Runtime mobile exploration on authorized test devices only." },
-  { slug: "jadx", name: "JADX", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Android decompiler for static analysis." },
-  { slug: "apktool", name: "apktool", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "APK resource decoding for static analysis." },
-  { slug: "adb", name: "ADB", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Android Debug Bridge for authorized test devices only." },
+  { slug: "mobsf", name: "MobSF", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS", "MANIFEST_ANALYSIS", "CODE_ANALYSIS", "BINARY_ANALYSIS", "CERTIFICATE_ANALYSIS", "NETWORK_SECURITY_CONFIG_ANALYSIS"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "MobSF static-analysis connector (Prompt 17 §13–§17): submits ONLY authorized artifacts to the administrator-registered trusted ScannerInstance; credentials are secret references on the instance (§14). Unconfigured = NOT_CONFIGURED." },
+  { slug: "frida", name: "Frida", category: "MOBILE", riskLevel: "REVIEW_REQUIRED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["DYNAMIC_INSTRUMENTATION"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "DISABLED registration (Prompt 17 §69–§71): Frida instrumentation exists in DSRclone only as administrator-reviewed, versioned modules under the MobileInstrumentationPolicy — default DISABLED for static profiles. No adapter exists, arbitrary user-supplied JavaScript is never accepted (§72/§75), and no stage can select it." },
+  { slug: "objection", name: "Objection", category: "MOBILE", riskLevel: "REVIEW_REQUIRED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["DYNAMIC_INSTRUMENTATION"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "APPROVAL_REQUIRED registration (Prompt 17 §73/§74): Objection is never an interactive shell into an application. Governed, administrator-approved modules only, inside an approved lab session — no adapter exists by default and arbitrary commands are prohibited (§75)." },
+  { slug: "jadx", name: "JADX", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["ANDROID_DECOMPILATION", "STATIC_CODE_EXTRACTION"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "JADX Android decompilation (Prompt 17 §19): runs in the static sandbox on MOBILE_STATIC_ANALYSIS workers; output is an analysis artifact — decompiled code is NEVER executed and its access is RBAC-gated (§24)." },
+  { slug: "apktool", name: "apktool", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["APK_RESOURCE_ANALYSIS", "MANIFEST_EXTRACTION", "RESOURCE_EXTRACTION"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "apktool resource + manifest analysis (Prompt 17 §18): decodes resources/AndroidManifest.xml in the safe extraction workspace; archive attacks are refused at intake (§107)." },
+  { slug: "adb", name: "ADB (lab devices)", category: "MOBILE", riskLevel: "REVIEW_REQUIRED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["DEVICE_MANAGEMENT", "APP_INSTALLATION", "LOG_COLLECTION", "CONTROLLED_APP_INTERACTION"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "ADB lab adapter (Prompt 17 §59): governed operations on APPROVED DSRclone-managed lab devices only — device inventory, install of the authorized build (hash verified, §60), launch, logs, reset. There is NO generic adb shell endpoint anywhere (§59/§75); personal devices are never targeted (§55)." },
+  { slug: "burp-suite", name: "Burp Suite (mobile proxy)", category: "MOBILE", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["MOBILE_PROXY_ANALYSIS"], supportedTargets: ["MOBILE_APP"], requiresCredentials: [], description: "Burp Suite connector for mobile proxy analysis (Prompt 17 §65): reuses the Prompt 8 governed connector + MOBILE_PROXY_ANALYSIS — sanitized flow metadata for authorized lab traffic only; no unrestricted Burp control exists." },
   { slug: "prowler", name: "Prowler", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CSPM", "CLOUD_POSTURE", "COMPLIANCE_QUERY"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["credentialReference"], description: "Prowler CSPM (Prompt 14 §23): multi-cloud CIS/posture checks over read-only credential references. FAIL results become findings on canonical cloud rules; PASS is posture evidence only." },
   { slug: "scoutsuite", name: "ScoutSuite", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CSPM", "CLOUD_POSTURE"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["credentialReference"], description: "ScoutSuite multi-cloud auditing (Prompt 14 §26): rule results land on the canonical cloud rules and merge with Prowler/native observations of the same issue." },
   { slug: "cloudmapper", name: "CloudMapper", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["AWS_NETWORK_ANALYSIS", "AWS_ACCOUNT_VISUALIZATION", "PUBLIC_EXPOSURE_ANALYSIS"], supportedTargets: ["AWS"], requiresCredentials: ["credentialReference"], description: "CloudMapper (AWS) account-graph import (Prompt 14 §27): public nodes and network structure from recorded exports become exposure evidence in the asset graph." },
@@ -145,7 +146,7 @@ const TOOLS: CatalogTool[] = [
   { slug: "gitleaks", name: "Gitleaks", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SECRET_SCANNING", "SECRET_DETECTION"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Secret scanning for git repositories (Prompt 12 §34). Values are fingerprinted at parse time — never stored or displayed." },
   { slug: "trufflehog", name: "TruffleHog", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SECRET_SCANNING", "SECRET_DETECTION", "SECRET_VERIFICATION"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "High-entropy secret scanning for repositories (Prompt 12 §37). External verification is DISABLED by platform policy (§44)." },
   { slug: "owasp-dependency-check", name: "OWASP Dependency-Check", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SCA", "DEPENDENCY_VULNERABILITY_ANALYSIS"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Dependency vulnerability analysis (Prompt 12 §49) against the worker-provisioned database — no installs, no network audits (§57)." },
-  { slug: "ghidra", name: "Ghidra", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Software reverse engineering suite for uploaded binaries." },
+  { slug: "ghidra", name: "Ghidra", category: "BINARY", riskLevel: "REVIEW_REQUIRED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["BINARY_ANALYSIS", "BINARY_STATIC_ANALYSIS", "NATIVE_LIBRARY_ANALYSIS"], supportedTargets: ["BINARY", "MOBILE_APP"], requiresCredentials: [], description: "Ghidra headless static analysis (Prompt 17 §34–§36): native-library hardening inventory (PIE/NX/canaries/RELRO/symbols) from administrator-approved scripts only. Binaries are never executed." },
   { slug: "cutter", name: "Cutter", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "radare2-powered reverse engineering GUI backend." },
   { slug: "radare2", name: "radare2", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Reverse engineering framework for uploaded artifacts." },
   { slug: "gdb", name: "GDB", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Debugger for authorized lab artifacts only." },
@@ -471,6 +472,34 @@ async function main(): Promise<void> {
       create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 15)", implementedPhase: 15 } },
     });
   }
+  // Prompt 17: the mobile security adapters. JADX / apktool / Ghidra
+  // are CONTAINER adapters on MOBILE_STATIC_ANALYSIS workers with
+  // NO_NETWORK (app artifacts are hostile content — static sandbox,
+  // never executed, §8); the MobSF connector and the lab adapters
+  // (ADB / mitmproxy mobile sessions) are EXTERNAL_API — the MobSF
+  // instance resolves per workspace (§14) and lab sessions per
+  // approved dynamic session (§58); unconfigured they report
+  // NOT_CONFIGURED. Frida / Objection are deliberately ABSENT: they
+  // stay DISABLED / APPROVAL_REQUIRED catalog registrations with no
+  // adapter (§69–§74), exactly like Pacu in Prompt 14.
+  const IMPLEMENTED_MOBILE: Array<{ slug: string; executionMode: "CONTAINER" | "EXTERNAL_API"; outputFormat: string; parser: string; defaultTimeout: number; networkPolicy: string }> = [
+    { slug: "mobsf", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "mobsf-report", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "jadx", executionMode: "CONTAINER", outputFormat: "JSON", parser: "jadx-output", defaultTimeout: 1800, networkPolicy: "NO_NETWORK" },
+    { slug: "apktool", executionMode: "CONTAINER", outputFormat: "JSON", parser: "apktool-output", defaultTimeout: 1200, networkPolicy: "NO_NETWORK" },
+    { slug: "ghidra", executionMode: "CONTAINER", outputFormat: "JSON", parser: "ghidra-report", defaultTimeout: 1800, networkPolicy: "NO_NETWORK" },
+    { slug: "adb", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "adb-lab-session", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "mitmproxy", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "mitmproxy-flows", defaultTimeout: 1200, networkPolicy: "CUSTOM_ALLOWLIST" },
+  ];
+  for (const impl of IMPLEMENTED_MOBILE) {
+    const tool = await prisma.tool.findUnique({ where: { slug: impl.slug } });
+    const catalog = TOOLS.find((x) => x.slug === impl.slug);
+    if (!tool || !catalog) continue;
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 17) — static analysis in the sandbox; app code is never executed; dynamic adapters run only in the controlled device lab with an approved session; credentials are secret references only", implementedPhase: 17 } },
+      create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 17)", implementedPhase: 17 } },
+    });
+  }
   // Prompt 13 §55: the compliance framework catalog. Control titles are
   // the governed checks' own descriptions (posture engine + benchmark
   // tools) — posture evidence catalog, NEVER a certification (§88).
@@ -580,6 +609,24 @@ async function main(): Promise<void> {
         { controlId: "4.1", title: "Cloud Storage buckets not publicly accessible (storage-public-access)", severityDefault: "HIGH" },
         { controlId: "4.2", title: "Cloud Storage bucket access logging enabled (storage-logging)", severityDefault: "LOW" },
         { controlId: "4.3", title: "Cloud Storage encryption with customer-managed keys where required (storage-encryption)", severityDefault: "MEDIUM" },
+      ],
+    },
+    {
+      key: "OWASP_MASVS", name: "OWASP MASVS (Mobile Application Security Verification Standard)", version: "2.1",
+      controls: [
+        { controlId: "MASVS-STORAGE-1", title: "Sensitive data storage reviewed (MOBILE_WORLD_READABLE_STORAGE)", severityDefault: "HIGH" },
+        { controlId: "MASVS-STORAGE-2", title: "Sensitive data leakage via logs/backups reviewed (MOBILE_SENSITIVE_DATA_LOGGING / MOBILE_BACKUP_ALLOWED)", severityDefault: "MEDIUM" },
+        { controlId: "MASVS-CRYPTO-1", title: "Weak cryptography usage reviewed (MOBILE_WEAK_CRYPTOGRAPHY)", severityDefault: "HIGH" },
+        { controlId: "MASVS-CRYPTO-2", title: "Insecure randomness reviewed (MOBILE_INSECURE_RANDOM)", severityDefault: "MEDIUM" },
+        { controlId: "MASVS-NETWORK-1", title: "Cleartext traffic configuration reviewed (MOBILE_CLEARTEXT_ENABLED / MOBILE_ATS_ARBITRARY_LOADS)", severityDefault: "HIGH" },
+        { controlId: "MASVS-NETWORK-2", title: "Certificate pinning evidence reviewed — presence is an observation, never a bypass target (MOBILE_PINNING_ABSENT_OBSERVED_CLEARTEXT)", severityDefault: "MEDIUM" },
+        { controlId: "MASVS-PLATFORM-1", title: "WebView bridge/file-access surface reviewed (MOBILE_WEBVIEW_JS_BRIDGE / MOBILE_WEBVIEW_FILE_ACCESS)", severityDefault: "MEDIUM" },
+        { controlId: "MASVS-PLATFORM-2", title: "Exported component protection reviewed (MOBILE_EXPORTED_COMPONENT_UNPROTECTED)", severityDefault: "HIGH" },
+        { controlId: "MASVS-CODE-1", title: "Debuggable production build reviewed (MOBILE_DEBUGGABLE_BUILD)", severityDefault: "HIGH" },
+        { controlId: "MASVS-CODE-2", title: "Hardcoded secrets reviewed — metadata/fingerprint only (MOBILE_HARDCODED_SECRET)", severityDefault: "HIGH" },
+        { controlId: "MASVS-RESILIENCE-1", title: "Native binary hardening — PIE (MOBILE_BINARY_NO_PIE)", severityDefault: "MEDIUM" },
+        { controlId: "MASVS-RESILIENCE-2", title: "Native binary hardening — NX/canary/RELRO (MOBILE_BINARY_NO_NX / MOBILE_BINARY_NO_CANARY / MOBILE_BINARY_NO_RELRO)", severityDefault: "MEDIUM" },
+        { controlId: "MASVS-RESILIENCE-3", title: "Debug symbols in release binaries reviewed (MOBILE_BINARY_DEBUG_SYMBOLS)", severityDefault: "LOW" },
       ],
     },
   ];

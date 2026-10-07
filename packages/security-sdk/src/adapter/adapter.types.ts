@@ -103,6 +103,23 @@ export const CAPABILITIES = [
   "ACCOUNT_AUTHENTICATION_TESTING", "NETWORK_POISONING", "CREDENTIAL_CAPTURE",
   "DIRECTORY_ENUMERATION", "OFFENSIVE_AD_OPERATIONS",
   "MANUAL_DIRECTORY_ANALYSIS", "SNAPSHOT_IMPORT",
+  // Prompt 17: mobile application security capabilities. The static
+  // set is what adapters implement (manifest/plist analysis,
+  // decompilation-output parsing, binary static analysis, secrets,
+  // SCA). DYNAMIC_INSTRUMENTATION exists ONLY so the policy can name
+  // Frida/Objection and keep them behind the instrumentation policy
+  // (§69–§74) — default DISABLED/APPROVAL_REQUIRED, approved modules
+  // only, never arbitrary scripts. There is deliberately NO
+  // generic-shell, app-execution, credential-theft, token-theft,
+  // pinning-bypass or root/jailbreak-bypass capability anywhere in
+  // this list (§75/§119).
+  "MANIFEST_ANALYSIS", "CODE_ANALYSIS", "NETWORK_SECURITY_CONFIG_ANALYSIS",
+  "ANDROID_DECOMPILATION", "STATIC_CODE_EXTRACTION",
+  "APK_RESOURCE_ANALYSIS", "MANIFEST_EXTRACTION", "RESOURCE_EXTRACTION",
+  "BINARY_STATIC_ANALYSIS", "NATIVE_LIBRARY_ANALYSIS",
+  "DEVICE_MANAGEMENT", "APP_INSTALLATION", "LOG_COLLECTION",
+  "CONTROLLED_APP_INTERACTION", "MOBILE_TRAFFIC_CAPTURE", "HTTP_ANALYSIS",
+  "MOBILE_PROXY_ANALYSIS", "DYNAMIC_INSTRUMENTATION",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

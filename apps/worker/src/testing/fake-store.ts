@@ -1,8 +1,8 @@
 import {
   CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, FIXTURE_MANIFEST_CONTENTS, FIXTURE_SOURCE_FILES,
-  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeDirectoryPosture, analyzeEncryption, analyzeIam, analyzeLdapPosture, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, buildIdentityGraph, classifyBaseline,
-  detectRepository, diffCloudInventories, diffDirectorySnapshots, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, findAttackPaths, parseManifests, privilegedPrincipals, resolveNestedGroups, summarizeForQualityGate,
-  type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type SourceFileEntry,
+  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeDirectoryPosture, analyzeEncryption, analyzeIam, analyzeLdapPosture, analyzeLogging, analyzeMobilePosture, extractMobileArtifacts, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, buildIdentityGraph, classifyBaseline,
+  detectRepository, diffCloudInventories, diffDirectorySnapshots, emptyMobileData, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateMobileSecurityGate, evaluateQualityGate, expandCidrTargets, findAttackPaths, mergeMobileData, parseManifests, privilegedPrincipals, resolveNestedGroups, summarizeForQualityGate, summarizeMobileForGate,
+  type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type SourceFileEntry,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
@@ -10,6 +10,7 @@ import type { ScopeRules } from "@dsrclone/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, processNormalizedResult, type ProcessedCloudResource, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
+import { isMobileProcessedFinding, stampMobileFindings, type MobileScanIdentity } from "../executors/mobile-stamp";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -32,7 +33,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -90,6 +91,28 @@ export interface FakeStoreOptions {
     identityKind?: string;
     dcHosts?: string[];
     previousData?: NormalizedDirectoryData;
+  };
+  /** Prompt 17: the fixture mobile application + build the store
+   *  resolves for a mobile scan — registered application identity, the
+   *  build (id + SHA-256 identity), the extracted artifacts the
+   *  platform stages analyze, the approved lab session state and
+   *  active kill switches (§92). Absent applicationId = NOT_CONFIGURED. */
+  mobileFixtures?: {
+    applicationId?: string;
+    applicationRef?: string;
+    platform?: "ANDROID" | "IOS";
+    environment?: string;
+    buildId?: string;
+    buildHash?: string;
+    artifactReference?: string;
+    analysisArtifacts?: Record<string, unknown>;
+    previousData?: NormalizedMobileData;
+    deviceId?: string;
+    dynamicSessionId?: string;
+    dynamicSessionApproved?: boolean;
+    trafficSessionId?: string;
+    kevCves?: string[];
+    killSwitches?: Array<{ level: string; active: boolean; scopeRef?: string }>;
   };
   cloudSecFixtures?: {
     accountId?: string;
@@ -157,6 +180,14 @@ export class FakeStore implements ScanRunStore {
   directoryDomainStatus = "REGISTERED";
   directoryFixtures: NonNullable<FakeStoreOptions["directoryFixtures"]> = {};
   private directoryDriftComputed = false;
+  /** Prompt 17 mobile state mirroring the Prisma store's build rows. */
+  mobileData: NormalizedMobileData = emptyMobileData("fake-store");
+  mobileComponents: ProcessedComponent[] = [];
+  mobileGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
+  mobileFixtures: NonNullable<FakeStoreOptions["mobileFixtures"]> = {};
+  /** Prompt 17 retest mirror: mobile findings resolved/reopened by
+   *  targeted rechecks across builds (§89). */
+  mobileRetestOutcomes: Array<{ fingerprint: string; status: string; buildHash: string }> = [];
   /** Prompt 12 source state mirroring the Prisma store's snapshot rows. */
   sourceSnapshot: { id: string; repositoryId: string; hash: string; files: SourceFileEntry[]; manifests: Record<string, string> } | null = null;
   sourceLanguages: string[] = [];
@@ -173,11 +204,11 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS" | "MOBILE_STATIC_BASELINE" | "MOBILE_STATIC_COMPREHENSIVE" | "MOBILE_SECRETS_ONLY" | "MOBILE_BINARY_ANALYSIS" | "MOBILE_DYNAMIC_CONTROLLED" | "MOBILE_FULL_CONTROLLED" | "MOBILE", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
@@ -185,6 +216,7 @@ export class FakeStore implements ScanRunStore {
     this.cloudFixtures = opts.cloudFixtures ?? {};
     this.cloudSecFixtures = opts.cloudSecFixtures ?? {};
     this.directoryFixtures = opts.directoryFixtures ?? {};
+    this.mobileFixtures = opts.mobileFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -288,6 +320,23 @@ export class FakeStore implements ScanRunStore {
         ...(this.directoryFixtures.identityKind ? { identityKind: this.directoryFixtures.identityKind } : {}),
         ...(this.directoryFixtures.dcHosts ? { dcHosts: this.directoryFixtures.dcHosts } : {}),
       } : undefined,
+      // Prompt 17: the scan's mobile context (§5/§58) — resolved from
+      // the registered application/build fixture, mirroring the Prisma
+      // store's MobileApplication/MobileBuild lookup. No buildId =
+      // NOT_CONFIGURED.
+      mobile: this.targetType === "MOBILE_APP" ? {
+        ...(this.mobileFixtures.applicationId ? { applicationId: this.mobileFixtures.applicationId } : {}),
+        ...(this.mobileFixtures.applicationRef ? { applicationRef: this.mobileFixtures.applicationRef } : {}),
+        ...(this.mobileFixtures.platform ? { platform: this.mobileFixtures.platform } : {}),
+        ...(this.mobileFixtures.environment ? { environment: this.mobileFixtures.environment } : {}),
+        ...(this.mobileFixtures.buildId ? { buildId: this.mobileFixtures.buildId } : {}),
+        ...(this.mobileFixtures.buildHash ? { buildHash: this.mobileFixtures.buildHash } : {}),
+        ...(this.mobileFixtures.artifactReference ? { artifactReference: this.mobileFixtures.artifactReference } : {}),
+        ...(this.mobileFixtures.deviceId ? { deviceId: this.mobileFixtures.deviceId } : {}),
+        ...(this.mobileFixtures.dynamicSessionId ? { dynamicSessionId: this.mobileFixtures.dynamicSessionId } : {}),
+        ...(this.mobileFixtures.dynamicSessionApproved !== undefined ? { dynamicSessionApproved: this.mobileFixtures.dynamicSessionApproved } : {}),
+        ...(this.mobileFixtures.trafficSessionId ? { trafficSessionId: this.mobileFixtures.trafficSessionId } : {}),
+      } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
@@ -347,7 +396,12 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
+  async persistResult(_scanId: string, _executionId: string, processedIn: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
+    // Prompt 17 §50: mobile findings are stamped with their canonical
+    // identity BEFORE persistence (mirrors the Prisma store).
+    const processed = this.mobileIdentity() && processedIn.findings.some(isMobileProcessedFinding)
+      ? { ...processedIn, findings: stampMobileFindings(processedIn.findings, this.mobileIdentity()!) }
+      : processedIn;
     // Assets merge by host (one canonical row, provenance unioned) —
     // mirrors the Prisma store's upsert behaviour.
     for (const a of processed.assets) {
@@ -445,7 +499,143 @@ export class FakeStore implements ScanRunStore {
     // canonical fingerprint; drift diffs against the previous
     // snapshot fixture once (§79).
     const dirCounts = this.persistDirectory(processed);
-    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
+    const mobCounts = this.persistMobile(processed);
+    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings + mobCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
+  }
+
+  /** Prompt 17: the scan's mobile identity when a build is registered. */
+  private mobileIdentity(): MobileScanIdentity | null {
+    const fx = this.mobileFixtures;
+    if (this.targetType !== "MOBILE_APP" || !fx.applicationId || !fx.buildId || !fx.buildHash) return null;
+    return {
+      applicationId: fx.applicationId,
+      applicationRef: fx.applicationRef ?? "com.example.app",
+      buildId: fx.buildId,
+      buildHash: fx.buildHash,
+      platform: fx.platform ?? "ANDROID",
+      ...(fx.environment ? { environment: fx.environment } : {}),
+    };
+  }
+
+  /** Prompt 17 mobile persistence mirror (§20–§52): inventory merges
+   *  by identity key; platform posture analysis runs over the merged
+   *  inventory and its findings join the scan stamped + deduped by
+   *  canonical fingerprint; MASVS assessments dedupe by control. */
+  private persistMobile(processed: ProcessedResult): { findings: number } {
+    const payload = processed.mobile;
+    const has = payload.permissions.length + payload.components.length + payload.deepLinks.length
+      + payload.endpoints.length + payload.nativeLibraries.length + payload.signing.length > 0;
+    const identity = this.mobileIdentity();
+    if (!has || !identity) return { findings: 0 };
+    this.mobileData = mergeMobileData(this.mobileData, payload);
+    for (const c of processed.components) {
+      if (!this.mobileComponents.some((x) => x.purl === c.purl)) this.mobileComponents.push(c);
+      if (!this.components.some((x) => x.purl === c.purl)) this.components.push(c);
+    }
+    const posture = analyzeMobilePosture(this.mobileData, {
+      applicationId: identity.applicationId,
+      applicationRef: identity.applicationRef,
+      buildId: identity.buildId,
+      buildHash: identity.buildHash,
+      platform: identity.platform,
+      environment: identity.environment ?? "PRODUCTION",
+      toolSlug: "mobile-platform-analysis",
+    });
+    const stamped = stampMobileFindings(
+      processNormalizedResult({
+        assets: [], services: [], endpoints: [], technologies: [], findings: posture.findings,
+        artifacts: [], metrics: {}, mock: false,
+      }, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-mobile-analysis", toolSlug: "mobile-platform-analysis" }).findings,
+      identity,
+    );
+    const fresh = stamped.filter((f) => !this.findings.some((x) => x.fingerprint === f.fingerprint));
+    if (fresh.length > 0) this.findings.push(...fresh);
+    for (const a of posture.controlAssessments) {
+      if (!this.controlAssessments.some((x) => x.frameworkKey === a.frameworkKey && x.controlId === a.controlId && x.subjectRef === a.subjectRef)) {
+        this.controlAssessments.push({ ...a });
+      }
+    }
+    return { findings: fresh.length };
+  }
+
+  /** Prompt 17 platform hooks mirroring the Prisma store (§6/§10/§90). */
+  async validateMobileBuild(): Promise<{ buildHash: string; platform: string; artifactFormat: string } | null> {
+    const identity = this.mobileIdentity();
+    if (!identity) return null;
+    return { buildHash: identity.buildHash, platform: identity.platform, artifactFormat: identity.platform === "ANDROID" ? "APK" : "IPA" };
+  }
+
+  async extractMobileMetadata(): Promise<{ permissions: number; components: number; endpoints: number; secrets: number; componentsScanned: number } | null> {
+    const identity = this.mobileIdentity();
+    if (!identity) return null;
+    const artifacts = this.mobileFixtures.analysisArtifacts;
+    if (!artifacts) return null;
+    const extracted = extractMobileArtifacts(artifacts, {
+      applicationId: identity.applicationId, applicationRef: identity.applicationRef,
+      buildId: identity.buildId, buildHash: identity.buildHash,
+      platform: identity.platform, environment: identity.environment ?? "PRODUCTION",
+      toolSlug: "mobile-platform-analysis",
+    });
+    const processedExtracted = processNormalizedResult({
+      assets: [], services: [], endpoints: [], technologies: [], findings: extracted.findings,
+      artifacts: [], metrics: {}, mock: false, components: extracted.components, mobile: extracted.data,
+    }, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-mobile-metadata", toolSlug: "mobile-platform-analysis" });
+    await this.persistResult("scan-1", "platform-mobile-metadata", processedExtracted);
+    return {
+      permissions: extracted.data.permissions.length,
+      components: extracted.data.components.length,
+      endpoints: extracted.data.endpoints.length,
+      secrets: extracted.findings.filter((f) => f.mobileFindingType === "MOBILE_SECRET").length,
+      componentsScanned: extracted.components.length,
+    };
+  }
+
+  async analyzeMobileManifest(): Promise<{ findings: number; assessments: number } | null> {
+    const identity = this.mobileIdentity();
+    if (!identity) return null;
+    const before = this.controlAssessments.length;
+    const posture = analyzeMobilePosture(this.mobileData, {
+      applicationId: identity.applicationId, applicationRef: identity.applicationRef,
+      buildId: identity.buildId, buildHash: identity.buildHash,
+      platform: identity.platform, environment: identity.environment ?? "PRODUCTION",
+      toolSlug: "mobile-platform-analysis",
+    });
+    for (const a of posture.controlAssessments) {
+      if (!this.controlAssessments.some((x) => x.frameworkKey === a.frameworkKey && x.controlId === a.controlId && x.subjectRef === a.subjectRef)) {
+        this.controlAssessments.push({ ...a });
+      }
+    }
+    return { findings: posture.findings.length, assessments: this.controlAssessments.length - before };
+  }
+
+  async evaluateMobileQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const identity = this.mobileIdentity();
+    if (!identity) return null;
+    const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
+    const mobile = canonical.filter(isMobileProcessedFinding);
+    if (mobile.length === 0 && this.findings.length === 0) return null;
+    const kev = new Set(this.mobileFixtures.kevCves ?? []);
+    const summary = summarizeMobileForGate(mobile.map((f) => ({
+      severity: f.severity,
+      ...(f.mobileFindingType ? { mobileFindingType: f.mobileFindingType } : {}),
+      ...(f.ruleId ? { ruleId: f.ruleId } : {}),
+      ...(f.secret ? { secretVerified: f.secret.verificationStatus === "VERIFIED_ACTIVE" } : {}),
+      ...(f.cve ? { kevListed: kev.has(f.cve) } : {}),
+    })));
+    const evaluation = evaluateMobileSecurityGate(summary);
+    this.mobileGateRecord = { status: evaluation.status, failedRules: evaluation.failedRules, warningRules: evaluation.warningRules };
+    return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
+  }
+
+  /** Prompt 16/17 (§92): active kill switches for the dynamic gate. */
+  async activeKillSwitches(): Promise<Array<{ level: string; organizationId?: string | null; workspaceId?: string | null; scopeRef?: string | null; active: boolean }>> {
+    return (this.mobileFixtures.killSwitches ?? []).map((s) => ({
+      level: s.level, active: s.active,
+      // Fixture switches bind to the fixture workspace unless a
+      // scopeRef says otherwise (mirrors the Prisma rows' columns).
+      ...(s.level === "WORKSPACE" ? { workspaceId: "ws-1" } : {}),
+      ...(s.scopeRef ? { scopeRef: s.scopeRef } : {}),
+    }));
   }
 
   /** Prompt 15 directory persistence mirror (§13–§19/§57–§79). */

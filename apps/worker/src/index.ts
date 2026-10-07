@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -12,6 +12,7 @@ import { prismaScannerDeps } from "./store/scanner-deps";
 import { prismaKubernetesDeps } from "./store/kubernetes-deps";
 import { prismaCloudDeps } from "./store/cloud-deps";
 import { prismaDirectoryDeps } from "./store/directory-deps";
+import { prismaMobileDeps } from "./store/mobile-deps";
 import { RetestRunner } from "./executors/retest-runner";
 import type { RetestJobData, ValidationJobData } from "./jobs";
 import { UnconfiguredValidationTransport, ValidationRunner } from "./executors/validation-runner";
@@ -81,6 +82,21 @@ registerCloudNativeAdapters(registry, undefined, prismaKubernetesDeps());
 // CLOUD_ANALYSIS workers (§10). Pacu is registered DISABLED in the
 // catalog only — it has no adapter and never executes (§34).
 registerCloudSecAdapters(registry, undefined, prismaCloudDeps());
+// Prompt 15: Active Directory adapters (LDAP/BloodHound connectors,
+// ldapsearch/SharpHound/PingCastle/enum4linux-ng/SMBMap/Certipy-find)
+// over Prisma-resolved domain records. Collection is READ-ONLY (§7);
+// live directory transports report NOT_CONFIGURED until provisioned
+// on a DIRECTORY_ANALYSIS worker (§10), and the offensive family has
+// no adapters at all (§103).
+registerDirectoryAdapters(registry, undefined, prismaDirectoryDeps());
+// Prompt 17: mobile adapters (MobSF connector, JADX, apktool, Ghidra
+// + the controlled-lab ADB/mitmproxy adapters) over Prisma-resolved
+// application/build records. Static analysis runs in the sandbox —
+// app code is never executed (§8); dynamic adapters execute only on
+// MOBILE_DYNAMIC_ANALYSIS workers with an approved lab session, and
+// their transports report NOT_CONFIGURED until a lab is provisioned
+// (§58). Frida/Objection have NO adapters (§69–§74).
+registerMobileAdapters(registry, undefined, prismaMobileDeps());
 const executor = new StageExecutor(registry, store, undefined, {
   workerCapabilities: privilegedCapabilitiesFromEnv(),
 });

@@ -27,7 +27,7 @@ export const WORKER_CAPABILITIES = [
 /** Prompt 10 §23/§24: worker types. The type + privileged capabilities
  *  come from the worker's OWN deployment environment — a general worker
  *  cannot promote itself, and job payloads never carry them. */
-export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST", "CLOUD_ANALYSIS", "DIRECTORY_ANALYSIS"] as const;
+export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST", "CLOUD_ANALYSIS", "DIRECTORY_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_DYNAMIC_ANALYSIS"] as const;
 export type WorkerTypeName = (typeof WORKER_TYPES)[number];
 
 export function workerTypeFromEnv(env: NodeJS.ProcessEnv = process.env): WorkerTypeName {
@@ -71,6 +71,17 @@ export function privilegedCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.e
   // cannot grant it.
   if (type === "DIRECTORY_ANALYSIS" && declared.includes("DIRECTORY_ANALYSIS")) {
     allowed.add("DIRECTORY_ANALYSIS");
+  }
+  // Prompt 17 §10: the two mobile worker capabilities stay SEPARATE —
+  // MOBILE_STATIC_ANALYSIS exists only on static workers (artifacts
+  // are hostile content, analyzed in the static sandbox) and
+  // MOBILE_DYNAMIC_ANALYSIS only on the isolated device-lab workers.
+  // Neither env can grant the other.
+  if (type === "MOBILE_STATIC_ANALYSIS" && declared.includes("MOBILE_STATIC_ANALYSIS")) {
+    allowed.add("MOBILE_STATIC_ANALYSIS");
+  }
+  if (type === "MOBILE_DYNAMIC_ANALYSIS" && declared.includes("MOBILE_DYNAMIC_ANALYSIS")) {
+    allowed.add("MOBILE_DYNAMIC_ANALYSIS");
   }
   return [...allowed];
 }

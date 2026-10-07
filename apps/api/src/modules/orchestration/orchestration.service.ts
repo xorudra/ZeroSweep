@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  apiHealthBySlug, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, mobileHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -104,9 +104,18 @@ export class OrchestrationService {
       // their health is a governed DISABLED constant in
       // directoryHealthRecord, never a probe.
       registerDirectoryAdapters(registry);
+      // Prompt 17: mobile adapters (MobSF connector / JADX / apktool /
+      // Ghidra + the controlled-lab ADB / mitmproxy adapters) join
+      // plan-time selection for the mobile profiles. Connectors and
+      // lab adapters report NOT_CONFIGURED at plan time — instance /
+      // session configuration resolves in the mobile workers (§14/
+      // §58). Frida/Objection have NO adapter (§69–§74): their health
+      // is a governed DISABLED / APPROVAL_REQUIRED constant in
+      // mobileHealthBySlug, never a probe.
+      registerMobileAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()), ...directoryHealthRecord(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()), ...directoryHealthRecord(registry.list()), ...mobileHealthBySlug(registry.list()) } };
     }
     return this.registryCache.registry;
   }

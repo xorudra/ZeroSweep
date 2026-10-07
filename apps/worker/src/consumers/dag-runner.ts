@@ -87,6 +87,16 @@ export interface ScanRunStore extends ExecutionStore {
   analyzeDirectoryLdapPosture?(scanId: string): Promise<{ findings: number; assessments: number } | null>;
   buildDirectoryGraph?(scanId: string): Promise<{ nodes: number; edges: number; privileged: number; drift: number } | null>;
   analyzeAttackPaths?(scanId: string): Promise<{ paths: number; findings: number } | null>;
+  /** Prompt 17 platform-stage hooks (same optional pattern): build
+   *  validation (§5/§6 — null fails the scan honestly as
+   *  NOT_CONFIGURED), metadata extraction over the build's registered
+   *  artifacts (§6/§20 — secret scan + SCA + SBOM inputs), manifest /
+   *  plist posture analysis (§20–§41) and the mobile quality gate
+   *  (§90). */
+  validateMobileBuild?(scanId: string): Promise<{ buildHash: string; platform: string; artifactFormat: string } | null>;
+  extractMobileMetadata?(scanId: string): Promise<{ permissions: number; components: number; endpoints: number; secrets: number; componentsScanned: number } | null>;
+  analyzeMobileManifest?(scanId: string): Promise<{ findings: number; assessments: number } | null>;
+  evaluateMobileQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -279,6 +289,9 @@ export class DagRunner {
     }
     if (plan.stages.some((s) => s.type === "DOMAIN_DISCOVERY")) {
       await emit("ad.scan_completed", { finalStatus });
+    }
+    if (plan.stages.some((s) => s.type === "MOBILE_ARTIFACT_INTAKE")) {
+      await emit("mobile.scan_completed", { finalStatus });
     }
     return { status: finalStatus };
   }
@@ -496,6 +509,44 @@ export class DagRunner {
         await emit("ad.attack_paths_analyzed", { stageId, paths: result.paths });
         if (result.paths > 0) await emit("ad.attack_path_detected", { stageId, count: result.paths });
       }
+    }
+    // Prompt 17 platform stages (§10/§11): MOBILE_ARTIFACT_INTAKE
+    // validates the registered build (missing hook or no build fails
+    // the scan honestly — FAIL_SCAN strategy); MOBILE_METADATA_
+    // EXTRACTION runs the platform extraction over the build's
+    // registered artifacts (manifest/plist parse, secret scan, SCA);
+    // MOBILE_MANIFEST_ANALYSIS runs posture over persisted inventory;
+    // the mobile gate shares the QUALITY_GATE stage. Dynamic tool
+    // stages that reached the platform path selected NO adapters (no
+    // approved lab session / dynamic worker unavailable) — they
+    // complete honestly as skipped, never simulated (§58/§73).
+    if (stageId === "MOBILE_ARTIFACT_INTAKE") {
+      if (!this.store.validateMobileBuild) return "FAILED";
+      const result = await this.store.validateMobileBuild(scanId);
+      if (!result) {
+        await emit("policy.denied", { stageId, reasonCode: "MOBILE_BUILD_NOT_CONFIGURED" });
+        return "FAILED";
+      }
+      await emit("mobile.build_validated", { stageId, buildHash: result.buildHash, platform: result.platform, artifactFormat: result.artifactFormat });
+    }
+    if (stageId === "MOBILE_METADATA_EXTRACTION" && this.store.extractMobileMetadata) {
+      const result = await this.store.extractMobileMetadata(scanId);
+      if (result) {
+        await emit("mobile.metadata_extracted", { stageId, permissions: result.permissions, components: result.components, endpoints: result.endpoints, componentsScanned: result.componentsScanned });
+        if (result.secrets > 0) await emit("mobile.secrets_detected", { stageId, count: result.secrets });
+        if (result.endpoints > 0) await emit("mobile.endpoints_discovered", { stageId, count: result.endpoints, classification: "DISCOVERED_REFERENCE" });
+      }
+    }
+    if (stageId === "MOBILE_MANIFEST_ANALYSIS" && this.store.analyzeMobileManifest) {
+      const result = await this.store.analyzeMobileManifest(scanId);
+      if (result) await emit("mobile.manifest_analyzed", { stageId, findings: result.findings, assessments: result.assessments });
+    }
+    if (stageId === "MOBILE_DYNAMIC_SESSION" || stageId === "MOBILE_TRAFFIC_ANALYSIS") {
+      await emit("mobile.dynamic_session_skipped", { stageId, reasonCode: "MOBILE_DYNAMIC_NOT_CONFIGURED", degraded: true });
+    }
+    if (stageId === "QUALITY_GATE" && this.store.evaluateMobileQualityGate) {
+      const result = await this.store.evaluateMobileQualityGate(scanId);
+      if (result) await emit("mobile.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
     }
     return "COMPLETED";
   }

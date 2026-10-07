@@ -99,7 +99,36 @@ export interface NormalizedFinding {
   directoryObjectId?: string;
   /** Directory object kind: USER | GROUP | COMPUTER | GPO | CA | TEMPLATE | DOMAIN | DC. */
   directoryObjectType?: string;
+  // ── Prompt 17 — mobile finding extensions (§49–§52). All optional;
+  // populated only by mobile analyzers/parsers. The build hash is the
+  // immutable build identity (§5); crossBuildFingerprint deliberately
+  // EXCLUDES it so the same root issue correlates across builds (§51).
+  /** Registered MobileApplication id (platform identity). */
+  mobileApplicationId?: string;
+  /** Registered MobileBuild id. */
+  mobileBuildId?: string;
+  /** SHA-256 of the assessed build artifact (§5). */
+  mobileBuildHash?: string;
+  mobilePlatform?: "ANDROID" | "IOS";
+  /** §49 finding type taxonomy. */
+  mobileFindingType?: MobileFindingType;
+  /** App component / file / library the finding concerns (§50). */
+  mobileComponent?: string;
+  /** OWASP Mobile Top 10 (2024) category id, e.g. M8 (§46). */
+  owaspMobile?: string;
+  /** OWASP MASVS control id where a reliable mapping exists (§47). */
+  masvsControl?: string;
+  /** Cross-build identity (§51): same root issue, different builds. */
+  crossBuildFingerprint?: string;
+  /** Static suggestion confirmed by a dynamic observation (§88). */
+  dynamicConfirmed?: boolean;
 }
+
+/** Prompt 17 §49: mobile finding types — kept distinguishable end to end. */
+export type MobileFindingType =
+  | "MOBILE_MISCONFIGURATION" | "MOBILE_CODE_FINDING" | "MOBILE_SECRET"
+  | "MOBILE_DEPENDENCY_VULNERABILITY" | "MOBILE_BINARY_FINDING"
+  | "MOBILE_NETWORK_FINDING" | "MOBILE_RUNTIME_FINDING";
 
 /** Prompt 14 §58: cloud finding classes — kept distinguishable end to end. */
 export type CloudFindingClass =
@@ -360,6 +389,97 @@ export interface NormalizedDirectoryData {
   snapshot?: NormalizedDirectorySnapshot;
   /** Domain password-policy metadata (§60) for the posture analyzers. */
   passwordPolicy?: Record<string, unknown>;
+}
+
+/** Prompt 17 §20: one declared application permission, classified —
+ *  a dangerous permission is inventoried, never auto-flagged (§22). */
+export interface NormalizedMobilePermission {
+  name: string;
+  classification: "NORMAL" | "DANGEROUS" | "SIGNATURE" | "CUSTOM" | "UNKNOWN";
+  source: string;
+}
+
+/** Prompt 17 §21: an application component from the manifest/plist. */
+export interface NormalizedMobileComponent {
+  kind: "ACTIVITY" | "SERVICE" | "RECEIVER" | "PROVIDER" | "EXTENSION";
+  name: string;
+  exported: boolean;
+  permission?: string;
+  intentActions: string[];
+  source: string;
+}
+
+/** Prompt 17 §26: a deep link — inventoried, never invoked. */
+export interface NormalizedMobileDeepLink {
+  scheme: string;
+  host?: string;
+  pathPrefix?: string;
+  autoVerify: boolean;
+  source: string;
+}
+
+/** Prompt 17 §29: an endpoint extracted from the app. Classification
+ *  is DISCOVERED_REFERENCE forever — extraction never authorizes. */
+export interface NormalizedMobileEndpoint {
+  url: string;
+  host: string;
+  kind: "HTTP" | "HTTPS" | "WEBSOCKET" | "DOMAIN";
+  classification: "DISCOVERED_REFERENCE";
+  source: string;
+}
+
+/** Prompt 17 §33: a native library + static hardening properties. */
+export interface NormalizedMobileNativeLibrary {
+  path: string;
+  architecture?: string;
+  sha256?: string;
+  pie?: boolean;
+  nx?: boolean;
+  stackCanary?: boolean;
+  relro?: "NONE" | "PARTIAL" | "FULL";
+  stripped?: boolean;
+  source: string;
+}
+
+/** Prompt 17 §31: signing-certificate metadata. No private key
+ *  material can exist in this record by construction. */
+export interface NormalizedMobileSigningInfo {
+  subject?: string;
+  issuer?: string;
+  validFrom?: string;
+  validTo?: string;
+  algorithm?: string;
+  fingerprint?: string;
+  debug?: boolean;
+  source: string;
+}
+
+/** The mobile payload of a normalized result (Prompt 17): static
+ *  inventory + analysis inputs for one build. Every string in it has
+ *  passed the hostile-content sanitizers (§107) — decompiled source
+ *  and manifest strings are attacker-controlled data. */
+export interface NormalizedMobileData {
+  applicationRef?: string; // package name / bundle id
+  platform?: "ANDROID" | "IOS";
+  versionName?: string;
+  versionCode?: number;
+  minOsVersion?: string;
+  targetOsVersion?: string;
+  permissions: NormalizedMobilePermission[];
+  components: NormalizedMobileComponent[];
+  deepLinks: NormalizedMobileDeepLink[];
+  endpoints: NormalizedMobileEndpoint[];
+  nativeLibraries: NormalizedMobileNativeLibrary[];
+  signing: NormalizedMobileSigningInfo[];
+  /** Third-party SDK inventory (§45): names only — inventory, never
+   *  a vulnerability or a legal/privacy conclusion. */
+  sdkInventory: { name: string; category: string; source: string }[];
+  /** Manifest/plist posture facts the analyzers reason over (§20–§41). */
+  posture?: Record<string, unknown>;
+  /** Bounded decompiled-source snippets (path + text) for the secret
+   *  scan + WebView/storage pattern analysis. Text is DATA (§24). */
+  sourceSnippets?: { path: string; text: string }[];
+  source: string; // adapter slug that reported this payload
 }
 
 /** A container image observed by an image/SBOM scan (Prompt 13 §5/§13):
@@ -803,6 +923,8 @@ export interface NormalizedSecurityResult {
   cloud?: NormalizedCloudData;
   /** Active Directory inventory + identity graph payload (Prompt 15). */
   directory?: NormalizedDirectoryData;
+  /** Mobile application static-analysis payload (Prompt 17). */
+  mobile?: NormalizedMobileData;
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

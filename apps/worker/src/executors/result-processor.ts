@@ -215,6 +215,20 @@ export interface ProcessedFinding {
   directoryDomainRef?: string;
   directoryObjectId?: string;
   directoryObjectType?: string;
+  /** Prompt 17 §49–§52: mobile identity — application, build (id +
+   *  SHA-256 hash), platform, finding type, component, OWASP Mobile /
+   *  MASVS mappings and the cross-build key. The canonical fingerprint
+   *  is stamped by the stores from this identity (§50). */
+  mobileApplicationId?: string;
+  mobileBuildId?: string;
+  mobileBuildHash?: string;
+  mobilePlatform?: string;
+  mobileFindingType?: string;
+  mobileComponent?: string;
+  owaspMobile?: string;
+  masvsControl?: string;
+  crossBuildFingerprint?: string;
+  dynamicConfirmed?: boolean;
 }
 
 /** Prompt 12 §45: component inventory passthrough (PURL identity). */
@@ -322,6 +336,9 @@ export interface ProcessedResult {
   /** Prompt 15: Active Directory inventory + identity-graph payload
    *  passthrough — the stores persist it into the directory tables. */
   directory: import("@dsrclone/security-sdk").NormalizedDirectoryData;
+  /** Prompt 17: mobile static-analysis payload passthrough — the
+   *  stores persist it into the mobile build inventory tables. */
+  mobile: import("@dsrclone/security-sdk").NormalizedMobileData;
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -635,6 +652,17 @@ export function processNormalizedResult(
       ...(f.directoryDomainRef ? { directoryDomainRef: f.directoryDomainRef } : {}),
       ...(f.directoryObjectId ? { directoryObjectId: f.directoryObjectId } : {}),
       ...(f.directoryObjectType ? { directoryObjectType: f.directoryObjectType } : {}),
+      // Prompt 17 passthrough (§49–§52): mobile identity fields.
+      ...(f.mobileApplicationId ? { mobileApplicationId: f.mobileApplicationId } : {}),
+      ...(f.mobileBuildId ? { mobileBuildId: f.mobileBuildId } : {}),
+      ...(f.mobileBuildHash ? { mobileBuildHash: f.mobileBuildHash } : {}),
+      ...(f.mobilePlatform ? { mobilePlatform: f.mobilePlatform } : {}),
+      ...(f.mobileFindingType ? { mobileFindingType: f.mobileFindingType } : {}),
+      ...(f.mobileComponent ? { mobileComponent: f.mobileComponent } : {}),
+      ...(f.owaspMobile ? { owaspMobile: f.owaspMobile } : {}),
+      ...(f.masvsControl ? { masvsControl: f.masvsControl } : {}),
+      ...(f.crossBuildFingerprint ? { crossBuildFingerprint: f.crossBuildFingerprint } : {}),
+      ...(f.dynamicConfirmed ? { dynamicConfirmed: true } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -793,7 +821,15 @@ export function processNormalizedResult(
     certificateAuthorities: [], certificateTemplates: [],
   };
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, suppressedEndpoints, isMock: result.mock };
+  // --- Mobile payload (Prompt 17): static inventory passes through
+  //     with provenance intact; the stores persist it into the mobile
+  //     build tables (deep links, components, endpoints, libraries).
+  const mobile: ProcessedResult["mobile"] = result.mobile ?? {
+    permissions: [], components: [], deepLinks: [], endpoints: [],
+    nativeLibraries: [], signing: [], sdkInventory: [], source: ctx.toolSlug ?? "unknown",
+  };
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, mobile, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original
@@ -1002,13 +1038,88 @@ function correlateDirectoryProcessed(
   };
 }
 
+/** Prompt 17 §50/§51: a processed finding is a MOBILE finding when it
+ *  carries mobile identity. Mobile findings correlate in their own
+ *  partition keyed on the canonical mobile fingerprint (application +
+ *  build hash + platform + file/component + rule + CWE + class,
+ *  stamped by the stores): the same issue reported by MobSF, JADX and
+ *  platform posture analysis converges on ONE canonical finding with
+ *  every source's evidence preserved. §88: a runtime (dynamic)
+ *  observation of cleartext traffic CONFIRMS the static cleartext
+ *  finding — confidence increases and both observations are kept. */
+export function isMobileFinding(f: ProcessedFinding): boolean {
+  return f.mobileBuildHash !== undefined || f.mobileFindingType !== undefined;
+}
+
+function correlateMobileProcessed(
+  findings: ProcessedFinding[],
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  const groups = new Map<string, ProcessedFinding[]>();
+  for (const f of findings) groups.set(f.fingerprint, [...(groups.get(f.fingerprint) ?? []), f]);
+  const runtimeCleartext = [...groups.values()].flat().some(
+    (f) => f.mobileFindingType === "MOBILE_RUNTIME_FINDING" && f.ruleId === "MOBILE_RUNTIME_CLEARTEXT_TRAFFIC",
+  );
+  const out: ProcessedFinding[] = [...groups.values()].map((members) => {
+    const primary = members[0]!;
+    const sources = [...new Set(members.flatMap((m) => m.sources))];
+    const confirmed = runtimeCleartext
+      && primary.ruleId === "MOBILE_CLEARTEXT_ENABLED"
+      && primary.mobileFindingType !== "MOBILE_RUNTIME_FINDING";
+    const risk = computeRisk({
+      severity: primary.severity as NormalizedFinding["severity"],
+      ...(primary.cvssScore !== undefined ? { cvssScore: primary.cvssScore } : {}),
+      confidence: confirmed ? Math.min(1, primary.confidence + 0.15) : primary.confidence,
+      verificationStatus: confirmed ? "CONFIRMED" : "UNVERIFIED",
+    });
+    return {
+      ...primary,
+      sources,
+      evidenceRows: members.flatMap((m) => m.evidenceRows),
+      evidenceSummary: members.map((m) => m.evidenceSummary).filter(Boolean).join("\n"),
+      ...(confirmed ? { dynamicConfirmed: true, confidence: Math.min(1, primary.confidence + 0.15) } : {}),
+      riskScore: risk.score,
+      riskBand: risk.band,
+      riskExplanation: [
+        ...risk.explanation,
+        ...(confirmed ? ["DYNAMICALLY_CONFIRMED: a controlled lab runtime observation confirmed this static finding (§88)"] : []),
+        ...(sources.length > 1 ? [`CORROBORATED_BY: ${sources.join(", ")}`] : []),
+      ],
+      confidenceBand: primary.confidence >= 0.8 ? "HIGH" : primary.confidence >= 0.5 ? "MEDIUM" : "LOW",
+      verificationStatus: confirmed ? "CONFIRMED" : "UNVERIFIED",
+    } as ProcessedFinding;
+  });
+  const byTool: CorrelationStats["byTool"] = {};
+  for (const f of findings) {
+    const entry = byTool[f.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.total += 1;
+    byTool[f.sourceTool] = entry;
+  }
+  for (const o of out) {
+    const entry = byTool[o.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.unique += 1;
+    if (o.sources.length > 1) entry.corroborated += 1;
+    byTool[o.sourceTool] = entry;
+  }
+  return {
+    findings: out,
+    stats: {
+      total: findings.length,
+      unique: out.length,
+      duplicatesMerged: findings.length - out.length,
+      corroborated: out.filter((f) => f.sources.length > 1).length,
+      byTool,
+    },
+  };
+}
+
 export function correlateProcessedFindings(
   findings: ProcessedFinding[],
   opts: { assetCriticality?: string; maxFindings?: number } = {},
 ): { findings: ProcessedFinding[]; stats: CorrelationStats } {
   const cloudFindings = findings.filter(isCloudNativeFinding);
   const directoryFindings = findings.filter((f) => !isCloudNativeFinding(f) && isDirectoryFinding(f));
-  const rest = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f));
+  const mobileFindings = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && isMobileFinding(f));
+  const rest = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && !isMobileFinding(f));
   const mergeStats = (parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[]) => {
     const byTool: CorrelationStats["byTool"] = {};
     for (const part of parts) {
@@ -1031,6 +1142,7 @@ export function correlateProcessedFindings(
   const parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[] = [];
   if (cloudFindings.length > 0) parts.push(correlateCloudProcessed(cloudFindings));
   if (directoryFindings.length > 0) parts.push(correlateDirectoryProcessed(directoryFindings));
+  if (mobileFindings.length > 0) parts.push(correlateMobileProcessed(mobileFindings));
   const sourceFindings = rest.filter(isSourceFinding);
   const otherFindings = rest.filter((f) => !isSourceFinding(f));
   if (otherFindings.length > 0) parts.push(correlateVulnProcessed(otherFindings, opts));

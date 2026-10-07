@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 15 complete (Prompts 1–15).** Production monorepo, backend and
+> **Status — Phase 17 complete (Prompts 1–17).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -218,10 +218,48 @@ and the AI health endpoint.
 14. ✅ Multi-cloud security assessment: AWS, Azure & GCP (Prompt 14)
 15. ✅ Active Directory security assessment, identity graph & defensive attack-path engine (Prompt 15)
 16. ✅ Controlled penetration testing & validation workflow (Prompt 16)
-17. Lab-only modules (wireless, mobile)
+17. ✅ Mobile application VAPT — Android & iOS (Prompt 17)
+18. Lab-only modules (wireless)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 17: Mobile Application VAPT — Android & iOS.**
+  Mobile applications became verified `MOBILE_APP` targets with
+  SHA-256 build identity: hostile-content intake (magic sniffing,
+  archive-attack validation, hash enforcement, signing-metadata
+  key-material dropped), then STATIC analysis on isolated
+  `MOBILE_STATIC_ANALYSIS` workers — MobSF connector (trusted
+  admin-registered instance only), JADX/apktool decompilation
+  artifacts (never executed, RBAC-gated, audited per access), Ghidra
+  native-hardening inventory (approved scripts only), manifest/plist
+  analysis (permissions classified, exported components inventoried —
+  presence alone is never a vulnerability), metadata-only secrets
+  (type + location + HMAC fingerprint + redacted preview), and
+  build-level SCA/SBOM reusing the Prompt 12 component models
+  (versions never invented). Extracted endpoints are
+  `DISCOVERED_REFERENCE` — they never authorize targets or expand
+  scope. Findings carry OWASP Mobile Top 10 (2024) + MASVS mappings
+  (no certification claims), dedupe across tools into one canonical
+  finding per build, and track cross-build identity for retest.
+  Dynamic work exists only in the controlled device lab
+  (`MOBILE_DYNAMIC_ANALYSIS` workers, approved sessions, verified
+  build hash, reset after assessment): ADB is a governed lab adapter
+  — **no generic `adb shell` exists**; mitmproxy/Burp traffic is
+  sanitized metadata with a temporary lab CA (never personal
+  devices); Frida is a DISABLED registration and Objection
+  APPROVAL_REQUIRED — instrumentation only as administrator-reviewed
+  versioned modules, never arbitrary scripts. Prohibited automation
+  (credential/token theft, account takeover, payment abuse,
+  persistence, spyware, SMS/contact/file extraction, control bypass)
+  is refused in code and audited. The mobile quality gate, budgets
+  and the Prompt 16 kill switches govern every run. Migration
+  `20261007140000_mobile_security` generated (not applied — no Docker
+  on the build VM). Docs: `docs/architecture/mobile-security-engine.md`,
+  `docs/architecture/android-security.md`, `docs/architecture/ios-security.md`,
+  `docs/architecture/mobile-device-lab.md`,
+  `docs/architecture/mobile-traffic-analysis.md`,
+  `docs/security/mobile-artifact-sandbox.md`,
+  `docs/security/mobile-dynamic-policy.md`, `docs/tools/mobile/`.
 - **2026-10-08 — Prompt 16: Controlled Security Validation & Authorized
   Pentest Workflow.** Findings can now be *validated* — confidence raised
   through governed, safe rechecks — under a full control stack: a closed
