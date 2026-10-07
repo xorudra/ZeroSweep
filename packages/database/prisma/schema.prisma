@@ -41,6 +41,13 @@ enum TargetType {
   ACTIVE_DIRECTORY
   BINARY
   WIRELESS_LAB
+  // Prompt 13 §3: cloud-native target kinds (DOCKER / KUBERNETES above
+  // remain as legacy aliases for DOCKER_HOST / KUBERNETES_CLUSTER).
+  CONTAINER_REGISTRY
+  DOCKER_HOST
+  KUBERNETES_CLUSTER
+  KUBERNETES_MANIFEST
+  HELM_CHART
 }
 
 enum TargetStatus {
@@ -89,6 +96,17 @@ enum AssessmentProfile {
   SECRETS_ONLY
   DEPENDENCIES_ONLY
   SAST_ONLY
+  // Prompt 13 §11/§80: container + Kubernetes profiles (CONTAINER above
+  // remains as the legacy alias for CONTAINER_BASELINE).
+  CONTAINER_BASELINE
+  CONTAINER_COMPREHENSIVE
+  SBOM_ONLY
+  IMAGE_VULNERABILITIES_ONLY
+  CONTAINER_MISCONFIG_ONLY
+  KUBERNETES_BASELINE
+  KUBERNETES_COMPREHENSIVE
+  DOCKER_HOST_BASELINE
+  CLOUD_NATIVE_FULL
 }
 
 enum AssessmentStatus {
@@ -154,6 +172,13 @@ enum ScanStageType {
   DEPENDENCY_INVENTORY
   SCA
   SBOM_GENERATION
+  // Prompt 13 §90: container / Docker / Kubernetes stages.
+  IMAGE_RESOLUTION
+  IMAGE_VULNERABILITY_SCAN
+  MANIFEST_SCAN
+  CLUSTER_INVENTORY
+  KUBERNETES_POSTURE
+  DOCKER_POSTURE
   QUALITY_GATE
   NORMALIZATION
   CORRELATION
@@ -406,6 +431,18 @@ enum AuditAction {
   QUALITY_GATE_EVALUATED
   SOURCE_FINDING_RESOLVED
   SOURCE_ARTIFACT_ACCESSED
+  // Prompt 13 §111: cloud-native audit actions. Metadata for these
+  // actions NEVER contains credentials, tokens or secret values.
+  CONTAINER_IMAGE_REGISTERED
+  CONTAINER_SCAN_STARTED
+  CONTAINER_SCAN_COMPLETED
+  KUBERNETES_CLUSTER_REGISTERED
+  KUBERNETES_SCAN_STARTED
+  KUBERNETES_SCAN_COMPLETED
+  DOCKER_POSTURE_ASSESSED
+  COMPLIANCE_ASSESSED
+  RUNTIME_EVENT_INGESTED
+  CLOUD_NATIVE_ARTIFACT_ACCESSED
 }
 
 enum NotificationType {
@@ -1013,6 +1050,19 @@ model Finding {
   dependencyScope         String?
   reachability            String?
   baselineStatus          String? // NEW | EXISTING vs the previous snapshot (§79)
+  // Prompt 13 §94/§51/§103: cloud-native finding identity. origin
+  // distinguishes static configuration analysis from live cluster
+  // observation; correlation preserves BOTH as observations (§103).
+  // Image findings are bound to the strongest identity — the digest.
+  origin                  String? // STATIC_CONFIGURATION_FINDING | LIVE_CLUSTER_FINDING | IMAGE_FINDING | DOCKER_HOST_FINDING | RUNTIME_CORRELATED
+  imageDigest             String?
+  imageRef                String?
+  clusterRef              String?
+  namespace               String?
+  resourceKind            String?
+  resourceName            String?
+  containerName           String?
+  controlId               String? // CIS / NSA-CISA control id for posture findings (§31/§41)
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1955,7 +2005,10 @@ model SourceSnapshot {
 // One inventoried software component (§45) — PURL identity (§46).
 model SoftwareComponent {
   id              String         @id @default(uuid())
-  snapshotId      String
+  snapshotId      String?
+  // Prompt 13 §13/§14: image package inventory (Syft) binds components
+  // to the image instead of a source snapshot — same component model.
+  imageId         String?
   name            String
   version         String?
   ecosystem       String
@@ -1965,11 +2018,14 @@ model SoftwareComponent {
   dependencyScope String         @default("RUNTIME")
   licenses        String[]       @default([])
   supplier        String?
-  snapshot        SourceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  snapshot        SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  image           ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
   createdAt       DateTime       @default(now())
 
   @@unique([snapshotId, purl])
+  @@unique([imageId, purl])
   @@index([snapshotId])
+  @@index([imageId])
   @@index([ecosystem, name])
 }
 
@@ -1977,17 +2033,21 @@ model SoftwareComponent {
 // artifactReference; the row carries format + checksum + counts.
 model SoftwareBillOfMaterials {
   id             String         @id @default(uuid())
-  snapshotId     String
+  snapshotId     String?
+  // Prompt 13 §12: image SBOMs bind to the image (Syft), not a snapshot.
+  imageId        String?
   scanId         String?
   format         SbomFormat
   specVersion    String
   checksum       String
   artifactRef    String?
   componentCount Int            @default(0)
-  snapshot       SourceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  snapshot       SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  image          ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
   createdAt      DateTime       @default(now())
 
   @@index([snapshotId])
+  @@index([imageId])
   @@index([scanId])
 }
 
@@ -2043,4 +2103,250 @@ model QualityGateResult {
   evaluatedAt   DateTime          @default(now())
 
   @@index([scanId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Prompt 13 — Container, Docker & Kubernetes security (§4–§63).
+// Images are NEVER executed (§9): every record here is static metadata
+// (layers, configuration, manifests, inventory). Credentials exist ONLY
+// as secret references (§7/§33) — there is deliberately no column that
+// could hold a registry password, kubeconfig or cluster token.
+// ─────────────────────────────────────────────────────────────────────
+
+// A container registry connection (§6/§7). URLs pass the platform
+// network/SSRF policy before approval; credentials are references only.
+model ContainerRegistry {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  name                String
+  url                 String
+  provider            String    @default("GENERIC") // GENERIC | DOCKER_HUB | GHCR | ECR | GCR | ACR | HARBOR | QUAY | PRIVATE
+  credentialReference String? // secret reference name only — never a value
+  approved            Boolean   @default(false)
+  createdBy           String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  images              ContainerImage[]
+
+  @@unique([workspaceId, url])
+  @@index([workspaceId])
+}
+
+// A container image asset (§5). Digest is the strongest identity: a tag
+// is mutable and is only the lookup key. Scans record the digest they
+// analyzed; drift appends a snapshot, never overwrites history (§78).
+model ContainerImage {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  targetId     String?
+  registryId   String?
+  reference    String // full reference as registered/observed (registry/repo[:tag][@digest])
+  registry     String // registry host, e.g. ghcr.io
+  repository   String
+  tag          String?
+  digest       String? // sha256:... — strongest identity
+  platform     String?
+  architecture String?
+  os           String?
+  source       String    @default("MANUAL") // MANUAL | REGISTRY | SBOM | CI | RUNTIME | CLUSTER
+  firstSeen    DateTime  @default(now())
+  lastSeen     DateTime  @updatedAt
+  registryRef  ContainerRegistry? @relation(fields: [registryId], references: [id], onDelete: SetNull)
+  snapshots    ContainerImageSnapshot[]
+  components   SoftwareComponent[]
+  sboms        SoftwareBillOfMaterials[]
+
+  @@unique([workspaceId, registry, repository, digest])
+  @@index([workspaceId])
+  @@index([workspaceId, repository])
+  @@index([digest])
+}
+
+// One immutable image observation (§5/§78): the digest a scan resolved
+// and analyzed, plus static config metadata (user, exposed ports,
+// entrypoint presence) and layer digests. A changed digest for the same
+// tag is drift — a NEW snapshot, never an overwrite.
+model ContainerImageSnapshot {
+  id            String   @id @default(uuid())
+  imageId       String
+  scanId        String?
+  digest        String
+  previousDigest String?
+  drift         Boolean  @default(false)
+  config        Json     @default("{}") // user, exposedPorts, entrypointPresent, cmdPresent, envKeys (names only)
+  layers        Json     @default("[]") // layer digests + sizes only
+  baseImage     Json? // { registry, repository, digest? } only when reliably known (§23)
+  capturedAt    DateTime @default(now())
+  image         ContainerImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@index([imageId])
+  @@index([scanId])
+}
+
+// A Docker host / daemon asset (§27). Posture is assessed from governed
+// Docker Bench output on an APPROVED host by a dedicated privileged
+// worker (§28/§29) — the platform never demands daemon socket access.
+model DockerHost {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  targetId        String?
+  name            String
+  engineVersion   String?
+  os              String?
+  environment     String    @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | CI | UNKNOWN
+  scanStatus      String    @default("NOT_ASSESSED")
+  lastAssessmentAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([workspaceId])
+}
+
+// A Kubernetes cluster connection (§32/§33). The API server is stored as
+// a REFERENCE (never a URL carrying credentials); the credential is a
+// secret reference to a least-privilege, read-oriented service account.
+// Cluster-admin is never assumed or requested by default.
+model KubernetesCluster {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  targetId            String?
+  name                String
+  apiServerReference  String // reference name only — no embedded credentials, ever
+  version             String?
+  provider            String    @default("GENERIC") // GENERIC | EKS | AKS | GKE | OPENSHIFT | ON_PREM
+  credentialReference String? // secret reference name only — never a value
+  environment         String    @default("UNKNOWN")
+  criticality         String    @default("MEDIUM")
+  lastAssessmentAt    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  workloads           KubernetesWorkload[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// A Kubernetes workload inventory row (§37/§38). Stores identity,
+// security-context summary and image references (digests when known) —
+// Secret VALUES are never part of inventory (§36/§105).
+model KubernetesWorkload {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  clusterId       String
+  scanId          String?
+  kind            String // Deployment | StatefulSet | DaemonSet | Job | CronJob | Pod | ReplicaSet
+  namespace       String
+  name            String
+  replicas        Int?
+  serviceAccount  String?
+  images          Json     @default("[]") // [{ container, image, digest?, tagPinned, digestPinned }]
+  securityContext Json     @default("{}") // privileged, runAsRoot, readOnlyRootFilesystem, capabilities, hostPath...
+  exposure        String   @default("CLUSTER_INTERNAL") // PUBLIC_INTERNET | EXTERNAL_NETWORK | CLUSTER_INTERNAL | LOCAL_ONLY | UNKNOWN (§64)
+  labels          Json     @default("{}") // sanitized metadata only (§109)
+  firstSeen       DateTime @default(now())
+  lastSeen        DateTime @updatedAt
+  cluster         KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, kind, namespace, name])
+  @@index([workspaceId])
+  @@index([clusterId])
+}
+
+// A static infrastructure manifest under analysis (§48): Dockerfile,
+// Kubernetes YAML or Helm chart from a source snapshot. YAML is hostile
+// input — only counts, checksum and type are kept here (§49).
+model InfrastructureManifest {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  repositoryId String?
+  snapshotId   String?
+  scanId       String?
+  filePath     String // repository-relative only
+  manifestType String // DOCKERFILE | KUBERNETES | HELM_CHART | HELM_VALUES | COMPOSE
+  resourceCount Int     @default(0)
+  checksum     String
+  source       String   @default("SOURCE_SNAPSHOT")
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([snapshotId])
+}
+
+// A compliance framework catalog entry (§55): CIS Docker, CIS
+// Kubernetes, NSA/CISA Kubernetes Hardening. Mappings support reporting
+// structure only — the platform never claims certification.
+model ComplianceFramework {
+  id          String @id @default(uuid())
+  key         String @unique // CIS_DOCKER | CIS_KUBERNETES | NSA_CISA_KUBERNETES
+  name        String
+  version     String
+  description String
+  controls    ComplianceControl[]
+}
+
+model ComplianceControl {
+  id          String @id @default(uuid())
+  frameworkId String
+  controlId   String // e.g. 5.4 (CIS Kubernetes), 4.2.1 (CIS Docker)
+  title       String
+  description String
+  framework   ComplianceFramework @relation(fields: [frameworkId], references: [id], onDelete: Cascade)
+
+  @@unique([frameworkId, controlId])
+  @@index([frameworkId])
+}
+
+enum ControlAssessmentStatus {
+  PASS
+  FAIL
+  WARN
+  NOT_APPLICABLE
+  UNKNOWN
+}
+
+// One control evaluation against one subject (§56). PASS / WARN /
+// NOT_APPLICABLE / UNKNOWN never become findings; FAIL may link the
+// finding it produced. Evidence is bounded and sanitized.
+model ControlAssessment {
+  id          String                  @id @default(uuid())
+  workspaceId String
+  scanId      String?
+  frameworkKey String
+  controlId   String
+  subjectRef  String // cluster / docker host / workload / image reference
+  status      ControlAssessmentStatus
+  evidence    String                  @default("")
+  findingId   String?
+  assessedAt  DateTime                @default(now())
+
+  @@index([workspaceId])
+  @@index([scanId])
+  @@index([frameworkKey, controlId])
+}
+
+// A normalized runtime security event (§59) ingested from a Falco-class
+// sensor through the DEDICATED ingestion path (never a scan worker).
+// Process/path/command metadata is sanitized before storage (§60):
+// stored-XSS and log-injection safe, secrets redacted. Runtime events
+// are detections, not vulnerabilities (§63).
+model RuntimeSecurityEvent {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  clusterId    String?
+  clusterName  String?
+  node         String?
+  namespace    String?
+  pod          String?
+  container    String?
+  rule         String
+  priority     String // EMERGENCY | ALERT | CRITICAL | ERROR | WARNING | NOTICE | INFORMATIONAL | DEBUG
+  eventTime    DateTime
+  metadata     Json     @default("{}") // sanitized fields only
+  source       String   @default("FALCO")
+  artifactRef  String?
+  ingestedAt   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([clusterId])
+  @@index([eventTime])
 }

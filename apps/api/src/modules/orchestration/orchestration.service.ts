@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, codeHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
+  apiHealthBySlug, cloudNativeHealthBySlug, codeHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -82,9 +82,15 @@ export class OrchestrationService {
       // Dependency-Check / Grype + the SonarQube connector with inert
       // deps) join plan-time selection for the source profiles.
       registerCodeAdapters(registry, undefined, INERT_CONNECTOR_DEPS);
+      // Prompt 13: cloud-native adapters (Trivy / Syft / Checkov /
+      // Kubescape / kube-hunter + INTERNAL_PRIVILEGED Docker Bench /
+      // kube-bench) and the Kubernetes connector with inert deps join
+      // plan-time selection; connector health derives from the
+      // workspace's registered clusters (kubernetesHealth below).
+      registerCloudNativeAdapters(registry, undefined, INERT_KUBERNETES_DEPS);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()) } };
     }
     return this.registryCache.registry;
   }
@@ -112,6 +118,16 @@ export class OrchestrationService {
     return proxyHealthBySlug(records as unknown as ScannerInstanceRecord[]);
   }
 
+  /** Prompt 13 plan-time Kubernetes connector health (§34/§93): the
+   *  connector is selectable exactly when the workspace has at least
+   *  one registered cluster connection — otherwise NOT_CONFIGURED and
+   *  the inventory stage plans empty instead of simulated. */
+  private async kubernetesHealth(workspaceId: string): Promise<Record<string, string>> {
+    const delegate = (this.prisma as unknown as { kubernetesCluster?: { count: (args: unknown) => Promise<number> } }).kubernetesCluster;
+    const count = delegate ? await delegate.count({ where: { workspaceId } }).catch(() => 0) : 0;
+    return { "kubernetes-connector": count > 0 ? "HEALTHY" : "NOT_CONFIGURED" };
+  }
+
   private async load(user: RequestUser, assessmentId: string): Promise<LoadedAssessment> {
     const workspace = await resolveWorkspace(this.prisma, user);
     const assessment = await this.prisma.assessment.findFirst({
@@ -132,6 +148,7 @@ export class OrchestrationService {
     const { assessment } = loaded;
     const target = assessment.target;
     const scannerHealth = await this.scannerHealth(loaded.workspaceId, user.organizationId);
+    const kubernetesHealth = await this.kubernetesHealth(loaded.workspaceId);
     const { plan } = buildScanPlan({
       scanId,
       assessmentId: assessment.id,
@@ -146,7 +163,7 @@ export class OrchestrationService {
       targetVerified: target.verified,
       assessmentApproved: assessment.status === "APPROVED",
       registry: this.registry(),
-      selection: { executableSlugs: EXECUTABLE_SLUGS, healthBySlug: { ...this.healthBySlug(), ...scannerHealth } },
+      selection: { executableSlugs: EXECUTABLE_SLUGS, healthBySlug: { ...this.healthBySlug(), ...scannerHealth, ...kubernetesHealth } },
     });
     return plan;
   }

@@ -58,6 +58,14 @@ export interface ScanRunStore extends ExecutionStore {
   inventorySourceDependencies?(scanId: string): Promise<{ components: number; manifests: number } | null>;
   generateSourceSbom?(scanId: string): Promise<{ format: string; checksum: string; components: number } | null>;
   evaluateSourceQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
+  /** Prompt 13 platform-stage hooks (same optional pattern): image
+   *  resolution (tag → digest + drift snapshot, §5/§78) and the
+   *  container quality gate (§75). skipped=true means the scan carries
+   *  no image context (e.g. a cluster-targeted CLOUD_NATIVE_FULL scan)
+   *  and the stage completes without work; null means an image scan
+   *  whose image cannot be resolved — an honest failure. */
+  resolveContainerImage?(scanId: string): Promise<{ imageRef: string; digest?: string; drift?: boolean; skipped?: boolean } | null>;
+  evaluateContainerQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -227,8 +235,11 @@ export class DagRunner {
     const finalStatus = finalScanStatus(statuses.values());
     await this.store.updateScan(scanId, { status: finalStatus, progress: 100, completedAt: new Date() });
     await emit(finalStatus === "COMPLETED" ? "scan.completed" : "scan.failed", { finalStatus });
-    if (plan.stages.some((s) => s.type === "QUALITY_GATE")) {
+    if (plan.stages.some((s) => s.type === "SOURCE_ACQUISITION")) {
       await emit("source.scan_completed", { finalStatus });
+    }
+    if (plan.stages.some((s) => s.type === "IMAGE_RESOLUTION" || s.type === "CLUSTER_INVENTORY" || s.type === "DOCKER_POSTURE")) {
+      await emit("container.scan_completed", { finalStatus });
     }
     return { status: finalStatus };
   }
@@ -352,6 +363,33 @@ export class DagRunner {
     if (stageId === "QUALITY_GATE" && this.store.evaluateSourceQualityGate) {
       const result = await this.store.evaluateSourceQualityGate(scanId);
       if (result) await emit("source.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
+    }
+    // Prompt 13 platform stages (§90): image resolution is engine work
+    // (tag → digest + drift snapshot). Tool stages that reached the
+    // platform path selected NO adapters (tools unavailable / no
+    // cluster configured) — they complete honestly as degraded/skipped,
+    // never simulated (§66 pattern).
+    if (stageId === "IMAGE_RESOLUTION") {
+      if (!this.store.resolveContainerImage) return "FAILED";
+      const result = await this.store.resolveContainerImage(scanId);
+      if (!result) {
+        await emit("policy.denied", { stageId, reasonCode: "IMAGE_UNRESOLVABLE" });
+        return "FAILED";
+      }
+      if (!result.skipped) {
+        await emit("container.image_resolved", { stageId, imageRef: result.imageRef, digest: result.digest ?? null, digestKnown: !!result.digest });
+        if (result.drift) await emit("container.image_drift_detected", { stageId, imageRef: result.imageRef, digest: result.digest ?? null });
+      }
+    }
+    if (stageId === "IMAGE_VULNERABILITY_SCAN" || stageId === "MANIFEST_SCAN" || stageId === "KUBERNETES_POSTURE" || stageId === "DOCKER_POSTURE") {
+      await emit("tool.failed", { stageId, reasonCode: "TOOL_UNAVAILABLE", degraded: true });
+    }
+    if (stageId === "CLUSTER_INVENTORY") {
+      await emit("policy.denied", { stageId, reasonCode: "CLUSTER_NOT_CONFIGURED" });
+    }
+    if (stageId === "QUALITY_GATE" && this.store.evaluateContainerQualityGate) {
+      const result = await this.store.evaluateContainerQualityGate(scanId);
+      if (result) await emit("container.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
     }
     return "COMPLETED";
   }

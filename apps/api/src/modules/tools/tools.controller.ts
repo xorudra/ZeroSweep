@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
-  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createApiAdapters, createNetworkAdapters, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
+  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createApiAdapters, createCloudNativeAdapters, createNetworkAdapters, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
 } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
@@ -35,7 +35,7 @@ export class ToolsController {
   /** Recon adapters probed live for health (§39). Built once; the probe is
    *  a PATH lookup + `--version` on THIS host — the worker host probes again
    *  at execution time, and plan-time/execution-time health always wins. */
-  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters(), ...createApiAdapters(), ...createNetworkAdapters()];
+  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters(), ...createApiAdapters(), ...createNetworkAdapters(), ...createCloudNativeAdapters()];
 
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
@@ -138,6 +138,28 @@ export class ToolsController {
         version: first.version, licenseState: first.licenseState,
         detail: first.lastHealthDetail ?? "Health as of the last administrator health check",
         source: "scanner instance registry (administrator health checks; workers re-probe at execution time)",
+      };
+    }
+    // Prompt 13 §34/§93: the Kubernetes connector has no binary — its
+    // health is whether the caller's organization has a registered
+    // cluster connection. Falco is a runtime sensor feed, configured
+    // per deployment; neither is ever faked HEALTHY.
+    if (tool.slug === "kubernetes-connector") {
+      const delegate = (this.prisma as unknown as {
+        kubernetesCluster?: { count: (args: unknown) => Promise<number> };
+      }).kubernetesCluster;
+      const clusters = delegate && user?.organizationId
+        ? await delegate.count({ where: { workspace: { organizationId: user.organizationId } } })
+        : 0;
+      return clusters > 0
+        ? { slug: tool.slug, healthStatus: "HEALTHY", installed: true, configuredInstances: clusters, detail: "Cluster connection(s) registered; inventory runs read-only from the worker (§34)", source: "kubernetes cluster registry" }
+        : { slug: tool.slug, healthStatus: "NOT_CONFIGURED", installed: false, configuredInstances: 0, detail: "No Kubernetes cluster is registered for your organization — register one under Kubernetes (Prompt 13 §32)", source: "kubernetes cluster registry" };
+    }
+    if (tool.slug === "falco") {
+      return {
+        slug: tool.slug, healthStatus: "NOT_CONFIGURED", installed: false,
+        detail: "Falco is a runtime sensor: events arrive through the trusted ingestion path (§59); no sensor feed is configured on this deployment",
+        source: "runtime sensor configuration",
       };
     }
     // Prompt 9: the Postman/Insomnia importers are platform code (no

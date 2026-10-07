@@ -15,6 +15,7 @@ import {
   parseTrufflehog, type ParsedCode,
 } from "./parsers-code";
 import { resolveCodeqlPlan, resolveSemgrepPacks } from "./policies";
+import { parseGrypeImage } from "../cloudnative/parsers-cloud";
 
 /**
  * Source-code tool adapters (Prompt 12 §21–§53). Every adapter:
@@ -307,15 +308,18 @@ export class DependencyCheckAdapter extends CodeAdapterBase {
 export class GrypeAdapter extends CodeAdapterBase {
   readonly metadata = codeMeta({
     id: "grype", slug: "grype", name: "Grype",
-    description: "Package vulnerability scanning (§51) over the snapshot directory or the generated SBOM, using the worker-provisioned vulnerability database (updated outside scans). Fixed versions come from the tool's trusted data only (§74).",
+    description: "Package vulnerability scanning (§51) over the snapshot directory or the generated SBOM, using the worker-provisioned vulnerability database (updated outside scans). Fixed versions come from the tool's trusted data only (§74). Prompt 13 §19: the SAME adapter also scans container images and image SBOMs — findings then bind to the image digest and share the §20 correlation fingerprint with Trivy.",
     homepage: "https://github.com/anchore/grype", licenseType: "OPEN_SOURCE",
-    capabilities: ["SCA", "PACKAGE_VULNERABILITY_ANALYSIS", "SBOM_ANALYSIS"],
+    capabilities: ["SCA", "PACKAGE_VULNERABILITY_ANALYSIS", "SBOM_ANALYSIS", "IMAGE_VULNERABILITY_SCANNING"],
+    supportedTargetTypes: ["SOURCE_REPOSITORY", "CONTAINER_IMAGE"],
     inputSchema: [
       { name: "sourcePath", type: "string", description: "Snapshot workspace path (worker-resolved)" },
       { name: "repositoryId", type: "string", description: "Repository identity for fingerprints" },
       { name: "languages", type: "string[]", description: "Detected languages (worker-derived)" },
       { name: "excludePatterns", type: "string[]", description: "Governed exclusion patterns (§85)" },
       { name: "sbomRef", type: "string", description: "Optional SBOM artifact reference to scan instead of the directory (sbom: input)" },
+      { name: "imageRef", type: "string", description: "Prompt 13 §19: image reference to scan instead of a directory (worker-resolved from the registered image asset)" },
+      { name: "imageDigest", type: "string", description: "Prompt 13 §5: digest the IMAGE_RESOLUTION stage resolved for this scan" },
     ],
   });
   readonly executable = "grype";
@@ -323,13 +327,34 @@ export class GrypeAdapter extends CodeAdapterBase {
   readonly versionArgs = ["version"];
 
   protected codePlan(target: AdapterTarget, config: Record<string, unknown>): ReconPlanParts {
+    // Prompt 13 §19: image input wins when the worker resolved an image
+    // for this execution — one adapter, three governed input kinds.
+    if (typeof config.imageRef === "string" && config.imageRef.length > 0) {
+      return { args: [config.imageRef, "-o", "json"] };
+    }
     const source = typeof config.sbomRef === "string" && config.sbomRef.length > 0
       ? `sbom:${config.sbomRef}`
       : `dir:${this.sourcePath(target, config)}`;
     return { args: [source, "-o", "json"] };
   }
 
-  protected parseCode(text: string): ParsedCode { return parseGrype(text, this.parserContext()); }
+  protected parseCode(text: string): ParsedCode {
+    // Prompt 13 §19/§20: image scans parse through the cloud-native
+    // parser so fingerprints bind to the digest and merge with Trivy.
+    if (typeof this.lastConfig.imageRef === "string" && this.lastConfig.imageRef.length > 0) {
+      const parsed = parseGrypeImage(text, {
+        toolSlug: this.metadata.slug,
+        imageRef: this.lastConfig.imageRef,
+        ...(typeof this.lastConfig.imageDigest === "string" ? { imageDigest: this.lastConfig.imageDigest } : {}),
+      });
+      const out = emptyParsedCode();
+      out.findings = parsed.findings;
+      out.metrics = { ...parsed.metrics };
+      out.records = parsed.findings.length;
+      return out;
+    }
+    return parseGrype(text, this.parserContext());
+  }
 }
 
 // ── SonarQube connector (§23–§27) ─────────────────────────────────────

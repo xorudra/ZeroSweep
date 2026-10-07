@@ -1,7 +1,7 @@
 import {
   CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, FIXTURE_MANIFEST_CONTENTS, FIXTURE_SOURCE_FILES,
   JwtToolAdapter, MockSecurityAdapter, ToolRegistry, buildCycloneDxSbom, classifyBaseline,
-  detectRepository, evaluateQualityGate, expandCidrTargets, parseManifests, summarizeForQualityGate,
+  detectRepository, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, parseManifests, summarizeForQualityGate,
   type SourceFileEntry,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
@@ -32,7 +32,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -61,6 +61,18 @@ export interface FakeStoreOptions {
     manifests?: Record<string, string>;
     previousFingerprints?: string[];
   };
+  /** Prompt 13: the fixture cloud-native context the store resolves for
+   *  a scan — registered image (tag + digest + the digest a PREVIOUS
+   *  scan recorded, for drift), registered cluster and Docker host. */
+  cloudFixtures?: {
+    imageRef?: string;
+    imageDigest?: string;
+    previousDigest?: string;
+    clusterId?: string;
+    clusterRef?: string;
+    hostRef?: string;
+    kevCves?: string[];
+  };
 }
 
 export class FakeStore implements ScanRunStore {
@@ -84,6 +96,14 @@ export class FakeStore implements ScanRunStore {
   jwtProfiles: ProcessedResult["jwtProfiles"] = [];
   packetCaptures: ProcessedResult["packetCaptures"] = [];
   components: ProcessedComponent[] = [];
+  /** Prompt 13 cloud-native state mirroring the Prisma store's rows. */
+  images: ProcessedResult["cloudNative"]["images"] = [];
+  workloads: ProcessedResult["cloudNative"]["workloads"] = [];
+  controlAssessments: ProcessedResult["cloudNative"]["controlAssessments"] = [];
+  runtimeEvents: ProcessedResult["cloudNative"]["runtimeEvents"] = [];
+  imageSnapshots: Array<{ imageRef: string; digest?: string; previousDigest?: string; drift: boolean }> = [];
+  containerQualityGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
+  cloudFixtures: NonNullable<FakeStoreOptions["cloudFixtures"]> = {};
   /** Prompt 12 source state mirroring the Prisma store's snapshot rows. */
   sourceSnapshot: { id: string; repositoryId: string; hash: string; files: SourceFileEntry[]; manifests: Record<string, string> } | null = null;
   sourceLanguages: string[] = [];
@@ -100,15 +120,16 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
     this.sourceFixtures = opts.sourceFixtures ?? {};
+    this.cloudFixtures = opts.cloudFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -177,6 +198,16 @@ export class FakeStore implements ScanRunStore {
         workspacePath: "/fixtures/source-snapshot",
         languages: this.sourceLanguages,
         sonarProjectKey: "fixture-repo",
+      } : undefined,
+      // Prompt 13: the scan's cloud-native context (§12) — resolved
+      // from the registered image/cluster/host fixtures, mirroring the
+      // Prisma store's row lookups.
+      cloudNative: (this.cloudFixtures.imageRef || this.cloudFixtures.clusterId || this.cloudFixtures.hostRef) ? {
+        ...(this.cloudFixtures.imageRef ? { imageRef: this.cloudFixtures.imageRef } : {}),
+        ...(this.cloudFixtures.imageDigest ? { imageDigest: this.cloudFixtures.imageDigest } : {}),
+        ...(this.cloudFixtures.clusterId ? { clusterId: this.cloudFixtures.clusterId } : {}),
+        ...(this.cloudFixtures.clusterRef ? { clusterRef: this.cloudFixtures.clusterRef } : {}),
+        ...(this.cloudFixtures.hostRef ? { hostRef: this.cloudFixtures.hostRef } : {}),
       } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
@@ -283,6 +314,19 @@ export class FakeStore implements ScanRunStore {
     for (const c of processed.components) {
       if (!this.components.some((x) => x.purl === c.purl)) this.components.push(c);
     }
+    // Prompt 13 cloud-native payloads: images merge by identity key
+    // (digest strongest, §5), workloads by cluster/kind/namespace/name,
+    // assessments + runtime events append — mirrors the Prisma store.
+    for (const img of processed.cloudNative.images) {
+      const key = `${img.registry}/${img.repository}@${img.digest ?? img.tag ?? ""}`;
+      if (!this.images.some((x) => `${x.registry}/${x.repository}@${x.digest ?? x.tag ?? ""}` === key)) this.images.push(img);
+    }
+    for (const w of processed.cloudNative.workloads) {
+      const key = `${w.clusterRef}|${w.kind}|${w.namespace}|${w.name}`;
+      if (!this.workloads.some((x) => `${x.clusterRef}|${x.kind}|${x.namespace}|${x.name}` === key)) this.workloads.push(w);
+    }
+    this.controlAssessments.push(...processed.cloudNative.controlAssessments);
+    this.runtimeEvents.push(...processed.cloudNative.runtimeEvents);
     return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length };
   }
 
@@ -320,6 +364,7 @@ export class FakeStore implements ScanRunStore {
   }
 
   async evaluateSourceQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    if (this.targetType !== "SOURCE_REPOSITORY") return null;
     const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
     if (canonical.length === 0 && this.findings.length === 0) return null;
     // Baseline classification (§79) against the previous snapshot.
@@ -331,6 +376,40 @@ export class FakeStore implements ScanRunStore {
     const evaluation = evaluateQualityGate(summarizeForQualityGate(canonical), DEFAULT_QUALITY_GATE_POLICY);
     this.qualityGateRecord = { status: evaluation.status, failedRules: evaluation.failedRules, warningRules: evaluation.warningRules };
     return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
+  }
+
+  /** Prompt 13 platform hooks mirroring the Prisma store (§5/§75/§78). */
+  async resolveContainerImage(): Promise<{ imageRef: string; digest?: string; drift?: boolean; skipped?: boolean } | null> {
+    if (this.targetType !== "CONTAINER_IMAGE") {
+      // A CLOUD_NATIVE_FULL scan over a cluster/host target carries no
+      // image context — the stage completes without work.
+      return { imageRef: "", skipped: true };
+    }
+    const imageRef = this.cloudFixtures.imageRef;
+    if (!imageRef) return null;
+    const digest = this.cloudFixtures.imageDigest;
+    const drift = !!this.cloudFixtures.previousDigest && !!digest && this.cloudFixtures.previousDigest !== digest;
+    this.imageSnapshots.push({ imageRef, ...(digest ? { digest } : {}), ...(this.cloudFixtures.previousDigest ? { previousDigest: this.cloudFixtures.previousDigest } : {}), drift });
+    if (digest && !this.images.some((i) => i.digest === digest)) {
+      const [registryHost, rest] = imageRef.includes("/") ? [imageRef.slice(0, imageRef.indexOf("/")), imageRef.slice(imageRef.indexOf("/") + 1)] : ["docker.io", imageRef];
+      this.images.push({ registry: registryHost, repository: rest.split(":")[0]!.split("@")[0]!, ...(rest.includes(":") ? { tag: rest.split(":")[1]!.split("@")[0] } : {}), digest, source: "IMAGE_RESOLUTION" });
+    }
+    return { imageRef, ...(digest ? { digest } : {}), drift };
+  }
+
+  async evaluateContainerQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const isCloudScan = ["CONTAINER_IMAGE", "KUBERNETES_CLUSTER", "DOCKER_HOST"].includes(this.targetType);
+    if (!isCloudScan) return null;
+    const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
+    const result = evaluateContainerQualityGate({
+      findings: canonical.map((f) => ({
+        severity: f.severity as never, ...(f.cve ? { cve: f.cve } : {}), ...(f.origin ? { origin: f.origin as never } : {}),
+        ...(f.secret ? { secret: f.secret } : {}), ...(f.controlId ? { controlId: f.controlId } : {}), ...(f.resourceKind ? { resourceKind: f.resourceKind } : {}),
+      })),
+      kevCves: this.cloudFixtures.kevCves ?? [],
+    });
+    this.containerQualityGateRecord = { status: result.status, failedRules: result.failedRules, warningRules: result.warningRules };
+    return { status: result.status, failedRules: result.failedRules.length, warningRules: result.warningRules.length };
   }
 
   /** Prompt 10 platform hook mirroring the Prisma store: bounded target

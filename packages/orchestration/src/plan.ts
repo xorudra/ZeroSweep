@@ -91,6 +91,9 @@ export const PLATFORM_STAGE_TYPES = new Set([
   // gate are engine/store hooks over the snapshot; no adapter executes.
   "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "DEPENDENCY_INVENTORY",
   "SBOM_GENERATION", "QUALITY_GATE",
+  // Prompt 13: image resolution (tag → digest + drift snapshot) is an
+  // engine/store hook — no adapter executes (§5/§78).
+  "IMAGE_RESOLUTION",
 ]);
 
 export class InvalidPlanError extends Error {
@@ -108,7 +111,11 @@ export function buildScanPlan(input: BuildScanPlanInput): { plan: ScanPlan; dag:
   const stages: PlannedStage[] = dag.nodes.map((node) => {
     // Platform stages are engine components, not tools (spec §2): they never
     // get an adapter selected — the runner executes them as in-process checks.
-    const selection = PLATFORM_STAGE_TYPES.has(node.type)
+    // Prompt 13 exception: SBOM_GENERATION is a platform stage for source
+    // profiles but a governed Syft TOOL stage when resolveTemplate shaped
+    // it with capability groups for a container profile (§12).
+    const shapedToolStage = node.type === "SBOM_GENERATION" && (node.capabilityGroups?.length ?? 0) > 0;
+    const selection = PLATFORM_STAGE_TYPES.has(node.type) && !shapedToolStage
       ? { selected: [] as SelectedAdapter[] }
       : selectAdaptersForStage(input.registry, node, {
           ...input.selection,

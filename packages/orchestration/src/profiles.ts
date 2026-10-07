@@ -25,6 +25,9 @@ export const STAGE_TYPES = [
   // scanning, SAST and SCA are tool stages.
   "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "SAST",
   "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "QUALITY_GATE",
+  // Prompt 13: container / Docker / Kubernetes stages (§90).
+  "IMAGE_RESOLUTION", "IMAGE_VULNERABILITY_SCAN", "MANIFEST_SCAN",
+  "CLUSTER_INVENTORY", "KUBERNETES_POSTURE", "DOCKER_POSTURE",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -141,7 +144,40 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     ...S("SCA", "Software Composition Analysis", "Match the component inventory against governed vulnerability data (Prompt 12 §49–§58): Dependency-Check + Grype tool reports merge by component+CVE; the Phase 11 local intelligence dataset adds POTENTIAL_EXPOSURE correlations and EPSS/KEV enrichment — an empty dataset honestly yields zero matches.", ["SCA"], ["DEPENDENCY_INVENTORY"], 12, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
     capabilityGroups: [["SCA"]],
   },
-  SBOM_GENERATION: S("SBOM_GENERATION", "SBOM Generation", "Generate the snapshot's software bill of materials (CycloneDX + SPDX, §47/§48) from the component inventory and store it as a checksummed artifact. Platform stage.", [], ["SCA"], 4, 300, "CONTINUE_WITH_PARTIAL_DATA"),
+  SBOM_GENERATION: S("SBOM_GENERATION", "SBOM Generation", "Generate the snapshot's software bill of materials (CycloneDX + SPDX, §47/§48) from the component inventory and store it as a checksummed artifact. Platform stage for source profiles; shaped into a governed Syft tool stage for container profiles (Prompt 13 §12).", [], ["SCA"], 4, 300, "CONTINUE_WITH_PARTIAL_DATA"),
+  // Prompt 13 §90: cloud-native stages. IMAGE_RESOLUTION is a platform
+  //  stage (tag → digest resolution + drift snapshot, §5/§78). Tool
+  //  stages are static-analysis only — images are NEVER executed (§9),
+  //  and the privileged benchmark stages carry no simulation fallback:
+  //  without the dedicated privileged worker they are honestly denied.
+  IMAGE_RESOLUTION: S("IMAGE_RESOLUTION", "Image Resolution", "Resolve the image tag to the digest this scan analyzes and record an image snapshot; a changed digest is drift — a NEW snapshot, never an overwrite (Prompt 13 §5/§78). Platform stage.", [], ["SCOPE_VALIDATION"], 4, 300, "FAIL_SCAN"),
+  IMAGE_VULNERABILITY_SCAN: {
+    ...S("IMAGE_VULNERABILITY_SCAN", "Image Vulnerability Scan", "Static image vulnerability scanning (Trivy + Grype, §13/§19): layers and packages analyzed without ever running the image (§9). Findings bind to the resolved digest and merge across tools by CVE + package + digest (§20).", ["IMAGE_VULNERABILITY_SCANNING"], ["IMAGE_RESOLUTION"], 14, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["IMAGE_VULNERABILITY_SCANNING"]],
+    simulationFallback: false,
+  },
+  MANIFEST_SCAN: {
+    ...S("MANIFEST_SCAN", "Manifest & IaC Scan", "Static analysis of Dockerfiles, Kubernetes manifests and Helm charts (Checkov §46, Kubescape §44, Trivy config §16). YAML is hostile input (§49); nothing is applied, rendered or executed (§47/§50).", ["IAC_SECURITY"], ["SCOPE_VALIDATION"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["IAC_SECURITY"], ["KUBERNETES_MANIFEST_SECURITY"], ["KUBERNETES_POSTURE"], ["MISCONFIGURATION_SCANNING"]],
+    simulationFallback: false,
+  },
+  CLUSTER_INVENTORY: {
+    ...S("CLUSTER_INVENTORY", "Cluster Inventory", "Read-only cluster inventory through the Kubernetes connector (§34/§35): namespaces, nodes, workloads, services, ingresses, NetworkPolicies, service accounts and RBAC — metadata only. Secret VALUES are never retrieved (§36/§105).", ["CLUSTER_INVENTORY"], ["SCOPE_VALIDATION"], 8, 900, "FAIL_STAGE_CONTINUE"),
+    capabilityGroups: [["CLUSTER_INVENTORY"]],
+    adapterAllowlist: ["kubernetes-connector"],
+    simulationFallback: false,
+  },
+  KUBERNETES_POSTURE: {
+    ...S("KUBERNETES_POSTURE", "Kubernetes Posture", "Cluster posture assessment (§38/§65–§73): connector posture over inventory, Kubescape controls, kube-bench CIS (privileged worker only, §39) and kube-hunter passive discovery (comprehensive only, §43).", ["KUBERNETES_POSTURE"], ["CLUSTER_INVENTORY"], 14, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["KUBERNETES_POSTURE"], ["POSTURE_ASSESSMENT"], ["KUBERNETES_CIS_ASSESSMENT"], ["KUBERNETES_SECURITY_DISCOVERY"]],
+    simulationFallback: false,
+  },
+  DOCKER_POSTURE: {
+    ...S("DOCKER_POSTURE", "Docker Host Posture", "CIS Docker Benchmark against an explicitly approved host (Docker Bench, §28–§31). INTERNAL_PRIVILEGED: dedicated privileged worker only; no Docker socket is mounted into any general worker (§30/§106).", ["DOCKER_CIS_ASSESSMENT"], ["SCOPE_VALIDATION"], 10, 1200, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["DOCKER_CIS_ASSESSMENT"]],
+    adapterAllowlist: ["docker-bench-for-security"],
+    simulationFallback: false,
+  },
   QUALITY_GATE: S("QUALITY_GATE", "Security Quality Gate", "Evaluate the configurable security quality gate over the scan summary (Prompt 12 §81/§82): PASSED / WARNING / FAILED is recorded as a scan RESULT — a failed gate never crashes the pipeline. Platform stage.", [], ["RISK_ANALYSIS"], 2, 300, "CONTINUE_WITH_PARTIAL_DATA"),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
@@ -204,7 +240,20 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   DEPENDENCIES_ONLY: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   SAST_ONLY: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SAST", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   SOURCE_CODE: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "SAST", "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
-  CONTAINER: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  // Prompt 13 §11/§80/§90: cloud-native profiles share the
+  //  resolution/inventory → analysis → normalize → correlate → risk →
+  //  quality gate → report chain. The legacy CONTAINER profile resolves
+  //  to the CONTAINER_BASELINE chain.
+  CONTAINER_BASELINE: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "IMAGE_VULNERABILITY_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  CONTAINER_COMPREHENSIVE: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "IMAGE_VULNERABILITY_SCAN", "MANIFEST_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  SBOM_ONLY: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION"]),
+  IMAGE_VULNERABILITIES_ONLY: template([...HEAD, "IMAGE_RESOLUTION", "IMAGE_VULNERABILITY_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  CONTAINER_MISCONFIG_ONLY: template([...HEAD, "IMAGE_RESOLUTION", "MANIFEST_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  KUBERNETES_BASELINE: template([...HEAD, "CLUSTER_INVENTORY", "KUBERNETES_POSTURE", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  KUBERNETES_COMPREHENSIVE: template([...HEAD, "CLUSTER_INVENTORY", "KUBERNETES_POSTURE", "MANIFEST_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  DOCKER_HOST_BASELINE: template([...HEAD, "DOCKER_POSTURE", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION"]),
+  CLOUD_NATIVE_FULL: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "IMAGE_VULNERABILITY_SCAN", "MANIFEST_SCAN", "CLUSTER_INVENTORY", "KUBERNETES_POSTURE", "DOCKER_POSTURE", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  CONTAINER: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "IMAGE_VULNERABILITY_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   CLOUD: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
   MOBILE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CUSTOM: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
@@ -297,6 +346,21 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
       if (profile === "SAST_ONLY" && def.type === "SAST") {
         def.adapterAllowlist = ["semgrep", "codeql", "bandit", "brakeman", "spotbugs"];
       }
+    }
+    // Prompt 13 §11/§80: cloud-native profile shaping. In container
+    // profiles SBOM_GENERATION becomes the governed Syft tool stage
+    // (source profiles keep it a platform stage — no shaping there).
+    // kube-hunter joins posture ONLY in comprehensive profiles, and
+    // only ever in passive discovery mode (§43 — the adapter enforces
+    // the mode at plan time; the executor derives nothing stronger).
+    const CONTAINER_PROFILES = ["CONTAINER_BASELINE", "CONTAINER_COMPREHENSIVE", "SBOM_ONLY", "IMAGE_VULNERABILITIES_ONLY", "CONTAINER_MISCONFIG_ONLY", "CONTAINER", "CLOUD_NATIVE_FULL"];
+    if (CONTAINER_PROFILES.includes(profile) && def.type === "SBOM_GENERATION") {
+      def.capabilityGroups = [["SBOM_GENERATION"]];
+      def.adapterAllowlist = ["syft"];
+      def.simulationFallback = false;
+    }
+    if (def.type === "KUBERNETES_POSTURE" && profile !== "KUBERNETES_COMPREHENSIVE" && profile !== "CLOUD_NATIVE_FULL") {
+      def.adapterAllowlist = ["kubernetes-connector", "kubescape", "kube-bench"];
     }
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];

@@ -245,3 +245,68 @@ export const createSourceExclusionSchema = z.object({
   reason: z.string().min(3).max(1000),
 }).strict();
 export type CreateSourceExclusionInput = z.input<typeof createSourceExclusionSchema>;
+
+/**
+ * Prompt 13 — container / Docker / Kubernetes (§91). STRICT schemas:
+ * registrations carry identity + secret REFERENCES only. There is no
+ * field that could hold a registry password, a kubeconfig, a cluster
+ * token or a credential value — unknown keys are rejected outright, and
+ * the SDK re-validates references and registry URLs (SSRF policy) at
+ * the service boundary.
+ */
+export const registerContainerImageSchema = z.object({
+  image: z.string().min(1).max(1024), // [registry/]repository[:tag][@digest]
+  source: z.enum(["MANUAL", "REGISTRY", "SBOM", "CI", "RUNTIME", "CLUSTER"]).default("MANUAL"),
+  registryId: z.string().uuid().optional(),
+}).strict();
+export type RegisterContainerImageInput = z.input<typeof registerContainerImageSchema>;
+
+export const createContainerRegistrySchema = z.object({
+  name: z.string().min(1).max(200),
+  url: z.string().url().max(2048),
+  provider: z.enum(["GENERIC", "DOCKER_HUB", "GHCR", "ECR", "GCR", "ACR", "HARBOR", "QUAY", "PRIVATE"]).default("GENERIC"),
+  credentialReference: credentialReferenceSchema.optional(),
+}).strict();
+export type CreateContainerRegistryInput = z.input<typeof createContainerRegistrySchema>;
+
+export const startContainerScanSchema = z.object({
+  profile: z.enum(["CONTAINER_BASELINE", "CONTAINER_COMPREHENSIVE", "SBOM_ONLY", "IMAGE_VULNERABILITIES_ONLY", "CONTAINER_MISCONFIG_ONLY"]).default("CONTAINER_BASELINE"),
+}).strict();
+export type StartContainerScanInput = z.input<typeof startContainerScanSchema>;
+
+export const createKubernetesClusterSchema = z.object({
+  name: z.string().min(1).max(200),
+  // A reference NAME for the API server endpoint — never a URL with
+  // embedded credentials, never a kubeconfig (§32/§33).
+  apiServerReference: z.string().min(1).max(300).regex(/^[A-Za-z0-9_.:/-]+$/, "apiServerReference is a reference, never a credential"),
+  version: z.string().max(50).optional(),
+  provider: z.enum(["GENERIC", "EKS", "AKS", "GKE", "OPENSHIFT", "ON_PREM"]).default("GENERIC"),
+  credentialReference: credentialReferenceSchema.optional(),
+  environment: z.enum(["PRODUCTION", "STAGING", "DEVELOPMENT", "CI", "UNKNOWN"]).default("UNKNOWN"),
+  criticality: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+}).strict();
+export type CreateKubernetesClusterInput = z.input<typeof createKubernetesClusterSchema>;
+
+export const startKubernetesScanSchema = z.object({
+  profile: z.enum(["KUBERNETES_BASELINE", "KUBERNETES_COMPREHENSIVE", "CLOUD_NATIVE_FULL"]).default("KUBERNETES_BASELINE"),
+}).strict();
+export type StartKubernetesScanInput = z.input<typeof startKubernetesScanSchema>;
+
+/**
+ * Falco-class runtime event ingestion (§57–§60). Events arrive from the
+ * trusted sensor forwarder only; the payload is validated here and
+ * sanitized again by the SDK before storage. Arbitrary user-authored
+ * rules are not accepted (§61) — `rule` is the sensor's rule NAME.
+ */
+export const ingestRuntimeEventSchema = z.object({
+  clusterName: z.string().max(300).optional(),
+  node: z.string().max(300).optional(),
+  namespace: z.string().max(300).optional(),
+  pod: z.string().max(300).optional(),
+  container: z.string().max(300).optional(),
+  rule: z.string().min(1).max(300),
+  priority: z.enum(["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFORMATIONAL", "DEBUG"]),
+  time: z.string().max(64), // ISO timestamp from the sensor
+  outputFields: z.record(z.union([z.string().max(2000), z.number(), z.boolean(), z.null()])).default({}),
+}).strict();
+export type IngestRuntimeEventInput = z.input<typeof ingestRuntimeEventSchema>;

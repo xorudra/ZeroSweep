@@ -27,7 +27,7 @@ export const WORKER_CAPABILITIES = [
 /** Prompt 10 §23/§24: worker types. The type + privileged capabilities
  *  come from the worker's OWN deployment environment — a general worker
  *  cannot promote itself, and job payloads never carry them. */
-export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS"] as const;
+export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST"] as const;
 export type WorkerTypeName = (typeof WORKER_TYPES)[number];
 
 export function workerTypeFromEnv(env: NodeJS.ProcessEnv = process.env): WorkerTypeName {
@@ -50,6 +50,16 @@ export function privilegedCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.e
   if (type === "PACKET_ANALYSIS" && declared.includes("PACKET_CAPTURE")) {
     allowed.add("PACKET_CAPTURE");
     allowed.add("PACKET_ANALYSIS");
+  }
+  // Prompt 13 §10/§28/§39: container analysis is an isolated worker
+  // type; privileged benchmark assessment (Docker Bench / kube-bench)
+  // exists only on PRIVILEGED_HOST workers that declare it — the env
+  // of any other worker type cannot grant it.
+  if (type === "CONTAINER_ANALYSIS" && declared.includes("CONTAINER_ANALYSIS")) {
+    allowed.add("CONTAINER_ANALYSIS");
+  }
+  if (type === "PRIVILEGED_HOST" && declared.includes("PRIVILEGED_HOST_ASSESSMENT")) {
+    allowed.add("PRIVILEGED_HOST_ASSESSMENT");
   }
   return [...allowed];
 }

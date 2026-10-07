@@ -1,7 +1,7 @@
 import {
   canonicalizeHostname, canonicalizeUrl, classifyApiKind, classifyEndpointType, computeRisk, correlateFindings as sdkCorrelateFindings,
   correlateSourceFindings, detectCrawlerTrap, detectWildcardGroups,
-  endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sensitiveRouteLabel,
+  endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sameConfigurationIdentity, sensitiveRouteLabel,
   sourceRiskFactors,
   ScopeMatcher, type CorrelationStats, type DnsRecordSet, type NormalizedFinding,
   type NormalizedSecurityResult, type NormalizedSoftwareComponent, type NormalizedVulnFinding,
@@ -184,6 +184,20 @@ export interface ProcessedFinding {
   reviewStatus?: string;
   generatedCode?: boolean;
   baselineStatus?: string;
+  /** Prompt 13 §51/§94: cloud-native identity — origin distinguishes
+   *  static configuration analysis from live cluster observation;
+   *  correlation preserves both observations (§103). */
+  origin?: string;
+  imageDigest?: string;
+  imageRef?: string;
+  clusterRef?: string;
+  namespace?: string;
+  resourceKind?: string;
+  resourceName?: string;
+  containerName?: string;
+  controlId?: string;
+  packageType?: string;
+  layerDigest?: string;
 }
 
 /** Prompt 12 §45: component inventory passthrough (PURL identity). */
@@ -270,6 +284,8 @@ export interface ProcessedResult {
   packetCaptures: ProcessedPacketCapture[];
   /** Prompt 12: software components inventoried by source scans (§45). */
   components: ProcessedComponent[];
+  /** Prompt 13: cloud-native inventory + posture payload passthrough. */
+  cloudNative: import("@dsrclone/security-sdk").NormalizedCloudNativeData;
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -558,6 +574,18 @@ export function processNormalizedResult(
       ...(f.reviewStatus ? { reviewStatus: f.reviewStatus } : {}),
       ...(f.generatedCode ? { generatedCode: true } : {}),
       ...(f.baselineStatus ? { baselineStatus: f.baselineStatus } : {}),
+      // Prompt 13 passthrough (§51/§94): cloud-native identity fields.
+      ...(f.origin ? { origin: f.origin } : {}),
+      ...(f.imageDigest ? { imageDigest: f.imageDigest } : {}),
+      ...(f.imageRef ? { imageRef: f.imageRef } : {}),
+      ...(f.clusterRef ? { clusterRef: f.clusterRef } : {}),
+      ...(f.namespace ? { namespace: f.namespace } : {}),
+      ...(f.resourceKind ? { resourceKind: f.resourceKind } : {}),
+      ...(f.resourceName ? { resourceName: f.resourceName } : {}),
+      ...(f.containerName ? { containerName: f.containerName } : {}),
+      ...(f.controlId ? { controlId: f.controlId } : {}),
+      ...(f.packageType ? { packageType: f.packageType } : {}),
+      ...(f.layerDigest ? { layerDigest: f.layerDigest } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -686,7 +714,13 @@ export function processNormalizedResult(
   }
   const components = [...componentByPurl.values()];
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, suppressedEndpoints, isMock: result.mock };
+  // --- cloud-native payload (Prompt 13): inventory + posture records
+  //     pass through with identity intact; the stores persist them.
+  const cloudNative: ProcessedResult["cloudNative"] = result.cloudNative ?? {
+    images: [], workloads: [], controlAssessments: [], manifests: [], runtimeEvents: [],
+  };
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original
@@ -729,32 +763,126 @@ export function isSourceFinding(f: ProcessedFinding): boolean {
   return f.filePath !== undefined || f.componentPurl !== undefined || f.secret !== undefined;
 }
 
+/** Prompt 13: a processed finding is a CLOUD-NATIVE finding when it
+ *  carries an origin (image / static-config / live-cluster / docker
+ *  host). Cloud findings correlate in their own partition (§95): the
+ *  §20/§54 fingerprints are the merge keys, and a static manifest
+ *  observation + a live cluster observation of the same configuration
+ *  issue merge into ONE canonical finding that preserves BOTH
+ *  observations (§51/§103) — never into the source partition, whose
+ *  snapshot identity semantics would be wrong for images/clusters. */
+export function isCloudNativeFinding(f: ProcessedFinding): boolean {
+  return f.origin !== undefined;
+}
+
+function correlateCloudProcessed(
+  findings: ProcessedFinding[],
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  // Group by fingerprint first (exact identity, §20/§54)…
+  const groups = new Map<string, ProcessedFinding[]>();
+  for (const f of findings) groups.set(f.fingerprint, [...(groups.get(f.fingerprint) ?? []), f]);
+  // …then merge groups sharing a configuration identity across origins
+  // (static manifest ↔ live cluster, §51/§103).
+  const groupList = [...groups.values()];
+  const merged: ProcessedFinding[][] = [];
+  const consumed = new Set<number>();
+  for (let i = 0; i < groupList.length; i++) {
+    if (consumed.has(i)) continue;
+    const group = [...groupList[i]!];
+    for (let j = i + 1; j < groupList.length; j++) {
+      if (consumed.has(j)) continue;
+      const a = group[0]!;
+      const b = groupList[j]![0]!;
+      if (a.origin !== b.origin && sameConfigurationIdentity(a, b)) {
+        group.push(...groupList[j]!);
+        consumed.add(j);
+      }
+    }
+    merged.push(group);
+  }
+  const out: ProcessedFinding[] = merged.map((members) => {
+    const primary = members[0]!;
+    const sources = [...new Set(members.flatMap((m) => m.sources))];
+    const risk = computeRisk({
+      severity: primary.severity as NormalizedFinding["severity"],
+      ...(primary.cvssScore !== undefined ? { cvssScore: primary.cvssScore } : {}),
+      confidence: primary.confidence,
+      verificationStatus: "UNVERIFIED",
+    });
+    const origins = [...new Set(members.map((m) => m.origin).filter(Boolean))];
+    return {
+      ...primary,
+      sources,
+      evidenceRows: members.flatMap((m) => m.evidenceRows),
+      evidenceSummary: members.map((m) => m.evidenceSummary).filter(Boolean).join("\n"),
+      riskScore: risk.score,
+      riskBand: risk.band,
+      riskExplanation: [
+        ...risk.explanation,
+        ...(origins.length > 1 ? [`CORRELATED_OBSERVATIONS: ${origins.join(" + ")} — static and live evidence preserved (§103)`] : []),
+        ...(sources.length > 1 ? [`CORROBORATED_BY: ${sources.join(", ")}`] : []),
+      ],
+      confidenceBand: primary.confidence >= 0.8 ? "HIGH" : primary.confidence >= 0.5 ? "MEDIUM" : "LOW",
+      verificationStatus: "UNVERIFIED",
+    };
+  });
+  const byTool: CorrelationStats["byTool"] = {};
+  for (const f of findings) {
+    const entry = byTool[f.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.total += 1;
+    byTool[f.sourceTool] = entry;
+  }
+  for (const o of out) {
+    const entry = byTool[o.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.unique += 1;
+    if (o.sources.length > 1) entry.corroborated += 1;
+    byTool[o.sourceTool] = entry;
+  }
+  return {
+    findings: out,
+    stats: {
+      total: findings.length,
+      unique: out.length,
+      duplicatesMerged: findings.length - out.length,
+      corroborated: out.filter((f) => f.sources.length > 1).length,
+      byTool,
+    },
+  };
+}
+
 export function correlateProcessedFindings(
   findings: ProcessedFinding[],
   opts: { assetCriticality?: string; maxFindings?: number } = {},
 ): { findings: ProcessedFinding[]; stats: CorrelationStats } {
-  const sourceFindings = findings.filter(isSourceFinding);
-  if (sourceFindings.length === 0) return correlateVulnProcessed(findings, opts);
-  const otherFindings = findings.filter((f) => !isSourceFinding(f));
-  const vulnPart = otherFindings.length > 0
-    ? correlateVulnProcessed(otherFindings, opts)
-    : { findings: [] as ProcessedFinding[], stats: { total: 0, unique: 0, duplicatesMerged: 0, corroborated: 0, byTool: {} } as CorrelationStats };
-  const sourcePart = correlateSourceProcessed(sourceFindings);
-  const byTool: CorrelationStats["byTool"] = { ...vulnPart.stats.byTool };
-  for (const [tool, v] of Object.entries(sourcePart.stats.byTool)) {
-    const existing = byTool[tool] ?? { total: 0, unique: 0, corroborated: 0 };
-    byTool[tool] = { total: existing.total + v.total, unique: existing.unique + v.unique, corroborated: existing.corroborated + v.corroborated };
-  }
-  return {
-    findings: [...vulnPart.findings, ...sourcePart.findings],
-    stats: {
-      total: vulnPart.stats.total + sourcePart.stats.total,
-      unique: vulnPart.stats.unique + sourcePart.stats.unique,
-      duplicatesMerged: vulnPart.stats.duplicatesMerged + sourcePart.stats.duplicatesMerged,
-      corroborated: vulnPart.stats.corroborated + sourcePart.stats.corroborated,
-      byTool,
-    },
+  const cloudFindings = findings.filter(isCloudNativeFinding);
+  const rest = findings.filter((f) => !isCloudNativeFinding(f));
+  const mergeStats = (parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[]) => {
+    const byTool: CorrelationStats["byTool"] = {};
+    for (const part of parts) {
+      for (const [tool, v] of Object.entries(part.stats.byTool)) {
+        const existing = byTool[tool] ?? { total: 0, unique: 0, corroborated: 0 };
+        byTool[tool] = { total: existing.total + v.total, unique: existing.unique + v.unique, corroborated: existing.corroborated + v.corroborated };
+      }
+    }
+    return {
+      findings: parts.flatMap((p) => p.findings),
+      stats: {
+        total: parts.reduce((s, p) => s + p.stats.total, 0),
+        unique: parts.reduce((s, p) => s + p.stats.unique, 0),
+        duplicatesMerged: parts.reduce((s, p) => s + p.stats.duplicatesMerged, 0),
+        corroborated: parts.reduce((s, p) => s + p.stats.corroborated, 0),
+        byTool,
+      },
+    };
   };
+  const parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[] = [];
+  if (cloudFindings.length > 0) parts.push(correlateCloudProcessed(cloudFindings));
+  const sourceFindings = rest.filter(isSourceFinding);
+  const otherFindings = rest.filter((f) => !isSourceFinding(f));
+  if (otherFindings.length > 0) parts.push(correlateVulnProcessed(otherFindings, opts));
+  if (sourceFindings.length > 0) parts.push(correlateSourceProcessed(sourceFindings));
+  if (parts.length === 0) return correlateVulnProcessed(findings, opts);
+  return mergeStats(parts);
 }
 
 /** Source correlation (§64–§68 + §70): fingerprint merges + conservative

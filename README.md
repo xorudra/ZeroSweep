@@ -10,8 +10,8 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 12 complete (Prompts 1–12).** Production monorepo, backend and
-> database foundation, the complete Tool Adapter SDK, a 126-tool metadata
+> **Status — Phase 13 complete (Prompts 1–13).** Production monorepo, backend and
+> database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
 > only, Wfuzz controlled-templates only, Arjun), the first findings pipeline
@@ -58,7 +58,22 @@ without verified scope and approval.
 > runs only inside approved scans against verified, in-scope targets.
 > Adapters whose binaries are absent report UNAVAILABLE honestly and
 > pipelines degrade — nothing fakes a real run. The AI service has no LLM
-> connected yet.
+> connected yet. And now the **container, Docker & Kubernetes layer**:
+> digest-bound image inventory with drift snapshots and purely static
+> analysis (Trivy vuln/misconfig/secret kinds kept separate, Syft
+> inventories + on-demand SBOMs, the Prompt 12 Grype adapter extended to
+> images — Trivy+Grype merge into one canonical finding per CVE), CIS
+> benchmark posture via Docker Bench / kube-bench as INTERNAL_PRIVILEGED
+> adapters that only a dedicated privileged worker can run, a read-only
+> Kubernetes connector (clusters registered by reference; secret values
+> never retrieved) with a full posture engine (privileged pods, hostPath,
+> RBAC, NetworkPolicy, digest pinning), kube-hunter passive-only by
+> policy, Kubescape + Checkov manifest analysis under hostile-YAML
+> discipline, CIS/NSA-CISA control assessments (evidence, never
+> certification), Falco runtime-event ingestion (sanitized detections,
+> never vulnerabilities), and /containers, /kubernetes, /compliance and
+> /runtime-events GUIs. No image is ever executed and no Docker socket
+> is mounted anywhere.
 
 ## Architecture
 
@@ -186,10 +201,41 @@ and the AI health endpoint.
 10. ✅ Network VAPT engine (Prompt 10)
 11. ✅ Vulnerability management & intelligence (Prompt 11) 20. Unified reporting & dashboard
 12. ✅ Source code security: SAST, secrets & SCA (Prompt 12)
-13. Lab-only modules (AD, wireless, mobile)
+13. ✅ Container, Docker & Kubernetes security (Prompt 13)
+14. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 13: Container, Docker & Kubernetes Security.**
+  Container images became digest-bound inventory (`ContainerImage` +
+  drift snapshots): registration parses references, scans resolve the
+  digest in an `IMAGE_RESOLUTION` stage, and every finding binds to the
+  digest it was found in. Analysis is static only — images are never
+  executed, no Docker socket is mounted anywhere (a test asserts the
+  compose file), and tools run NO_NETWORK on an isolated
+  `CONTAINER_ANALYSIS` worker. Trivy (vuln/misconfig/secret kinds kept
+  strictly separate; secrets are fingerprint-only), Syft (image SBOM
+  inventories; CycloneDX built on demand), and the Prompt 12 Grype
+  adapter extended to image inputs — the same CVE from Trivy+Grype on
+  one digest correlates into a single canonical finding. Docker Bench
+  and kube-bench are `INTERNAL_PRIVILEGED`: selected only for approved
+  host/cluster targets and executor-refused unless the worker is a
+  dedicated `PRIVILEGED_HOST`. The Kubernetes connector inventories
+  clusters read-only from reference-registered connections (secret
+  values are unobtainable through its transport), and the posture
+  engine flags privileged workloads, hostPath, dangerous capabilities,
+  root containers, RBAC excess, NetworkPolicy gaps and unpinned images;
+  kube-hunter is passive-only by check classification, Kubescape and
+  Checkov analyze manifests under hostile-YAML limits, and static vs
+  live findings correlate by configuration fingerprint. CIS Docker /
+  CIS Kubernetes / NSA-CISA control assessments are recorded as
+  evidence (never certification), Falco events ingest through a
+  sanitized trusted path as detections (never vulnerabilities), and the
+  container quality gate fails on KEV image CVEs (governed dataset
+  only), critical CVEs, image secrets and privileged containers.
+  Migration `20261007100000_container_kubernetes` generated, not applied
+  (no Docker on the build VM); verification is fixture-only — no image
+  pulled, no cluster contacted.
 - **2026-10-07 — Prompt 12: Source Code Security Engine.** Repositories
   became first-class `SOURCE_REPOSITORY` targets whose content is
   hostile input: SSRF-guarded git intake (reference-name credentials

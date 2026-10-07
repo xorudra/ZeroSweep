@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCloudNativeAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -9,6 +9,7 @@ import type { OrchestrationJobData, PlaceholderJobData, ScanOrchestrationJobData
 import { StageExecutor, type StageJobData } from "./executors/stage-executor";
 import { PrismaWorkerStore } from "./store/prisma-store";
 import { prismaScannerDeps } from "./store/scanner-deps";
+import { prismaKubernetesDeps } from "./store/kubernetes-deps";
 import { RetestRunner } from "./executors/retest-runner";
 import type { RetestJobData } from "./jobs";
 import { DagRunner } from "./consumers/dag-runner";
@@ -61,6 +62,14 @@ registerNetworkAdapters(registry);
 // discipline. Source tools analyze snapshots read-only with NO_NETWORK;
 // absent binaries report UNAVAILABLE honestly (§2/§13/§14).
 registerCodeAdapters(registry, undefined, prismaScannerDeps());
+// Prompt 13: cloud-native adapters (Syft / Trivy / Checkov / Kubescape /
+// kube-hunter + the INTERNAL_PRIVILEGED Docker Bench / kube-bench pair)
+// and the Kubernetes connector over Prisma-resolved cluster records.
+// Images are analyzed statically — never executed (§9); the privileged
+// pair is executor-gated on PRIVILEGED_HOST_ASSESSMENT (§28/§39), and
+// the connector's live transport honestly reports UNAVAILABLE until a
+// read-only cluster client is provisioned on the worker (§34).
+registerCloudNativeAdapters(registry, undefined, prismaKubernetesDeps());
 const executor = new StageExecutor(registry, store, undefined, {
   workerCapabilities: privilegedCapabilitiesFromEnv(),
 });

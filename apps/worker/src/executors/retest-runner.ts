@@ -15,7 +15,7 @@ import type { StageExecutor } from "./stage-executor";
  * absence of evidence is not evidence of absence.
  */
 export interface RetestStore {
-  prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string } | null>;
+  prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string } | null>;
   retestScanFingerprints(scanId: string): Promise<string[]>;
   completeRetest(retestId: string, outcome: "RESOLVED" | "REOPENED" | "FAILED", detail: string): Promise<void>;
 }
@@ -31,7 +31,10 @@ export class RetestRunner {
     if (!prepared) return { status: "NOT_PREPARED" };
     const outcome = await this.executor.run({
       kind: "STAGE_EXECUTION", scanId: prepared.scanId,
-      stageId: "SAFE_VULNERABILITY_SCAN", toolExecutionId: prepared.executionId, attempt: 1,
+      // Prompt 13 §77: cloud-native findings retest in their ORIGINAL
+      // stage (image rescan / manifest rescan / posture reassessment /
+      // benchmark rerun); all other findings keep the Prompt 11 stage.
+      stageId: prepared.stageId ?? "SAFE_VULNERABILITY_SCAN", toolExecutionId: prepared.executionId, attempt: 1,
     });
     if (outcome.status !== "COMPLETED" && outcome.status !== "ALREADY_COMPLETED") {
       const reason = outcome.status === "DENIED" ? ` (${outcome.reasonCode})` : "";

@@ -36,6 +36,12 @@ export const SCAN_EVENT_TYPES = [
   "source.secret_detected", "source.dependency_vulnerability_detected",
   "source.dependencies_inventoried", "source.sbom_generated",
   "source.quality_gate_evaluated", "source.scan_completed",
+  // Prompt 13 — cloud-native events (§111-adjacent scan events).
+  // Counts/ids/digests only; never credentials, tokens or secret values.
+  "container.image_registered", "container.image_resolved", "container.image_drift_detected",
+  "container.scan_completed", "kubernetes.inventory_recorded", "kubernetes.posture_assessed",
+  "docker.posture_assessed", "compliance.assessed", "runtime.event_ingested",
+  "container.quality_gate_evaluated",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

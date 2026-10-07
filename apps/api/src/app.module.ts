@@ -27,6 +27,7 @@ import { ApiSecurityModule } from "./modules/api-security/api-security.module";
 import { NetworkModule } from "./modules/network/network.module";
 import { VulnerabilitiesModule } from "./modules/vulnerabilities/vulnerabilities.module";
 import { RepositoriesModule } from "./modules/repositories/repositories.module";
+import { CloudNativeModule } from "./modules/cloud-native/cloud-native.module";
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { RepositoriesModule } from "./modules/repositories/repositories.module";
     OrganizationsModule, WorkspacesModule, TargetsModule, ScopesModule, AssessmentsModule,
     ScansModule, FindingsModule, ReportsModule, ToolsModule, IntegrationsModule,
     CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule, ScannersModule,
-    ApiSecurityModule, NetworkModule, VulnerabilitiesModule, RepositoriesModule,
+    ApiSecurityModule, NetworkModule, VulnerabilitiesModule, RepositoriesModule, CloudNativeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

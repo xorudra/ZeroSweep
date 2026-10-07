@@ -8,6 +8,9 @@ export const TARGET_TYPES = [
   "DOMAIN", "WEB_APPLICATION", "IP_ADDRESS", "CIDR", "API", "GRAPHQL",
   "SOURCE_REPOSITORY", "APK", "CONTAINER_IMAGE", "DOCKER", "KUBERNETES",
   "AWS", "AZURE", "GCP", "ACTIVE_DIRECTORY", "BINARY", "WIRELESS_LAB",
+  // Prompt 13 §3: cloud-native target kinds. DOCKER / KUBERNETES above
+  // remain as legacy aliases resolving to DOCKER_HOST / KUBERNETES_CLUSTER.
+  "CONTAINER_REGISTRY", "DOCKER_HOST", "KUBERNETES_CLUSTER", "KUBERNETES_MANIFEST", "HELM_CHART",
 ] as const;
 export type TargetType = (typeof TARGET_TYPES)[number];
 
@@ -20,6 +23,11 @@ export const ASSESSMENT_PROFILES = [
   // Prompt 12 §18: source code security profiles. SOURCE_CODE remains as
   // the legacy alias and resolves to the SOURCE_BASELINE stage chain.
   "SOURCE_BASELINE", "SOURCE_COMPREHENSIVE", "SECRETS_ONLY", "DEPENDENCIES_ONLY", "SAST_ONLY",
+  // Prompt 13 §11/§80: container + Kubernetes profiles. CONTAINER remains
+  // as the legacy alias and resolves to the CONTAINER_BASELINE chain.
+  "CONTAINER_BASELINE", "CONTAINER_COMPREHENSIVE", "SBOM_ONLY", "IMAGE_VULNERABILITIES_ONLY",
+  "CONTAINER_MISCONFIG_ONLY", "KUBERNETES_BASELINE", "KUBERNETES_COMPREHENSIVE",
+  "DOCKER_HOST_BASELINE", "CLOUD_NATIVE_FULL",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

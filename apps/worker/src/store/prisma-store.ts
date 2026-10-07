@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseManifests, planRetest, summarizeForQualityGate, type CvssRecord,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planRetest, summarizeForQualityGate, type CvssRecord,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
@@ -85,6 +85,9 @@ export class PrismaWorkerStore implements ScanRunStore {
       // Prompt 12 (§12): source context resolved from repository +
       // snapshot rows — workspace paths never come from client input.
       source: await this.loadSourceContext(graph.workspaceId, target.id, exec.scanId),
+      // Prompt 13 (§12): cloud-native context resolved from image /
+      // cluster / Docker host rows — references only, never credentials.
+      cloudNative: await this.loadCloudContext(graph.workspaceId, target.id, target.type, target.value),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -120,6 +123,37 @@ export class PrismaWorkerStore implements ScanRunStore {
       languages: langs,
       sonarProjectKey: repo.name,
     };
+  }
+
+  /** Prompt 13: cloud-native context for a scan's target — the
+   *  registered image (with its recorded digest), cluster or Docker
+   *  host. Credential REFERENCES live on those rows; values never
+   *  enter an execution context. */
+  private async loadCloudContext(workspaceId: string, targetId: string, targetType: string, targetValue: string): Promise<ExecutionContextRecord["cloudNative"]> {
+    if (targetType === "CONTAINER_IMAGE") {
+      const image = await prisma.containerImage.findFirst({ where: { workspaceId, targetId } });
+      return {
+        imageRef: targetValue,
+        ...(image?.digest ? { imageDigest: image.digest } : {}),
+        ...(image ? { imageId: image.id } : {}),
+      };
+    }
+    if (targetType === "KUBERNETES_CLUSTER" || targetType === "KUBERNETES") {
+      const cluster = await prisma.kubernetesCluster.findFirst({ where: { workspaceId, targetId } });
+      if (!cluster) return undefined;
+      return { clusterId: cluster.id, clusterRef: cluster.name };
+    }
+    if (targetType === "DOCKER_HOST" || targetType === "DOCKER") {
+      const host = await prisma.dockerHost.findFirst({ where: { workspaceId, targetId } });
+      if (!host) return undefined;
+      return { hostRef: host.name };
+    }
+    if (targetType === "KUBERNETES_MANIFEST" || targetType === "HELM_CHART" || targetType === "SOURCE_REPOSITORY") {
+      // Manifest scans ride the source snapshot (ctx.source) — no
+      // cluster context exists or is needed.
+      return undefined;
+    }
+    return undefined;
   }
 
   /** Prompt 10 §45: latest packet-capture artifact reference for a scan. */
@@ -425,6 +459,12 @@ export class PrismaWorkerStore implements ScanRunStore {
           dependencyScope: f.dependencyScope, reachability: f.reachability,
           baselineStatus: f.baselineStatus,
           reviewStatus: f.reviewStatus,
+          // Prompt 13 (§51/§94): cloud-native identity — origin, image
+          // digest binding, cluster/workload identity, control id.
+          origin: f.origin, imageDigest: f.imageDigest, imageRef: f.imageRef,
+          clusterRef: f.clusterRef, namespace: f.namespace,
+          resourceKind: f.resourceKind, resourceName: f.resourceName,
+          containerName: f.containerName, controlId: f.controlId,
           ...(f.secret ? {
             secretMetadata: {
               create: {
@@ -598,6 +638,98 @@ export class PrismaWorkerStore implements ScanRunStore {
         },
       });
       packetCaptures++;
+    }
+    // ── Prompt 13 cloud-native payloads (§5/§37/§56/§59) ──
+    // Images upsert on (workspace, registry, repository, digest) — the
+    // digest is the identity; a new digest is a NEW row + snapshot
+    // (drift), never an overwrite (§78). Components from image scans
+    // (Syft) bind to the image (§13). Workloads upsert per cluster
+    // identity; control assessments and runtime events append.
+    const targetRow = await prisma.target.findUnique({ where: { id: scan.assessment.targetId } });
+    const cloudCtx = targetRow ? await this.loadCloudContext(scan.workspaceId, targetRow.id, targetRow.type, targetRow.value) : undefined;
+    for (const img of processed.cloudNative.images) {
+      const existingImg = await prisma.containerImage.findFirst({
+        where: { workspaceId: scan.workspaceId, registry: img.registry, repository: img.repository, digest: img.digest ?? null },
+      });
+      const row = existingImg
+        ? await prisma.containerImage.update({ where: { id: existingImg.id }, data: { lastSeen: new Date(), tag: img.tag ?? existingImg.tag } })
+        : await prisma.containerImage.create({
+            data: {
+              workspaceId: scan.workspaceId, targetId: scan.assessment.targetId,
+              reference: img.reference ?? `${img.registry}/${img.repository}${img.tag ? `:${img.tag}` : ""}${img.digest ? `@${img.digest}` : ""}`, registry: img.registry, repository: img.repository, tag: img.tag, digest: img.digest,
+              platform: img.platform, architecture: img.architecture, os: img.os, source: img.source,
+            },
+          });
+      await prisma.containerImageSnapshot.create({
+        data: {
+          imageId: row.id, scanId, digest: img.digest ?? "unknown",
+          config: (img.config ?? {}) as never, layers: (img.layers ?? []) as never,
+          baseImage: (img.baseImage ?? undefined) as never,
+        },
+      });
+      void row;
+    }
+    if (cloudCtx?.imageId && processed.components.length > 0) {
+      for (const c of processed.components) {
+        await prisma.softwareComponent.upsert({
+          where: { imageId_purl: { imageId: cloudCtx.imageId, purl: c.purl } },
+          create: {
+            imageId: cloudCtx.imageId,
+            name: c.name, version: c.version, ecosystem: c.ecosystem, purl: c.purl,
+            sourceManifest: c.sourceManifest, scope: c.scope,
+            dependencyScope: c.dependencyScope, licenses: c.licenses,
+            ...(c.supplier ? { supplier: c.supplier } : {}),
+          },
+          update: { licenses: c.licenses, dependencyScope: c.dependencyScope },
+        });
+        components++;
+      }
+    }
+    for (const w of processed.cloudNative.workloads) {
+      const cluster = cloudCtx?.clusterId
+        ? await prisma.kubernetesCluster.findUnique({ where: { id: cloudCtx.clusterId } })
+        : await prisma.kubernetesCluster.findFirst({ where: { workspaceId: scan.workspaceId, name: w.clusterRef } });
+      if (!cluster) continue;
+      await prisma.kubernetesWorkload.upsert({
+        where: { clusterId_kind_namespace_name: { clusterId: cluster.id, kind: w.kind, namespace: w.namespace, name: w.name } },
+        create: {
+          workspaceId: scan.workspaceId, clusterId: cluster.id, scanId,
+          kind: w.kind, namespace: w.namespace, name: w.name, replicas: w.replicas,
+          serviceAccount: w.serviceAccount, images: w.images as never,
+          securityContext: w.securityContext as never, exposure: w.exposure, labels: w.labels as never,
+        },
+        update: {
+          scanId, replicas: w.replicas, serviceAccount: w.serviceAccount,
+          images: w.images as never, securityContext: w.securityContext as never,
+          exposure: w.exposure, labels: w.labels as never, lastSeen: new Date(),
+        },
+      });
+    }
+    for (const a of processed.cloudNative.controlAssessments) {
+      await prisma.controlAssessment.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId, frameworkKey: a.frameworkKey, controlId: a.controlId,
+          subjectRef: a.subjectRef, status: a.status as never, evidence: a.evidence,
+        },
+      });
+    }
+    for (const e of processed.cloudNative.runtimeEvents) {
+      await prisma.runtimeSecurityEvent.create({
+        data: {
+          workspaceId: scan.workspaceId, clusterId: cloudCtx?.clusterId,
+          clusterName: e.clusterName, node: e.node, namespace: e.namespace, pod: e.pod,
+          container: e.container, rule: e.rule, priority: e.priority,
+          eventTime: new Date(e.eventTime), metadata: e.metadata as never, source: e.source,
+        },
+      });
+    }
+    for (const m of processed.cloudNative.manifests) {
+      await prisma.infrastructureManifest.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId, filePath: m.filePath,
+          manifestType: m.manifestType, resourceCount: m.resourceCount, checksum: m.checksum,
+        },
+      });
     }
     return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components };
   }
@@ -864,6 +996,80 @@ export class PrismaWorkerStore implements ScanRunStore {
     return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
   }
 
+  // ---------- Prompt 13 cloud-native platform hooks (§5/§75/§78) ----------
+
+  /** IMAGE_RESOLUTION (§5/§78): record the image snapshot this scan
+   *  analyzes. The digest comes from the registered image row (written
+   *  at registration / by SBOM import / by a previous scan) — registry
+   *  tag→digest resolution lands with the registry connectors; until
+   *  then an image with no recorded digest resolves tag-only and the
+   *  event says so honestly. A changed digest appends a NEW snapshot
+   *  (drift) — history is never overwritten. */
+  async resolveContainerImage(scanId: string): Promise<{ imageRef: string; digest?: string; drift?: boolean; skipped?: boolean } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const target = graph.assessment.target;
+    if (target.type !== "CONTAINER_IMAGE") return { imageRef: "", skipped: true };
+    let ref: ReturnType<typeof parseImageReference>;
+    try { ref = parseImageReference(target.value); } catch { return null; }
+    let image = await prisma.containerImage.findFirst({ where: { workspaceId: graph.workspaceId, targetId: target.id } });
+    if (!image) {
+      image = await prisma.containerImage.create({
+        data: {
+          workspaceId: graph.workspaceId, targetId: target.id, reference: target.value,
+          registry: ref.registry, repository: ref.repository, tag: ref.tag, digest: ref.digest, source: "TARGET",
+        },
+      });
+    }
+    const digest = image.digest ?? ref.digest;
+    const previous = await prisma.containerImageSnapshot.findFirst({ where: { imageId: image.id }, orderBy: { capturedAt: "desc" } });
+    const drift = !!previous?.digest && !!digest && previous.digest !== "unknown" && previous.digest !== digest;
+    if (!previous || previous.digest !== (digest ?? "unknown") || previous.scanId !== scanId) {
+      await prisma.containerImageSnapshot.create({
+        data: {
+          imageId: image.id, scanId, digest: digest ?? "unknown",
+          previousDigest: drift ? previous?.digest : undefined, drift,
+          config: {} as never, layers: [] as never,
+        },
+      });
+    }
+    return { imageRef: target.value, ...(digest ? { digest } : {}), drift };
+  }
+
+  /** QUALITY_GATE for cloud-native scans (§75): the container gate
+   *  over the scan's canonical findings. KEV membership comes ONLY
+   *  from the Phase 11 intelligence tables (§74) — an empty dataset
+   *  means no KEV rule can fire, honestly. */
+  async evaluateContainerQualityGate(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const targetType = graph.assessment.target.type;
+    if (!["CONTAINER_IMAGE", "KUBERNETES_CLUSTER", "KUBERNETES", "DOCKER_HOST", "DOCKER"].includes(targetType)) return null;
+    const rows = await prisma.finding.findMany({ where: { scanId, duplicateOfId: null }, include: { secretMetadata: true } });
+    const cveIds = [...new Set(rows.map((r) => r.cve).filter((x): x is string => !!x))];
+    const kevRows = cveIds.length > 0 ? await prisma.kevRecord.findMany({ where: { cveId: { in: cveIds } }, select: { cveId: true } }) : [];
+    const result = evaluateContainerQualityGate({
+      findings: rows.map((r) => ({
+        severity: r.severity as never, cve: r.cve ?? undefined, origin: (r.origin as never) ?? undefined,
+        ...(r.secretMetadata ? { secret: { secretType: r.secretMetadata.secretType } as never } : {}),
+        controlId: r.controlId ?? undefined, resourceKind: r.resourceKind ?? undefined,
+      })),
+      kevCves: kevRows.map((k) => k.cveId),
+    });
+    await prisma.qualityGateResult.create({
+      data: {
+        scanId, status: result.status as never, policyVersion: "container-gate/1.0.0",
+        failedRules: result.failedRules as never, warningRules: result.warningRules as never,
+        summary: result.summary as never,
+      },
+    });
+    const cloudCtx = await this.loadCloudContext(graph.workspaceId, graph.assessment.targetId, targetType, graph.assessment.target.value);
+    if (cloudCtx?.clusterId) {
+      await prisma.kubernetesCluster.update({ where: { id: cloudCtx.clusterId }, data: { lastAssessmentAt: new Date() } });
+    }
+    return { status: result.status, failedRules: result.failedRules.length, warningRules: result.warningRules.length };
+  }
+
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
   async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
     const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
@@ -909,6 +1115,13 @@ export class PrismaWorkerStore implements ScanRunStore {
       reachability: r.reachability ?? undefined,
       reviewStatus: r.reviewStatus ?? undefined,
       baselineStatus: r.baselineStatus ?? undefined,
+      // Prompt 13: cloud-native fields ride along so cloud findings
+      // route to the cloud correlation partition (§95) with their
+      // static/live origins preserved (§103).
+      origin: r.origin ?? undefined, imageDigest: r.imageDigest ?? undefined, imageRef: r.imageRef ?? undefined,
+      clusterRef: r.clusterRef ?? undefined, namespace: r.namespace ?? undefined,
+      resourceKind: r.resourceKind ?? undefined, resourceName: r.resourceName ?? undefined,
+      containerName: r.containerName ?? undefined, controlId: r.controlId ?? undefined,
       ...(r.secretMetadata ? {
         secret: {
           secretType: r.secretMetadata.secretType,
@@ -1062,7 +1275,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    * the ordinary StageExecutor, so authorization, scope, policy and
    * budget gates are re-evaluated by construction (§57).
    */
-  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string } | null> {
+  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string } | null> {
     const retest = await prisma.retestRequest.findUnique({ where: { id: retestId } });
     if (!retest || retest.status !== "QUEUED") return null;
     const finding = await prisma.finding.findUnique({ where: { id: retest.findingId } });
@@ -1075,17 +1288,21 @@ export class PrismaWorkerStore implements ScanRunStore {
       checkReference: retest.checkReference, lifecycleStatus: "RETEST_PENDING",
     });
     if (!plan.ok) return null;
+    // Prompt 13 §77: cloud-native findings retest in their original
+    // stage kind; everything else keeps the Prompt 11 stage.
+    const cloudRetest = finding.origin ? planCloudNativeRetest({ origin: finding.origin, sourceTool: retest.sourceTool, controlId: finding.controlId ?? undefined }) : null;
+    const retestStage = cloudRetest?.stageType ?? "SAFE_VULNERABILITY_SCAN";
     const child = await prisma.scan.create({
       data: { workspaceId: finding.workspaceId, assessmentId: graph.assessmentId, requestedBy: retest.requestedBy, status: "QUEUED" },
     });
     const stagePlan = {
-      id: "SAFE_VULNERABILITY_SCAN", type: "SAFE_VULNERABILITY_SCAN", name: "Targeted Retest",
+      id: retestStage, type: retestStage, name: "Targeted Retest",
       description: "Prompt 11 §56 targeted retest: re-run the original detection only.",
       requiredCapabilities: [], dependencies: [], selectedAdapters: [{
         slug: retest.sourceTool, adapterId: retest.sourceTool, name: retest.sourceTool,
         riskLevel: "MODERATE", preference: "REQUIRED", simulation: false, reason: "original detection tool (§56)",
       }],
-      weight: 100, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: true, status: "QUEUED",
+      weight: 100, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: !cloudRetest, status: "QUEUED",
     };
     const scopeParse = scopeRulesSchema.safeParse(graph.assessment.scope?.rules ?? {});
     await prisma.scanPlan.create({
@@ -1103,14 +1320,14 @@ export class PrismaWorkerStore implements ScanRunStore {
       },
     });
     await prisma.scanStage.create({
-      data: { scanId: child.id, type: "SAFE_VULNERABILITY_SCAN", status: "QUEUED", dependencies: [], weight: 100, metadata: { retestId } as never },
+      data: { scanId: child.id, type: retestStage as never, status: "QUEUED", dependencies: [], weight: 100, metadata: { retestId } as never },
     });
-    const execution = await this.ensureExecution(child.id, "SAFE_VULNERABILITY_SCAN", retest.sourceTool, 1);
+    const execution = await this.ensureExecution(child.id, retestStage, retest.sourceTool, 1);
     await prisma.retestRequest.update({
       where: { id: retestId },
       data: { status: "RUNNING", scanId: child.id, startedAt: new Date() },
     });
-    return { executionId: execution.id, scanId: child.id, canonicalFingerprint: plan.plan.canonicalFingerprint };
+    return { executionId: execution.id, scanId: child.id, canonicalFingerprint: plan.plan.canonicalFingerprint, stageId: retestStage };
   }
 
   /** Canonical fingerprints the retest scan actually produced. */

@@ -110,6 +110,45 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  # Prompt 13 §10: container/image/manifest analysis runs on an isolated
+  # worker type. Static analysis only — this service has NO Docker
+  # socket mount and never executes an image (§9/§30).
+  worker-container-analysis:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://minio:9000
+      DSRCLONE_WORKER_TYPE: CONTAINER_ANALYSIS
+      DSRCLONE_WORKER_CAPABILITIES: CONTAINER_ANALYSIS
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # Prompt 13 §28/§39: the ONLY worker that may run the INTERNAL_PRIVILEGED
+  # CIS benchmark adapters (Docker Bench / kube-bench), and only against
+  # explicitly approved hosts/clusters. Deployed on the assessed host's
+  # segment by the operator — never part of the general worker pool.
+  worker-privileged-host:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    profiles: ["privileged"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://minio:9000
+      DSRCLONE_WORKER_TYPE: PRIVILEGED_HOST
+      DSRCLONE_WORKER_CAPABILITIES: PRIVILEGED_HOST_ASSESSMENT
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   web:
     build:
       context: .

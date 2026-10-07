@@ -120,15 +120,16 @@ const TOOLS: CatalogTool[] = [
   { slug: "roadtools", name: "ROADtools", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AZURE"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Azure AD exploration framework for authorized tenants." },
   { slug: "pacu", name: "Pacu", category: "CLOUD", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "AWS exploitation framework — approved cloud engagements only." },
   { slug: "steampipe", name: "Steampipe", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "SQL queries over cloud APIs for posture checks." },
-  { slug: "checkov", name: "Checkov", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CLOUD_CONFIGURATION_AUDIT", "SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Infrastructure-as-code static analysis." },
-  { slug: "trivy", name: "Trivy", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTAINER_SCANNING", "SCA", "SECRET_SCANNING"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Container, IaC and repository vulnerability scanner." },
-  { slug: "grype", name: "Grype", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTAINER_SCANNING", "SCA", "PACKAGE_VULNERABILITY_ANALYSIS", "SBOM_ANALYSIS"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Vulnerability scanner for container images, filesystems and source snapshots (Prompt 12 §51 for source use)." },
-  { slug: "syft", name: "Syft", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SCA"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "SBOM generation for images and filesystems." },
-  { slug: "docker-bench-for-security", name: "Docker Bench for Security", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["DOCKER"], requiresCredentials: [], description: "Docker host configuration checks (CIS benchmark)." },
-  { slug: "kube-bench", name: "kube-bench", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES"], requiresCredentials: [], description: "Kubernetes CIS benchmark checks." },
-  { slug: "kube-hunter", name: "kube-hunter", category: "CONTAINER", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES"], requiresCredentials: [], description: "Kubernetes penetration-testing discovery tool." },
-  { slug: "kubescape", name: "Kubescape", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES"], requiresCredentials: [], description: "Kubernetes security posture framework." },
-  { slug: "falco", name: "Falco", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES", "DOCKER"], requiresCredentials: [], description: "Runtime security monitoring for containers." },
+  { slug: "checkov", name: "Checkov", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["IAC_SECURITY", "KUBERNETES_MANIFEST_SECURITY", "DOCKERFILE_SECURITY", "HELM_SECURITY"], supportedTargets: ["SOURCE_REPOSITORY", "CONTAINER_IMAGE", "KUBERNETES_MANIFEST", "HELM_CHART", "KUBERNETES_CLUSTER"], requiresCredentials: [], description: "Infrastructure-as-code, Kubernetes manifest, Helm and Dockerfile static analysis (Prompt 13 §46) — IaC is never executed." },
+  { slug: "trivy", name: "Trivy", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["IMAGE_VULNERABILITY_SCANNING", "MISCONFIGURATION_SCANNING", "SECRET_SCANNING", "IMAGE_ANALYSIS"], supportedTargets: ["CONTAINER_IMAGE", "CONTAINER_REGISTRY", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Static container image analysis: vulnerabilities, misconfigurations and secret metadata (Prompt 13 §15–§18). Images are never executed." },
+  { slug: "grype", name: "Grype", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTAINER_SCANNING", "SCA", "PACKAGE_VULNERABILITY_ANALYSIS", "SBOM_ANALYSIS", "IMAGE_VULNERABILITY_SCANNING"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Vulnerability scanner for container images, filesystems and source snapshots (Prompt 12 §51 for source use; Prompt 13 §19 for image use — one adapter, two input kinds)." },
+  { slug: "syft", name: "Syft", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SBOM_GENERATION", "IMAGE_ANALYSIS"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "SBOM generation for container images and filesystems (Prompt 13 §12)." },
+  { slug: "docker-bench-for-security", name: "Docker Bench for Security", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["DOCKER_CIS_ASSESSMENT", "DOCKER_HOST_CONFIGURATION", "COMPLIANCE_ASSESSMENT"], supportedTargets: ["DOCKER_HOST"], requiresCredentials: [], description: "CIS Docker Benchmark host checks — INTERNAL_PRIVILEGED: approved host + dedicated privileged worker only (Prompt 13 §28)." },
+  { slug: "kube-bench", name: "kube-bench", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["KUBERNETES_CIS_ASSESSMENT", "COMPLIANCE_ASSESSMENT"], supportedTargets: ["KUBERNETES_CLUSTER"], requiresCredentials: [], description: "CIS Kubernetes Benchmark checks — INTERNAL_PRIVILEGED: approved cluster + dedicated privileged worker only (Prompt 13 §39)." },
+  { slug: "kube-hunter", name: "kube-hunter", category: "CONTAINER", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["KUBERNETES_SECURITY_DISCOVERY", "KUBERNETES_POSTURE_TESTING"], supportedTargets: ["KUBERNETES_CLUSTER"], requiresCredentials: [], description: "Kubernetes discovery — automated runs are passive-only by policy; intrusive checks are classified and never executed (Prompt 13 §42/§43)." },
+  { slug: "kubescape", name: "Kubescape", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["KUBERNETES_POSTURE", "MANIFEST_ANALYSIS", "COMPLIANCE_ASSESSMENT"], supportedTargets: ["KUBERNETES_CLUSTER", "KUBERNETES_MANIFEST", "CONTAINER_IMAGE"], requiresCredentials: [], description: "Kubernetes posture and manifest analysis with compliance framework mapping (Prompt 13 §44)." },
+  { slug: "falco", name: "Falco", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["RUNTIME_SECURITY_EVENTS"], supportedTargets: ["KUBERNETES_CLUSTER", "DOCKER_HOST"], requiresCredentials: [], description: "Runtime security sensor — events arrive through the trusted ingestion path; DSRclone never deploys the sensor (Prompt 13 §57–§63)." },
+  { slug: "kubernetes-connector", name: "Kubernetes Connector", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CLUSTER_INVENTORY", "RESOURCE_INVENTORY", "POSTURE_ASSESSMENT"], supportedTargets: ["KUBERNETES_CLUSTER"], requiresCredentials: ["credentialReference"], description: "Read-only cluster inventory + posture over registered cluster connections; secret values are never retrieved (Prompt 13 §32–§38)." },
   { slug: "semgrep", name: "Semgrep", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST", "CODE_PATTERN_ANALYSIS", "SECURITY_RULE_ANALYSIS", "DATAFLOW_ANALYSIS"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Static analysis with the governed, pinned rule-pack catalog (Prompt 12 §22) — users never supply arbitrary rules." },
   { slug: "sonarqube", name: "SonarQube", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SAST", "CODE_PATTERN_ANALYSIS", "SCAN_RESULT_IMPORT"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: ["SONAR_TOKEN"], description: "Code quality and security platform (self-hosted or admin-provided)." },
   { slug: "codeql", name: "CodeQL", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST", "SECURITY_QUERY_ANALYSIS", "DATAFLOW_ANALYSIS"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Semantic code analysis engine with governed query suites + SARIF import (Prompt 12 §28–§31). Build-needing languages degrade as BUILD_REQUIRED — target code is never built." },
@@ -346,6 +347,87 @@ async function main(): Promise<void> {
       update: { enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 12) — snapshot path + worker-derived config only; governed rule/query policies enforced in code; source is never executed", implementedPhase: 12 } },
       create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 12)", implementedPhase: 12 } },
     });
+  }
+  // Prompt 13: the cloud-native adapters. Image/manifest tools run
+  // NO_NETWORK on the isolated CONTAINER_ANALYSIS worker (vuln DBs and
+  // rule packs provisioned out of band, §10); Docker Bench / kube-bench
+  // are INTERNAL_PRIVILEGED (executor-gated on the PRIVILEGED_HOST
+  // worker capability); the Kubernetes connector and Falco are
+  // connector-style — unconfigured they report NOT_CONFIGURED (§34/§59).
+  const IMPLEMENTED_CLOUD: Array<{ slug: string; executionMode: "CONTAINER" | "EXTERNAL_API"; outputFormat: string; parser: string; defaultTimeout: number; networkPolicy: string }> = [
+    { slug: "trivy", executionMode: "CONTAINER", outputFormat: "JSON", parser: "trivy-json", defaultTimeout: 1800, networkPolicy: "NO_NETWORK" },
+    { slug: "syft", executionMode: "CONTAINER", outputFormat: "JSON", parser: "syft-json", defaultTimeout: 900, networkPolicy: "NO_NETWORK" },
+    { slug: "checkov", executionMode: "CONTAINER", outputFormat: "JSON", parser: "checkov-json", defaultTimeout: 1800, networkPolicy: "NO_NETWORK" },
+    { slug: "kubescape", executionMode: "CONTAINER", outputFormat: "JSON", parser: "kubescape-json", defaultTimeout: 1800, networkPolicy: "NO_NETWORK" },
+    { slug: "kube-hunter", executionMode: "CONTAINER", outputFormat: "JSON", parser: "kube-hunter-json", defaultTimeout: 900, networkPolicy: "NO_NETWORK" },
+    { slug: "docker-bench-for-security", executionMode: "CONTAINER", outputFormat: "JSON", parser: "docker-bench-json", defaultTimeout: 900, networkPolicy: "NO_NETWORK" },
+    { slug: "kube-bench", executionMode: "CONTAINER", outputFormat: "JSON", parser: "kube-bench-json", defaultTimeout: 900, networkPolicy: "NO_NETWORK" },
+    { slug: "kubernetes-connector", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "kubernetes-inventory", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "falco", executionMode: "EXTERNAL_API", outputFormat: "JSONL", parser: "falco-events", defaultTimeout: 300, networkPolicy: "CUSTOM_ALLOWLIST" },
+  ];
+  for (const impl of IMPLEMENTED_CLOUD) {
+    const tool = await prisma.tool.findUnique({ where: { slug: impl.slug } });
+    const catalog = TOOLS.find((x) => x.slug === impl.slug);
+    if (!tool || !catalog) continue;
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 13) — static analysis only; images are never executed; credentials are secret references only", implementedPhase: 13 } },
+      create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 13)", implementedPhase: 13 } },
+    });
+  }
+  // Prompt 13 §55: the compliance framework catalog. Control titles are
+  // the governed checks' own descriptions (posture engine + benchmark
+  // tools) — posture evidence catalog, NEVER a certification (§88).
+  const COMPLIANCE_CATALOG: Array<{ key: string; name: string; version: string; controls: Array<{ controlId: string; title: string; severityDefault: string }> }> = [
+    {
+      key: "CIS_DOCKER", name: "CIS Docker Benchmark", version: "1.6",
+      controls: [
+        { controlId: "1.1.1", title: "Host configuration check 1.1.1 (Docker Bench)", severityDefault: "MEDIUM" },
+        { controlId: "2.8", title: "Container configuration check 2.8 (Docker Bench)", severityDefault: "LOW" },
+        { controlId: "4.1", title: "Image user should not be root (Docker Bench 4.1)", severityDefault: "HIGH" },
+      ],
+    },
+    {
+      key: "CIS_KUBERNETES", name: "CIS Kubernetes Benchmark", version: "1.8",
+      controls: [
+        { controlId: "1.1.1", title: "Control plane configuration check 1.1.1 (kube-bench)", severityDefault: "MEDIUM" },
+        { controlId: "1.1.12", title: "Control plane configuration check 1.1.12 (kube-bench)", severityDefault: "HIGH" },
+        { controlId: "CIS-5.1.1", title: "Cluster-admin / wildcard RBAC binding", severityDefault: "CRITICAL" },
+        { controlId: "CIS-5.2.2", title: "Host network namespace shared", severityDefault: "HIGH" },
+        { controlId: "CIS-5.2.3", title: "Host PID namespace shared", severityDefault: "HIGH" },
+        { controlId: "CIS-5.2.5", title: "Dangerous Linux capabilities added", severityDefault: "HIGH" },
+        { controlId: "CIS-5.2.6", title: "Container may run as root", severityDefault: "HIGH" },
+        { controlId: "CIS-5.2.9", title: "Host filesystem (hostPath) volume mounted", severityDefault: "HIGH" },
+        { controlId: "CIS-5.3.2", title: "NetworkPolicy coverage for exposed workloads", severityDefault: "MEDIUM" },
+        { controlId: "CIS-5.4.1", title: "Resource limits not declared", severityDefault: "LOW" },
+        { controlId: "CIS-5.4.5", title: "Default service account in use", severityDefault: "MEDIUM" },
+        { controlId: "CIS-5.7.3", title: "Service account token automount not disabled", severityDefault: "MEDIUM" },
+      ],
+    },
+    {
+      key: "NSA_CISA_KUBERNETES", name: "NSA/CISA Kubernetes Hardening Guidance", version: "1.2",
+      controls: [
+        { controlId: "KSV-0012", title: "Writable root filesystem", severityDefault: "MEDIUM" },
+        { controlId: "KSV-0013", title: "Image pull policy allows mutable tags (Always / latest)", severityDefault: "MEDIUM" },
+        { controlId: "KSV-0014", title: "Privileged container", severityDefault: "CRITICAL" },
+        { controlId: "KSV-0015", title: "Image not pinned by digest", severityDefault: "MEDIUM" },
+        { controlId: "C-0057", title: "Privileged container (Kubescape control)", severityDefault: "CRITICAL" },
+      ],
+    },
+  ];
+  for (const fw of COMPLIANCE_CATALOG) {
+    const framework = await prisma.complianceFramework.upsert({
+      where: { key: fw.key },
+      update: { name: fw.name, version: fw.version },
+      create: { key: fw.key, name: fw.name, version: fw.version },
+    });
+    for (const c of fw.controls) {
+      await prisma.complianceControl.upsert({
+        where: { frameworkId_controlId: { frameworkId: framework.id, controlId: c.controlId } },
+        update: { title: c.title, severityDefault: c.severityDefault },
+        create: { frameworkId: framework.id, controlId: c.controlId, title: c.title, severityDefault: c.severityDefault },
+      });
+    }
   }
   // Prompt 6 §10: wordlists are governed platform data, seeded from the
   // security-sdk's bundled registry so DB metadata and code can never

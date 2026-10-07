@@ -1,6 +1,6 @@
 import {
-  API_SLUGS, CODE_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
-  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext,
+  API_SLUGS, CLOUD_NATIVE_SLUGS, CODE_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS] as const;
 
 /** Slugs whose execution requires the worker to hold the local layer-2
  *  capability (Prompt 10 §65) — meaningless and denied anywhere else. */
@@ -92,6 +92,19 @@ export interface ExecutionContextRecord {
     commitSha?: string;
     languages?: string[];
     sonarProjectKey?: string;
+  };
+  /** Prompt 13: the scan's cloud-native context, resolved by the STORE
+   *  from ContainerImage / KubernetesCluster / DockerHost rows — the
+   *  image reference + resolved digest, the cluster id (credential
+   *  REFERENCE only, never a value) and the approved Docker host.
+   *  Never client input (§12). */
+  cloudNative?: {
+    imageRef?: string;
+    imageDigest?: string;
+    imageId?: string;
+    clusterId?: string;
+    clusterRef?: string;
+    hostRef?: string;
   };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
@@ -187,6 +200,7 @@ export class StageExecutor {
       // the DAG degrades the stage instead of inventing scanner output.
       const isVulnScanner = isVulnScannerAdapter(adapter);
       const isSonar = isSonarQubeAdapter(adapter);
+      const isK8sConnector = isKubernetesConnector(adapter);
       const isConnector = isScannerConnectorAdapter(adapter) || isVulnScanner || isSonar;
       // Defense in depth (§37/§38): proxy connectors execute ONLY in the
       // passive stage; Prompt 11 vulnerability scanners execute ONLY in
@@ -202,6 +216,29 @@ export class StageExecutor {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
         await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no scanner instance is configured for this workspace (NOT_CONFIGURED)`);
         return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      // Prompt 13 gates (§28/§34/§39): the Kubernetes connector executes
+      // ONLY in the inventory/posture stages and only against a cluster
+      // the STORE resolved for this scan (absent = NOT_CONFIGURED);
+      // INTERNAL_PRIVILEGED benchmark adapters (Docker Bench /
+      // kube-bench) additionally require THIS worker to hold the
+      // PRIVILEGED_HOST_ASSESSMENT capability — a general worker denies
+      // them even inside an approved assessment.
+      if (isK8sConnector && ctx.stageId !== "CLUSTER_INVENTORY" && ctx.stageId !== "KUBERNETES_POSTURE") {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: the Kubernetes connector executes only in CLUSTER_INVENTORY / KUBERNETES_POSTURE (§34)`);
+        return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      if (isK8sConnector && !ctx.cloudNative?.clusterId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no Kubernetes cluster is registered for this scan (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      if ((PRIVILEGED_CLOUD_SLUGS as readonly string[]).includes(ctx.adapterSlug)
+        && !this.workerCapabilities.includes("PRIVILEGED_HOST_ASSESSMENT")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: INTERNAL_PRIVILEGED benchmark — this worker does not hold PRIVILEGED_HOST_ASSESSMENT (§28/§39)`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
       }
       // Prompt 10 gates (§19/§20/§44/§65) — evaluated BEFORE health and
       // policy, because they are deployment/approval facts, not tool
@@ -389,6 +426,38 @@ export class StageExecutor {
         if (declared.has("externalVerification")) config.externalVerification = false;
         if (isSonar && declared.has("sonarProjectKey") && ctx.source?.sonarProjectKey) config.sonarProjectKey = ctx.source.sonarProjectKey;
       }
+      // Prompt 13 derived configuration — worker-computed from the
+      // scan's cloud-native context (store-resolved), never client
+      // input (§12): image reference + resolved digest, cluster/host
+      // references, Trivy's profile-derived scanner kinds and target
+      // kind, Kubescape's mode, kube-hunter's mode (PASSIVE_DISCOVERY
+      // is the ONLY mode ever derived, §43) and the connector's
+      // stage-derived inventory mode.
+      if ((CLOUD_NATIVE_SLUGS as readonly string[]).includes(ctx.adapterSlug) || ctx.adapterSlug === "grype") {
+        if (declared.has("imageRef") && ctx.cloudNative?.imageRef) config.imageRef = ctx.cloudNative.imageRef;
+        if (declared.has("imageDigest") && ctx.cloudNative?.imageDigest) config.imageDigest = ctx.cloudNative.imageDigest;
+        if (declared.has("clusterRef") && ctx.cloudNative?.clusterRef) config.clusterRef = ctx.cloudNative.clusterRef;
+        if (declared.has("hostRef") && ctx.cloudNative?.hostRef) config.hostRef = ctx.cloudNative.hostRef;
+        if (declared.has("clusterId") && ctx.cloudNative?.clusterId) config.clusterId = ctx.cloudNative.clusterId;
+        if (declared.has("sourcePath") && ctx.source?.workspacePath) config.sourcePath = ctx.source.workspacePath;
+        if (ctx.adapterSlug === "trivy") {
+          if (declared.has("scanKinds")) {
+            config.scanKinds = ctx.profile === "CONTAINER_MISCONFIG_ONLY" ? ["config"]
+              : ctx.profile === "IMAGE_VULNERABILITIES_ONLY" ? ["vuln", "secret"]
+                : ["vuln", "config", "secret"];
+          }
+          if (declared.has("scanTarget")) config.scanTarget = ctx.profile === "CONTAINER_MISCONFIG_ONLY" ? "fs" : "image";
+        }
+        if (ctx.adapterSlug === "kubescape" && declared.has("scanMode")) {
+          config.scanMode = ctx.stageId === "MANIFEST_SCAN" ? "manifests" : "cluster";
+        }
+        if (ctx.adapterSlug === "kube-hunter" && declared.has("hunterMode")) {
+          config.hunterMode = "PASSIVE_DISCOVERY";
+        }
+        if (isK8sConnector && declared.has("inventoryMode")) {
+          config.inventoryMode = ctx.stageId === "CLUSTER_INVENTORY" ? "CLUSTER_INVENTORY" : "POSTURE_ASSESSMENT";
+        }
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -490,6 +559,23 @@ export class StageExecutor {
       if (depFindings.length > 0) {
         await emit("source.dependency_vulnerability_detected", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: depFindings.length });
       }
+      // Prompt 13 §111-adjacent scan events — counts/ids only, never
+      // credentials or secret values.
+      if (processed.cloudNative.images.length > 0) {
+        await emit("container.image_resolved", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.cloudNative.images.length });
+      }
+      if (processed.cloudNative.workloads.length > 0) {
+        await emit("kubernetes.inventory_recorded", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.cloudNative.workloads.length });
+      }
+      if (processed.cloudNative.controlAssessments.length > 0) {
+        await emit("compliance.assessed", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.cloudNative.controlAssessments.length, failed: processed.cloudNative.controlAssessments.filter((a) => a.status === "FAIL").length });
+      }
+      if (ctx.adapterSlug === "docker-bench-for-security") {
+        await emit("docker.posture_assessed", { stageId: ctx.stageId, tool: ctx.adapterSlug, checks: processed.cloudNative.controlAssessments.length });
+      }
+      if (isK8sConnector) {
+        await emit("kubernetes.posture_assessed", { stageId: ctx.stageId, tool: ctx.adapterSlug, workloads: processed.cloudNative.workloads.length });
+      }
 
       await this.store.updateExecution(ctx.executionId, {
         status: "COMPLETED", completedAt: new Date(), exitCode: 0,
@@ -506,6 +592,10 @@ export class StageExecutor {
           webSockets: counts.webSockets ?? processed.webSockets.length,
           packetCaptures: counts.packetCaptures ?? processed.packetCaptures.length,
           components: counts.components ?? processed.components.length,
+          images: processed.cloudNative.images.length,
+          workloads: processed.cloudNative.workloads.length,
+          controlAssessments: processed.cloudNative.controlAssessments.length,
+          runtimeEvents: processed.cloudNative.runtimeEvents.length,
           suppressedEndpoints: processed.suppressedEndpoints,
           ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
           ...(nseSelection ? { nseSnapshot: nseSelection.snapshot, nseScriptsSelected: nseSelection.selected } : {}),
