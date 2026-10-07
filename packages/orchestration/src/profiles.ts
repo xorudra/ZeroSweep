@@ -160,8 +160,12 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   //  under an approved internal engagement, §64/§65). NETWORK_ASSESSMENT
   //  is kept as the baseline-equivalent profile name from Prompt 4.
   NETWORK_DISCOVERY: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", ...TAIL]),
-  NETWORK_BASELINE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
-  NETWORK_COMPREHENSIVE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
+  // Prompt 11 §84: network baseline/comprehensive scans may OPTIONALLY
+  // use a configured Greenbone/Nessus connector for vulnerability
+  // assessment. The stage is shaped in resolveTemplate below: connector
+  // slugs only, no simulation fallback — unconfigured means SKIPPED (§86).
+  NETWORK_BASELINE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  NETWORK_COMPREHENSIVE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   NETWORK_INTERNAL: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
   NETWORK_ASSESSMENT: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
   SOURCE_CODE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
@@ -226,6 +230,14 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
       }
       if (profile === "NETWORK_DISCOVERY" && def.type === "HOST_DISCOVERY") {
         def.adapterAllowlist = ["nmap"];
+      }
+      // Prompt 11 §84/§86: the network vulnerability stage belongs to the
+      // Greenbone/Nessus connectors only. No simulation fallback exists:
+      // with neither configured the stage is honestly SKIPPED.
+      if ((profile === "NETWORK_BASELINE" || profile === "NETWORK_COMPREHENSIVE") && def.type === "SAFE_VULNERABILITY_SCAN") {
+        def.capabilityGroups = [["NETWORK_VULNERABILITY_ASSESSMENT"]];
+        def.adapterAllowlist = ["greenbone-openvas", "nessus-professional"];
+        def.simulationFallback = false;
       }
       // §64/§65: internal host discovery may use local layer-2 adapters
       // — but ONLY there, and the executor still gates them on the

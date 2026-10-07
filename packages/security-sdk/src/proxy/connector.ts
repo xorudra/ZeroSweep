@@ -212,7 +212,9 @@ export abstract class BaseScannerConnector implements InteractiveScannerConnecto
     const supported = PRODUCT_CAPABILITIES[this.product];
     const declared = instance.declaredCapabilities.filter((c) => supported.includes(c));
     if (instance.deploymentType === "IMPORT_ONLY") {
-      return declared.filter((c) => c === "ISSUE_IMPORT" || c === "SITE_MAP_IMPORT" || c === "ENDPOINT_IMPORT");
+      // Prompt 11: vulnerability scanners contribute SCAN_RESULT_IMPORT
+      // in import-only mode — they never receive live traffic either.
+      return declared.filter((c) => c === "ISSUE_IMPORT" || c === "SITE_MAP_IMPORT" || c === "ENDPOINT_IMPORT" || c === "SCAN_RESULT_IMPORT");
     }
     return declared;
   }

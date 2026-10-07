@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, EnvSecretResolver, JwtToolAdapter, PROXY_SLUGS, clampDiscoveryBudget, computeRisk, expandCidrTargets,
+  CidrPolicyService, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, clampDiscoveryBudget, computeDueAt, computeRiskV2, enrichFinding, expandCidrTargets, DEFAULT_SLA_POLICY, planRetest,
 } from "@dsrclone/security-sdk";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
@@ -115,7 +115,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  org-wide ones. Resolved from trusted DB state only; the queue
    *  payload and the client never name an instance or an endpoint. */
   private async loadScannerBinding(toolSlug: string, workspaceId: string, organizationId: string): Promise<{ instanceId?: string } | undefined> {
-    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug)) return undefined;
+    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug) && !(VULN_SCANNER_SLUGS as readonly string[]).includes(toolSlug)) return undefined;
     const own = await prisma.scannerInstance.findFirst({
       where: { workspaceId, enabled: true, tool: { slug: toolSlug } },
       orderBy: { createdAt: "asc" },
@@ -617,6 +617,24 @@ export class PrismaWorkerStore implements ScanRunStore {
           cvssScore: c.cvssScore ?? primaryRow.cvssScore, remediation: c.remediation ?? primaryRow.remediation,
         },
       });
+      // Prompt 11 §59–§64: record one OBSERVATION per (source tool,
+      // source fingerprint) — the canonical finding accumulates scanner
+      // observations across scans instead of spawning duplicates (§62).
+      // Observed severities are the SOURCE severities: conflicts between
+      // scanners are preserved here, never averaged away (§63).
+      for (const member of memberRows) {
+        for (const e of member.evidence) {
+          await prisma.findingObservation.upsert({
+            where: { findingId_sourceTool_sourceFingerprint: { findingId: primaryRow.id, sourceTool: e.sourceTool, sourceFingerprint: e.fingerprint ?? member.fingerprint ?? member.id } },
+            create: {
+              findingId: primaryRow.id, workspaceId: member.workspaceId, scanId,
+              sourceTool: e.sourceTool, sourceFingerprint: e.fingerprint ?? member.fingerprint ?? member.id,
+              severity: member.severity, summary: e.summary ?? undefined,
+            },
+            update: { observedAt: new Date(), severity: member.severity, scanId },
+          });
+        }
+      }
       // Re-home duplicate evidence + mark duplicates (§20: never delete).
       for (const member of memberRows.slice(1)) {
         await prisma.findingEvidence.updateMany({ where: { findingId: member.id }, data: { findingId: primaryRow.id } });
@@ -636,17 +654,193 @@ export class PrismaWorkerStore implements ScanRunStore {
   async recalculateFindingRisk(scanId: string): Promise<{ updated: number } | null> {
     const rows = await prisma.finding.findMany({ where: { scanId, duplicateOfId: null }, include: { asset: { select: { criticality: true } } } });
     if (rows.length === 0) return null;
+    // Prompt 11 §35/§37: Risk Engine V2 — enrichment comes ONLY from the
+    // governed local intelligence tables; when they hold nothing for a
+    // CVE, the finding keeps its V1-derived score with NO intel factors
+    // (never invented, §87). The intelligence snapshot used is recorded
+    // on every finding (§31).
+    const cveIds = [...new Set(rows.map((r) => r.cve).filter((x): x is string => !!x))];
+    const dataset = new InMemoryIntelligenceDataset();
+    if (cveIds.length > 0) {
+      const [cves, epss, kevs] = await Promise.all([
+        prisma.cveRecord.findMany({ where: { cveId: { in: cveIds } } }),
+        prisma.epssRecord.findMany({ where: { cveId: { in: cveIds } }, orderBy: { date: "desc" } }),
+        prisma.kevRecord.findMany({ where: { cveId: { in: cveIds } } }),
+      ]);
+      for (const c of cves) {
+        const record: Parameters<InMemoryIntelligenceDataset["upsertCve"]>[0] = {
+          cveId: c.cveId, description: c.description, cweIds: c.cweIds,
+          references: (c.references as { label: string; url: string }[] | null) ?? [], source: c.source,
+        };
+        if (c.cvssScore != null) {
+          record.cvss = { baseScore: c.cvssScore, version: (c.cvssVersion ?? "3.1") as "3.1", source: c.source, ...(c.cvssVector ? { vector: c.cvssVector } : {}) } as typeof record.cvss;
+        }
+        dataset.upsertCve(record);
+      }
+      const seenEpss = new Set<string>();
+      for (const e of epss) {
+        if (seenEpss.has(e.cveId)) continue;
+        seenEpss.add(e.cveId);
+        dataset.upsertEpss({ cveId: e.cveId, score: e.score, percentile: e.percentile, date: e.date.toISOString().slice(0, 10), source: e.source });
+      }
+      for (const k of kevs) {
+        dataset.upsertKev({ cveId: k.cveId, source: k.source, ...(k.dateAdded ? { dateAdded: k.dateAdded.toISOString().slice(0, 10) } : {}), ...(k.vendorProject ? { vendorProject: k.vendorProject } : {}), ...(k.product ? { product: k.product } : {}), ...(k.requiredAction ? { requiredAction: k.requiredAction } : {}), ...(k.knownRansomwareUse ? { knownRansomwareUse: k.knownRansomwareUse } : {}) });
+      }
+    }
+    const scan = await prisma.scan.findUnique({ where: { id: scanId }, select: { workspaceId: true } });
+    const policyRow = scan ? await prisma.remediationSlaPolicy.findFirst({ where: { workspaceId: scan.workspaceId }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] }) : null;
+    const policy = policyRow
+      ? { id: policyRow.id, name: policyRow.name, rules: (policyRow.rules as { byPriority?: never; bySeverity?: never }) ?? {} }
+      : DEFAULT_SLA_POLICY;
     let updated = 0;
     for (const r of rows) {
-      const risk = computeRisk({
-        severity: r.severity as never, cvssScore: r.cvssScore ?? undefined, confidence: r.confidence,
+      const enrichment = enrichFinding({ cve: r.cve ?? undefined, cwe: r.cwe ?? undefined, cpe: r.cpe ?? undefined, cvssScore: r.cvssScore ?? undefined }, dataset);
+      const exploitRefs = await prisma.exploitReference.count({ where: { findingId: r.id } });
+      const risk = computeRiskV2({
+        severity: r.severity as never, cvssScore: enrichment.cvss.effectiveScore ?? r.cvssScore ?? undefined,
+        confidence: r.confidence,
         assetCriticality: (r.asset?.criticality ?? "UNSPECIFIED") as never,
         verificationStatus: r.verificationStatus as never,
+        enrichment, exploitReferenceExists: exploitRefs > 0 || r.exploitRefExists,
+        ageDays: Math.max(0, Math.floor((Date.now() - r.firstSeen.getTime()) / 86400_000)),
       });
-      await prisma.finding.update({ where: { id: r.id }, data: { riskScore: risk.score, riskBand: risk.band, riskExplanation: risk.explanation as never } });
+      const dueAt = r.dueAt ?? computeDueAt(policy as never, {
+        priority: risk.priority, severity: r.severity, createdAt: r.createdAt,
+        confirmedAt: r.lifecycleStatus !== "NEW" ? r.reviewedAt : undefined,
+      });
+      await prisma.finding.update({
+        where: { id: r.id },
+        data: {
+          riskScore: risk.score, riskBand: risk.band,
+          riskExplanation: [...risk.baseExplanation, ...risk.factors] as never,
+          priority: risk.priority, riskFactors: risk.factors as never, riskCalcVersion: risk.calcVersion,
+          intelSnapshot: enrichment.snapshotId as never,
+          epssScore: enrichment.epss?.score ?? null, epssPercentile: enrichment.epss?.percentile ?? null,
+          kevListed: enrichment.kevListed, intelCvssScore: enrichment.cvss.intelligenceScore ?? null,
+          exploitRefExists: exploitRefs > 0 || r.exploitRefExists,
+          ...(dueAt ? { dueAt } : {}),
+        },
+      });
       updated++;
     }
     return { updated };
+  }
+
+  // ---------- Prompt 11 retest support (§55–§58) ----------
+
+  /**
+   * Prepare a targeted retest execution: build a single-stage child scan
+   * (same assessment/target/scope as the original finding's scan) whose
+   * only stage re-runs the ORIGINAL tool. Execution then flows through
+   * the ordinary StageExecutor, so authorization, scope, policy and
+   * budget gates are re-evaluated by construction (§57).
+   */
+  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string } | null> {
+    const retest = await prisma.retestRequest.findUnique({ where: { id: retestId } });
+    if (!retest || retest.status !== "QUEUED") return null;
+    const finding = await prisma.finding.findUnique({ where: { id: retest.findingId } });
+    if (!finding) return null;
+    const graph = await loadScanGraph(finding.scanId);
+    if (!graph?.assessment) return null;
+    const plan = planRetest({
+      fingerprint: finding.fingerprint, host: finding.host, port: finding.port, endpoint: finding.endpoint,
+      cve: finding.cve, cwe: finding.cwe, sources: finding.sources,
+      checkReference: retest.checkReference, lifecycleStatus: "RETEST_PENDING",
+    });
+    if (!plan.ok) return null;
+    const child = await prisma.scan.create({
+      data: { workspaceId: finding.workspaceId, assessmentId: graph.assessmentId, requestedBy: retest.requestedBy, status: "QUEUED" },
+    });
+    const stagePlan = {
+      id: "SAFE_VULNERABILITY_SCAN", type: "SAFE_VULNERABILITY_SCAN", name: "Targeted Retest",
+      description: "Prompt 11 §56 targeted retest: re-run the original detection only.",
+      requiredCapabilities: [], dependencies: [], selectedAdapters: [{
+        slug: retest.sourceTool, adapterId: retest.sourceTool, name: retest.sourceTool,
+        riskLevel: "MODERATE", preference: "REQUIRED", simulation: false, reason: "original detection tool (§56)",
+      }],
+      weight: 100, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: true, status: "QUEUED",
+    };
+    const scopeParse = scopeRulesSchema.safeParse(graph.assessment.scope?.rules ?? {});
+    await prisma.scanPlan.create({
+      data: {
+        scanId: child.id, assessmentId: graph.assessmentId, profile: "CUSTOM",
+        plan: {
+          scanId: child.id, assessmentId: graph.assessmentId, targetId: graph.assessment.targetId,
+          workspaceId: finding.workspaceId, organizationId: graph.workspace.organizationId,
+          profile: "CUSTOM", targetType: graph.assessment.target.type, targetValue: graph.assessment.target.value,
+          targetHost: finding.host ?? "", scope: scopeParse.success ? scopeParse.data : {},
+          stages: [stagePlan], dependencies: {}, selectedTools: [retest.sourceTool],
+          policySnapshot: { targetVerified: graph.assessment.target.verified, assessmentApproved: graph.assessment.status === "APPROVED", executableSlugs: [retest.sourceTool], simulation: false },
+        } as never,
+        policySnapshot: { retest: true, retestId } as never,
+      },
+    });
+    await prisma.scanStage.create({
+      data: { scanId: child.id, type: "SAFE_VULNERABILITY_SCAN", status: "QUEUED", dependencies: [], weight: 100, metadata: { retestId } as never },
+    });
+    const execution = await this.ensureExecution(child.id, "SAFE_VULNERABILITY_SCAN", retest.sourceTool, 1);
+    await prisma.retestRequest.update({
+      where: { id: retestId },
+      data: { status: "RUNNING", scanId: child.id, startedAt: new Date() },
+    });
+    return { executionId: execution.id, scanId: child.id, canonicalFingerprint: plan.plan.canonicalFingerprint };
+  }
+
+  /** Canonical fingerprints the retest scan actually produced. */
+  async retestScanFingerprints(scanId: string): Promise<string[]> {
+    const rows = await prisma.finding.findMany({ where: { scanId }, select: { fingerprint: true } });
+    return rows.map((r) => r.fingerprint).filter((x): x is string => !!x);
+  }
+
+  /**
+   * Apply a retest outcome (§55/§58): RESOLVED closes the finding;
+   * REOPENED returns it to the remediation workflow (CONFIRMED — the
+   * issue demonstrably persists) with recurrence incremented; FAILED
+   * leaves the finding untouched in RETEST_PENDING (a retest that could
+   * not run is never a pass). Both evidence sets are preserved.
+   */
+  async completeRetest(retestId: string, outcome: "RESOLVED" | "REOPENED" | "FAILED", detail: string): Promise<void> {
+    const retest = await prisma.retestRequest.findUnique({ where: { id: retestId } });
+    if (!retest) return;
+    const finding = await prisma.finding.findUnique({ where: { id: retest.findingId } });
+    await prisma.retestRequest.update({
+      where: { id: retestId },
+      data: {
+        status: outcome === "FAILED" ? "FAILED" : "COMPLETED",
+        ...(outcome === "FAILED" ? {} : { result: outcome }),
+        completedAt: new Date(),
+        newEvidence: { detail, judgedAt: new Date().toISOString() } as never,
+      },
+    });
+    if (!finding || outcome === "FAILED") return;
+    if (outcome === "RESOLVED") {
+      await prisma.finding.update({
+        where: { id: finding.id },
+        data: { lifecycleStatus: "RESOLVED", status: "RESOLVED", resolvedAt: new Date() },
+      });
+    } else {
+      await prisma.finding.update({
+        where: { id: finding.id },
+        data: {
+          lifecycleStatus: "CONFIRMED", status: "CONFIRMED", reopenedAt: new Date(),
+          recurrenceCount: finding.recurrenceCount + 1, resolvedAt: null,
+        },
+      });
+    }
+    await prisma.findingHistory.create({
+      data: {
+        findingId: finding.id, workspaceId: finding.workspaceId,
+        event: outcome === "RESOLVED" ? "RESOLVED" : "REOPENED",
+        metadata: { retestId, via: "targeted-retest", detail } as never,
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: retest.requestedBy, organizationId: undefined, workspaceId: finding.workspaceId,
+        action: "RETEST_COMPLETED" as never, resourceType: "VULNERABILITY", resourceId: finding.id,
+        metadata: { retestId, outcome } as never,
+      },
+    });
   }
 
   // ---------- Prompt 9 platform-stage hooks ----------

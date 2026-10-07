@@ -241,6 +241,22 @@ enum FindingStatus {
   FALSE_POSITIVE
 }
 
+// Prompt 11 §47: the vulnerability-management lifecycle. This is the
+// operational workflow state (triage → remediation → retest → closure);
+// the Phase 7 FindingStatus remains the review verdict. The lifecycle
+// service keeps the two mapped consistently.
+enum VmLifecycleStatus {
+  NEW
+  TRIAGED
+  CONFIRMED
+  IN_PROGRESS
+  REMEDIATED
+  RETEST_PENDING
+  RESOLVED
+  FALSE_POSITIVE
+  ACCEPTED_RISK
+}
+
 enum FindingVerificationStatus {
   UNVERIFIED
   LIKELY
@@ -349,6 +365,19 @@ enum AuditAction {
   PROTECTED_TARGET_BLOCKED
   INTERNAL_SCAN_APPROVED
   RAW_PCAP_ACCESSED
+  // Prompt 11 §92: vulnerability management + intelligence audit actions.
+  VULNERABILITY_CREATED
+  VULNERABILITY_TRIAGED
+  VULNERABILITY_ASSIGNED
+  RISK_ACCEPTED
+  RISK_ACCEPTANCE_EXPIRED
+  FALSE_POSITIVE_MARKED
+  RETEST_REQUESTED
+  RETEST_COMPLETED
+  VULNERABILITY_RESOLVED
+  VULNERABILITY_REOPENED
+  SCANNER_REPORT_IMPORTED
+  INTELLIGENCE_UPDATED
 }
 
 enum NotificationType {
@@ -864,64 +893,95 @@ model ToolExecution {
 
 // ------------------------------- Findings -------------------------------
 model Finding {
-  id                 String                    @id @default(uuid())
-  workspaceId        String
-  scanId             String
-  assetId            String?
-  title              String
-  description        String
-  severity           Severity
-  confidence         Float                     @default(0.5)
-  cvssScore          Float?
-  cvssVector         String?
-  cve                String?
-  cwe                String?
-  owaspCategory      String?
-  endpoint           String?
-  host               String?
-  port               Int?
-  protocol           String?
-  parameter          String?
-  technicalImpact    String?
-  businessImpact     String?
-  remediation        String?
-  status             FindingStatus             @default(OPEN)
-  verificationStatus FindingVerificationStatus @default(UNVERIFIED)
-  duplicateOfId      String?
-  fingerprint        String?
+  id                      String                    @id @default(uuid())
+  workspaceId             String
+  scanId                  String
+  assetId                 String?
+  title                   String
+  description             String
+  severity                Severity
+  confidence              Float                     @default(0.5)
+  cvssScore               Float?
+  cvssVector              String?
+  cve                     String?
+  cwe                     String?
+  owaspCategory           String?
+  endpoint                String?
+  host                    String?
+  port                    Int?
+  protocol                String?
+  parameter               String?
+  technicalImpact         String?
+  businessImpact          String?
+  remediation             String?
+  status                  FindingStatus             @default(OPEN)
+  verificationStatus      FindingVerificationStatus @default(UNVERIFIED)
+  duplicateOfId           String?
+  fingerprint             String?
   // Prompt 7: curated vulnerability class + cross-tool correlation state.
-  vulnClass          String?
+  vulnClass               String?
   // Contributing tool slugs after correlation (§18/§21): one canonical
   // finding, many sources; duplicates point at it via duplicateOfId and
   // their evidence rows are re-homed here, never deleted (§20).
-  sources            String[]                  @default([])
+  sources                 String[]                  @default([])
   // Deterministic risk engine output (§34/§35): 0–100 score, band and the
   // explained inputs (JSON: base/confidence/criticality/exposure factors).
-  riskScore          Float?
-  riskBand           String?
-  riskExplanation    Json?
-  confidenceBand     String?
+  riskScore               Float?
+  riskBand                String?
+  riskExplanation         Json?
+  confidenceBand          String?
   // Manual review workflow (§32/§33): who reviewed, when, and why. The
   // original scanner evidence is never overwritten by a review.
-  reviewStatus       String?
-  reviewedBy         String?
-  reviewedAt         DateTime?
-  reviewNotes        String?
+  reviewStatus            String?
+  reviewedBy              String?
+  reviewedAt              DateTime?
+  reviewNotes             String?
   // Provenance (Prompt 4 §35): fixture findings are permanently flagged so
   // they can never be presented as real security results.
-  isMock             Boolean                   @default(false)
-  toolExecutionId    String?
-  firstSeen          DateTime                  @default(now())
-  lastSeen           DateTime                  @updatedAt
-  scan               Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  asset              Asset?                    @relation(fields: [assetId], references: [id])
-  duplicateOf        Finding?                  @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
-  duplicates         Finding[]                 @relation("FindingDuplicates")
-  evidence           FindingEvidence[]
-  references         FindingReference[]
-  history            FindingHistory[]
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
+  isMock                  Boolean                   @default(false)
+  toolExecutionId         String?
+  // Prompt 11: vulnerability-management layer (§47 lifecycle, §39/§40
+  // priority separate from severity, §41–§43 SLA, §44 ownership, §46 tags).
+  lifecycleStatus         VmLifecycleStatus         @default(NEW)
+  detectionKind           String                    @default("DETECTED_VULNERABILITY") // DETECTED_VULNERABILITY | POTENTIAL_EXPOSURE (§34)
+  cpe                     String?
+  priority                String? // P0..P4 remediation priority (§40)
+  riskFactors             Json? // Risk Engine V2 factor breakdown (§38)
+  riskCalcVersion         String?
+  intelSnapshot           Json? // intelligence snapshot/version used (§31)
+  intelCvssScore          Float? // intelligence CVSS — preserved separately from the scanner score (§32)
+  epssScore               Float?
+  epssPercentile          Float?
+  kevListed               Boolean                   @default(false)
+  exploitRefExists        Boolean                   @default(false)
+  assignedToId            String?
+  assignedToTeam          String?
+  assignedBy              String?
+  assignedAt              DateTime?
+  tags                    String[]                  @default([])
+  slaPolicyId             String?
+  dueAt                   DateTime?
+  resolvedAt              DateTime?
+  reopenedAt              DateTime?
+  recurrenceCount         Int                       @default(0)
+  riskAcceptanceReason    String?
+  riskAcceptedBy          String?
+  riskAcceptanceExpiresAt DateTime?
+  observations            FindingObservation[]
+  comments                FindingComment[]
+  exploitReferences       ExploitReference[]
+  retests                 RetestRequest[]
+  firstSeen               DateTime                  @default(now())
+  lastSeen                DateTime                  @updatedAt
+  scan                    Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  asset                   Asset?                    @relation(fields: [assetId], references: [id])
+  duplicateOf             Finding?                  @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates              Finding[]                 @relation("FindingDuplicates")
+  evidence                FindingEvidence[]
+  references              FindingReference[]
+  history                 FindingHistory[]
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 
   @@index([workspaceId])
   @@index([scanId])
@@ -933,6 +993,13 @@ model Finding {
   @@index([cwe])
   @@index([verificationStatus])
   @@index([createdAt])
+  @@index([workspaceId, lifecycleStatus])
+  @@index([workspaceId, priority])
+  @@index([assignedToId])
+  @@index([dueAt])
+  @@index([kevListed])
+  @@index([firstSeen])
+  @@index([lastSeen])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -983,6 +1050,216 @@ model FindingReference {
   createdAt DateTime @default(now())
 
   @@index([findingId])
+}
+
+// ------------------------------- Vulnerability intelligence (Prompt 11) -------------------------------
+// Global, shared reference data (§100): CVE/CWE/CPE/EPSS/KEV records are
+// public metadata cached locally (§87) — one record per identifier, never
+// one per finding (§23). Tenant-specific relationships live on Finding.
+
+model CveRecord {
+  id           String    @id @default(uuid())
+  cveId        String    @unique
+  description  String
+  publishedAt  DateTime?
+  modifiedAt   DateTime?
+  cvssScore    Float?
+  cvssVector   String?
+  cvssVersion  String? // kept distinct — vectors are never silently converted (§26)
+  cweIds       String[]  @default([])
+  references   Json      @default("[]")
+  source       String // e.g. NVD
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([cveId])
+}
+
+model CweRecord {
+  id           String    @id @default(uuid())
+  cweId        String    @unique // CWE-79
+  name         String
+  description  String
+  category     String?
+  references   Json      @default("[]")
+  source       String    @default("CURATED")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model CpeRecord {
+  id           String    @id @default(uuid())
+  canonical    String    @unique // cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*
+  part         String // a | h | o
+  vendor       String
+  product      String
+  version      String?
+  cveIds       String[]  @default([]) // governed CPE→CVE links (§33)
+  source       String    @default("SCANNER")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([vendor, product])
+}
+
+model EpssRecord {
+  id         String   @id @default(uuid())
+  cveId      String
+  score      Float // probability 0..1 — context, never severity (§27)
+  percentile Float
+  date       DateTime
+  source     String   @default("FIRST_EPSS")
+  createdAt  DateTime @default(now())
+
+  @@unique([cveId, date])
+  @@index([cveId])
+}
+
+model KevRecord {
+  id                 String    @id @default(uuid())
+  cveId              String    @unique
+  dateAdded          DateTime?
+  vendorProject      String?
+  product            String?
+  vulnerabilityName  String?
+  requiredAction     String?
+  dueDate            DateTime?
+  knownRansomwareUse String?
+  source             String    @default("CISA_KEV")
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+// Per-source sync bookkeeping (§30): incremental sync, checksum, retry /
+// backoff, last-success tracking. NEVER_SYNCED is the honest initial state.
+model IntelligenceSyncState {
+  id            String    @id @default(uuid())
+  source        String    @unique // NVD | FIRST_EPSS | CISA_KEV | CURATED_CWE
+  status        String    @default("NEVER_SYNCED") // NEVER_SYNCED | SYNCED | FAILED
+  lastAttemptAt DateTime?
+  lastSuccessAt DateTime?
+  checksum      String?
+  recordCount   Int       @default(0)
+  detail        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ------------------------------- Vulnerability management (Prompt 11) -------------------------------
+
+// A public exploit REFERENCE (§20): "a public exploit reference exists" —
+// never a claim that the target is exploitable (§21). Reference-only.
+model ExploitReference {
+  id               String   @id @default(uuid())
+  findingId        String
+  source           String // SEARCHSPLOIT
+  externalId       String // EDB-ID
+  title            String
+  reference        String
+  platform         String?
+  type             String?
+  verifiedMetadata Json?
+  finding          Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  @@unique([findingId, source, externalId])
+  @@index([findingId])
+}
+
+// One canonical vulnerability, many scan-specific observations (§62).
+model FindingObservation {
+  id                String   @id @default(uuid())
+  findingId         String
+  workspaceId       String
+  scanId            String?
+  sourceTool        String
+  sourceFingerprint String   @default("")
+  severity          String
+  summary           String?
+  observedAt        DateTime @default(now())
+  finding           Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@unique([findingId, sourceTool, sourceFingerprint])
+  @@index([findingId])
+  @@index([workspaceId])
+  @@index([scanId])
+}
+
+model FindingComment {
+  id          String   @id @default(uuid())
+  findingId   String
+  workspaceId String
+  authorId    String
+  text        String // sanitized at the API boundary (§45)
+  finding     Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([findingId])
+  @@index([workspaceId])
+}
+
+// Configurable SLA policy (§41) — rules map priority (or severity) to a
+// resolution window in hours. Never one hardcoded organization's policy.
+model RemediationSlaPolicy {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  rules       Json // { "P0": 24, "P1": 48, ... } hours, priority-first (§42)
+  isDefault   Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// A targeted retest request (§55–§58): reuses the ORIGINAL safe detection
+// mechanism, re-passes authorization/scope/policy/budget gates, and ends
+// RESOLVED or REOPENED with both evidence sets preserved.
+model RetestRequest {
+  id               String    @id @default(uuid())
+  findingId        String
+  workspaceId      String
+  requestedBy      String
+  status           String    @default("QUEUED") // QUEUED | RUNNING | COMPLETED | DENIED | FAILED
+  sourceTool       String
+  checkReference   String?
+  scanId           String?
+  result           String? // RESOLVED | REOPENED
+  previousEvidence Json?
+  newEvidence      Json?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  finding          Finding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+
+  @@index([findingId])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+// Scanner report import (§74–§76): preview first; out-of-scope data is
+// rejected or quarantined, never silently committed.
+model ScannerReportImport {
+  id          String   @id @default(uuid())
+  workspaceId String
+  scanner     String // nessus-professional | greenbone-openvas
+  scanId      String?
+  status      String   @default("PREVIEW") // PREVIEW | COMMITTED | REJECTED | QUARANTINED
+  fileName    String?
+  checksum    String
+  summary     Json     @default("{}")
+  warnings    Json     @default("[]")
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([status])
 }
 
 // ------------------------------- Reports, credentials, integrations -------------------------------
@@ -1088,6 +1365,10 @@ model ScannerInstance {
   credentialReference  String?
   declaredCapabilities Json                  @default("[]")
   detectedCapabilities Json                  @default("[]")
+  // Prompt 11 §7/§12: administrator-approved logical-profile → scanner
+  // policy/config mappings + last reported feed/plugin state. Ordinary
+  // users never see or submit raw scanner policy identifiers.
+  config               Json                  @default("{}")
   healthStatus         ScannerHealthStatus   @default(NOT_CONFIGURED)
   version              String?
   licenseState         String?

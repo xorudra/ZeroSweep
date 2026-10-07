@@ -25,6 +25,7 @@ import { AssetsModule } from "./modules/assets/assets.module";
 import { ScannersModule } from "./modules/scanners/scanners.module";
 import { ApiSecurityModule } from "./modules/api-security/api-security.module";
 import { NetworkModule } from "./modules/network/network.module";
+import { VulnerabilitiesModule } from "./modules/vulnerabilities/vulnerabilities.module";
 
 @Module({
   imports: [

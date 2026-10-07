@@ -19,6 +19,13 @@ export interface ScanOrchestrationJobData {
   workspaceId: string;
 }
 
+/** Prompt 11 §55: targeted retest job — IDs only, like every other job. */
+export interface RetestJobData {
+  kind: "RETEST_EXECUTION";
+  retestId: string;
+  workspaceId: string;
+}
+
 /** @deprecated Phase 2 placeholder shape, kept so old queued jobs fail safe. */
 export interface OrchestrationJobData {
   kind: "ASSESSMENT_ORCHESTRATION_PLACEHOLDER";

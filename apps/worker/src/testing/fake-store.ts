@@ -169,6 +169,9 @@ export class FakeStore implements ScanRunStore {
   /** Prompt 7 hooks mirroring the Prisma store's pipeline behaviour. */
   correlatedFindings: ProcessedResult["findings"] = [];
   findingStats: Record<string, unknown> | null = null;
+  /** Prompt 11 §59–§64 mirror: one observation per (canonical finding,
+   *  source tool) recorded at correlation time. */
+  observations: Array<{ findingFingerprint: string; sourceTool: string; severity: string }> = [];
 
   async summarizeFindings(): Promise<Record<string, unknown> | null> {
     if (this.findings.length === 0) return null;
@@ -182,6 +185,11 @@ export class FakeStore implements ScanRunStore {
     const { findings, stats } = correlateProcessedFindings(this.findings, { maxFindings: 1000 });
     this.correlatedFindings = findings;
     this.findingStats = stats as unknown as Record<string, unknown>;
+    for (const f of findings) {
+      for (const tool of f.sources) {
+        this.observations.push({ findingFingerprint: f.fingerprint, sourceTool: tool, severity: f.severity });
+      }
+    }
     return { canonical: findings.length, duplicates: stats.duplicatesMerged, stats: stats as unknown as Record<string, unknown> };
   }
 

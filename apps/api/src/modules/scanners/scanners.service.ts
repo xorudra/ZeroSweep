@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  BurpIssueParser, CaidoIssueParser, EnvEndpointResolver, EnvSecretResolver, HarImporter,
+  BurpIssueParser, CaidoIssueParser, EnvEndpointResolver, EnvSecretResolver, GreenboneConnector, HarImporter,
   HttpScannerTransport, ImportValidationError, InMemoryScannerInstanceProvider,
-  PRODUCT_CAPABILITIES, SLUG_PRODUCTS, ScopeMatcher, ZapIssueParser,
+  NessusConnector, PRODUCT_CAPABILITIES, SLUG_PRODUCTS, ScopeMatcher, ZapIssueParser,
   assertImportSize, correlateFindings, createProxyConnectors, evaluateApproval,
   extractParameterNames, hashScopeSnapshot, parseImportJson, validateEndpointReference,
   type ParsedProxy, type ScannerInstanceRecord, type ScannerProduct,
@@ -31,7 +31,7 @@ import { AuditService } from "../audit/audit.service";
 type InstanceRow = {
   id: string; organizationId: string; workspaceId: string | null; toolId: string;
   name: string; endpointReference: string; deploymentType: string; credentialReference: string | null;
-  declaredCapabilities: unknown; detectedCapabilities: unknown; healthStatus: string;
+  declaredCapabilities: unknown; detectedCapabilities: unknown; config?: unknown; healthStatus: string;
   version: string | null; licenseState: string | null; lastHealthCheckAt: Date | null;
   lastHealthDetail: string | null; enabled: boolean; createdBy: string;
   createdAt: Date; updatedAt: Date; tool?: { slug: string };
@@ -58,6 +58,9 @@ export function toInstanceRecord(row: InstanceRow, toolSlug: string): ScannerIns
     enabled: row.enabled,
     createdBy: row.createdBy,
     createdAt: row.createdAt.toISOString(),
+    // Prompt 11 §7/§12: administrator profile mappings + feed state ride
+    // along as instance config (metadata only — never a secret).
+    ...(row.config !== undefined ? { config: row.config } : {}),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -77,6 +80,8 @@ export function instanceView(row: InstanceRow, toolSlug: string) {
     credentialReference: row.credentialReference,
     declaredCapabilities: row.declaredCapabilities,
     detectedCapabilities: row.detectedCapabilities,
+    config: (row.config as Record<string, unknown> | undefined) ?? {},
+    feedStatus: ((row.config as { feedStatus?: string } | undefined)?.feedStatus) ?? null,
     healthStatus: row.healthStatus,
     version: row.version,
     licenseState: row.licenseState,
@@ -126,6 +131,7 @@ export class ScannersService {
     name: string; toolSlug: string; endpointReference: string;
     deploymentType: string; credentialReference?: string;
     declaredCapabilities?: string[]; workspaceId?: string;
+    config?: Record<string, unknown>;
   }) {
     const check = validateEndpointReference(data.endpointReference);
     if (!check.ok) {
@@ -153,6 +159,7 @@ export class ScannersService {
         credentialReference: data.credentialReference ?? null,
         declaredCapabilities: declared as never,
         detectedCapabilities: [] as never,
+        ...(data.config ? { config: data.config as never } : {}),
         createdBy: user.id,
       },
       include: { tool: { select: { slug: true } } },
@@ -168,6 +175,7 @@ export class ScannersService {
 
   async updateInstance(user: RequestUser, id: string, data: {
     name?: string; enabled?: boolean; credentialReference?: string | null; declaredCapabilities?: string[];
+    config?: Record<string, unknown>;
   }) {
     const existing = await this.findInstance(user, id);
     if (data.declaredCapabilities) {
@@ -183,6 +191,7 @@ export class ScannersService {
         ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
         ...(data.credentialReference !== undefined ? { credentialReference: data.credentialReference } : {}),
         ...(data.declaredCapabilities !== undefined ? { declaredCapabilities: data.declaredCapabilities as never } : {}),
+        ...(data.config !== undefined ? { config: data.config as never } : {}),
       },
       include: { tool: { select: { slug: true } } },
     });
@@ -221,6 +230,30 @@ export class ScannersService {
       secrets: new EnvSecretResolver(),
       transport: new HttpScannerTransport(),
     });
+    // Prompt 11 §3/§10: Greenbone/Nessus health comes from their own
+    // connectors (version + feed state; Nessus also surfaces license).
+    if (record.product === "GREENBONE" || record.product === "NESSUS") {
+      const transport = new HttpScannerTransport();
+      const vuln = record.product === "GREENBONE"
+        ? new GreenboneConnector(transport, new EnvEndpointResolver(), new EnvSecretResolver())
+        : new NessusConnector(transport, new EnvEndpointResolver(), new EnvSecretResolver());
+      const vHealth = await vuln.healthCheck(record);
+      const detected = (PRODUCT_CAPABILITIES[record.product] as string[]).filter((c) => record.declaredCapabilities.includes(c as never));
+      const updatedV = await this.prisma.scannerInstance.update({
+        where: { id },
+        data: {
+          healthStatus: vHealth.status as never,
+          version: vHealth.version ?? null,
+          licenseState: vHealth.licenseState ?? record.licenseState ?? null,
+          detectedCapabilities: detected as never,
+          lastHealthCheckAt: new Date(),
+          lastHealthDetail: vHealth.detail ?? null,
+        },
+        include: { tool: { select: { slug: true } } },
+      });
+      const rv = updatedV as unknown as InstanceRow;
+      return { ...instanceView(rv, rv.tool?.slug ?? toolSlug), latencyMs: vHealth.latencyMs ?? null };
+    }
     const connector = record.product === "ZAP" ? connectors.zap
       : record.product === "BURP" ? connectors.burp
       : record.product === "MITMPROXY" ? connectors.mitmproxy

@@ -13,7 +13,7 @@ import type { Capability } from "../adapter/adapter.types";
  * at execution time through a SecretResolver.
  */
 
-export const SCANNER_PRODUCTS = ["ZAP", "BURP", "CAIDO", "MITMPROXY"] as const;
+export const SCANNER_PRODUCTS = ["ZAP", "BURP", "CAIDO", "MITMPROXY", "GREENBONE", "NESSUS"] as const;
 export type ScannerProduct = (typeof SCANNER_PRODUCTS)[number];
 
 /** Capabilities a connector product can EVER support (§4/§10/§13). What a
@@ -27,6 +27,13 @@ export const PRODUCT_CAPABILITIES: Record<ScannerProduct, Capability[]> = {
   // flow capture, API endpoint discovery and WebSocket inventory. It
   // produces observations and inventory, not vulnerability findings.
   MITMPROXY: ["PROXY", "HTTP_TRAFFIC_CAPTURE", "API_DISCOVERY", "WEBSOCKET_DISCOVERY", "ENDPOINT_IMPORT", "REQUEST_COLLECTION"],
+  // Prompt 11 §3: Greenbone/OpenVAS — administrator-managed network
+  // vulnerability scanner. Import + assessment only; no proxy semantics.
+  GREENBONE: ["VULNERABILITY_SCANNING", "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION"],
+  // Prompt 11 §10: Nessus Professional — COMMERCIAL / ADMIN_PROVIDED /
+  // LICENSE_REQUIRED. Same connector ceiling; license state is read from
+  // the deployment, never assumed (§11/§85).
+  NESSUS: ["VULNERABILITY_SCANNING", "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION"],
 };
 
 export const PRODUCT_SLUGS: Record<ScannerProduct, string> = {
@@ -34,12 +41,16 @@ export const PRODUCT_SLUGS: Record<ScannerProduct, string> = {
   BURP: "burp-suite-professional",
   CAIDO: "caido",
   MITMPROXY: "mitmproxy",
+  GREENBONE: "greenbone-openvas",
+  NESSUS: "nessus-professional",
 };
 export const SLUG_PRODUCTS: Record<string, ScannerProduct> = {
   "owasp-zap": "ZAP",
   "burp-suite-professional": "BURP",
   caido: "CAIDO",
   mitmproxy: "MITMPROXY",
+  "greenbone-openvas": "GREENBONE",
+  "nessus-professional": "NESSUS",
 };
 
 /** How the scanner deployment is provided (§9/§55). IMPORT_ONLY instances

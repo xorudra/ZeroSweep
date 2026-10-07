@@ -45,6 +45,11 @@ export const CAPABILITIES = [
   "HOST_DISCOVERY", "VERSION_DETECTION", "OS_HINTING", "SAFE_NETWORK_CHECKS",
   "HIGH_SPEED_PORT_DISCOVERY", "LOCAL_NETWORK_DISCOVERY", "UDP_SCANNING",
   "PACKET_CAPTURE", "PACKET_ANALYSIS",
+  // Prompt 11: vulnerability-scanner connector + intelligence capabilities.
+  // VULNERABILITY_REFERENCE_LOOKUP (SearchSploit) is reference-only — there
+  // is deliberately NO exploit-execution capability anywhere (§17/§18/§103).
+  "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION",
+  "VULNERABILITY_REFERENCE_LOOKUP",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

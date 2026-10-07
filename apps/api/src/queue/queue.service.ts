@@ -72,8 +72,31 @@ export class QueueService implements OnModuleDestroy {
     }
   }
 
+  private retestQueue?: Queue;
+
+  /** Prompt 11 §55: enqueue a targeted retest (IDs only). Failure to
+   *  enqueue is logged and reported — the RetestRequest row stays QUEUED
+   *  in Postgres and can be re-dispatched; it is never silently dropped. */
+  async enqueueRetest(data: { retestId: string; workspaceId: string }): Promise<boolean> {
+    try {
+      if (!this.connection) this.ensure();
+      if (!this.retestQueue) {
+        this.retestQueue = new Queue(QUEUES.RETEST_EXECUTION, { connection: this.connection! });
+      }
+      await this.retestQueue.add(
+        "retest-execution",
+        { kind: "RETEST_EXECUTION", retestId: data.retestId, workspaceId: data.workspaceId },
+        { jobId: `retest-${data.retestId}`, removeOnComplete: 100, removeOnFail: 100 },
+      );
+      return true;
+    } catch (e) {
+      logger.warn("could not enqueue retest", { error: e instanceof Error ? e.message : "unknown" });
+      return false;
+    }
+  }
+
   async onModuleDestroy(): Promise<void> {
-    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close()]);
+    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close(), this.retestQueue?.close()]);
     this.connection?.disconnect();
   }
 }

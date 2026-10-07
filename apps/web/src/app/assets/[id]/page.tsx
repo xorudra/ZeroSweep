@@ -38,6 +38,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+interface AssetRisk {
+  openCount: number; worstRiskScore: number; kevCount: number; overdueCount: number;
+  findings: { id: string; title: string; severity: string; priority?: string | null; lifecycleStatus: string }[];
+}
+
 interface WebSurfaceSummary {
   totalEndpoints: number;
   apiEndpoints: number;
@@ -54,6 +59,7 @@ export default function Page() {
   const params = useParams<{ id: string }>();
   const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; asset: AssetDetail }>({ kind: "loading" });
   const [surface, setSurface] = useState<WebSurfaceSummary | null>(null);
+  const [risk, setRisk] = useState<AssetRisk | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +68,8 @@ export default function Page() {
       .catch((e: unknown) => { if (!cancelled) setState({ kind: "error", message: e instanceof ApiError ? e.message : "Could not reach the API." }); });
     // Web-surface summary is best-effort (Prompt 6 §55).
     api.assetWebSurface(params.id).then((s) => { if (!cancelled) setSurface(s as WebSurfaceSummary); }).catch(() => undefined);
+    // Vulnerability risk summary (Prompt 11 §70) — best-effort like the surface summary.
+    apiFetch<AssetRisk>(`/vulnerabilities/by-asset/${params.id}/risk`).then((r) => { if (!cancelled) setRisk(r); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [params.id]);
 
@@ -121,6 +129,26 @@ export default function Page() {
             ))}
           </div>
         </Card>
+
+        {risk && (
+          <Card title="Vulnerability Risk (Prompt 11 §70)">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <Field label="Open vulnerabilities">{risk.openCount}</Field>
+              <Field label="Worst risk score">{risk.worstRiskScore}</Field>
+              <Field label="KEV listed">{risk.kevCount}</Field>
+              <Field label="Overdue SLA">{risk.overdueCount}</Field>
+            </div>
+            <div className="mt-3 space-y-1">
+              {risk.findings.slice(0, 10).map((f) => (
+                <p key={f.id} className="text-sm text-slate-200">
+                  <Link href={`/vulnerabilities/${f.id}`} className="text-sky-300 hover:underline">{f.title}</Link>
+                  <span className="text-slate-500"> · {f.severity} · {f.priority ?? "unprioritized"} · {f.lifecycleStatus}</span>
+                </p>
+              ))}
+              {risk.findings.length === 0 && <p className="text-sm text-slate-500">No vulnerabilities recorded for this asset. Canonical findings only — duplicates are observations and are never double-counted.</p>}
+            </div>
+          </Card>
+        )}
 
         {surface && surface.totalEndpoints > 0 && (
           <Card title="Web Surface (Prompt 6)">

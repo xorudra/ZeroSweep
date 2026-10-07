@@ -17,6 +17,8 @@ interface InstanceView {
   id: string; toolSlug: string; name: string; endpointReference: string;
   deploymentType: string; credentialReference?: string | null;
   declaredCapabilities?: string[]; detectedCapabilities?: string[];
+  config?: { profiles?: Record<string, string>; feedStatus?: string };
+  feedStatus?: string | null;
   healthStatus: string; version?: string | null; licenseState?: string | null;
   lastHealthCheckAt?: string | null; lastHealthDetail?: string | null; enabled: boolean;
 }
@@ -34,6 +36,11 @@ const PRODUCTS = [
   { slug: "owasp-zap", name: "OWASP ZAP", capabilities: ["PROXY", "PASSIVE_ANALYSIS", "CONTEXT_MANAGEMENT", "ENDPOINT_IMPORT", "ISSUE_IMPORT", "WEB_CRAWLING", "ENDPOINT_DISCOVERY", "VULNERABILITY_SCANNING", "ACTIVE_WEB_SCANNING"] },
   { slug: "burp-suite-professional", name: "Burp Suite Professional", capabilities: ["PROXY", "PASSIVE_ANALYSIS", "SITE_MAP_IMPORT", "ISSUE_IMPORT", "WEB_CRAWLING", "ACTIVE_WEB_SCANNING"] },
   { slug: "caido", name: "Caido", capabilities: ["PROXY", "TRAFFIC_ANALYSIS", "ENDPOINT_DISCOVERY", "REQUEST_COLLECTION", "ISSUE_IMPORT"] },
+  // Prompt 11 §3/§10: vulnerability scanners. Nessus is COMMERCIAL /
+  // ADMIN_PROVIDED / LICENSE_REQUIRED — registering an instance never
+  // implies a license exists; health reports what the deployment says.
+  { slug: "greenbone-openvas", name: "Greenbone / OpenVAS", capabilities: ["VULNERABILITY_SCANNING", "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION"] },
+  { slug: "nessus-professional", name: "Nessus Professional (commercial, admin-provided)", capabilities: ["VULNERABILITY_SCANNING", "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION"] },
 ];
 
 const inputCls = "w-full rounded bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none ring-slate-700 focus:ring-1";
@@ -104,6 +111,11 @@ export default function ScannerSettingsPage() {
                   <p className="mt-1 text-xs text-slate-400">
                     Endpoint reference: {inst.endpointReference} · Credential: {inst.credentialReference ? `reference “${inst.credentialReference}”` : "none"}
                     {inst.version ? ` · Version ${inst.version}` : ""}{inst.licenseState ? ` · License: ${inst.licenseState}` : ""}
+                    {(inst.toolSlug === "greenbone-openvas" || inst.toolSlug === "nessus-professional") ? (
+                      <span className="block text-xs text-slate-500">
+                        Feed: {inst.feedStatus ?? inst.config?.feedStatus ?? "not reported"} · Logical profiles: {inst.config?.profiles ? Object.entries(inst.config.profiles).map(([k, v]) => `${k} → ${v}`).join(", ") : "none mapped — an administrator maps logical profiles to approved scanner policies (§7/§12); users never submit raw policy ids"}
+                      </span>
+                    ) : null}
                     {inst.lastHealthCheckAt ? ` · Last check ${new Date(inst.lastHealthCheckAt).toLocaleString()}` : " · Never health-checked"}
                   </p>
                   {inst.lastHealthDetail ? <p className="mt-1 text-xs text-slate-500">{inst.lastHealthDetail}</p> : null}

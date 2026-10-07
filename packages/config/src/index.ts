@@ -36,4 +36,6 @@ export const QUEUES = {
   RESULT_PROCESSING: "result-processing",
   CORRELATION: "correlation",
   RISK_ANALYSIS: "risk-analysis",
+  // Prompt 11 §55: targeted vulnerability retests (IDs only payloads).
+  RETEST_EXECUTION: "retest-execution",
 } as const;

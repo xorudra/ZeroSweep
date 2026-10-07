@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 10 complete (Prompts 1–10).** Production monorepo, backend and
+> **Status — Phase 11 complete (Prompts 1–11).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -184,10 +184,37 @@ and the AI health endpoint.
 8. ✅ OWASP ZAP, Burp Suite & Caido integration layer (Prompt 8)
 9. ✅ API security testing & protection assessment (Prompt 9)
 10. ✅ Network VAPT engine (Prompt 10)
-11. Vulnerability management & intelligence 20. Unified reporting & dashboard
+11. ✅ Vulnerability management & intelligence (Prompt 11) 20. Unified reporting & dashboard
 12. API/cloud/container/source-code modules 13. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
+
+- **2026-10-07 — Prompt 11: Vulnerability Management & Intelligence.**
+  The management layer over findings: a full lifecycle state machine
+  (NEW → TRIAGED → CONFIRMED → IN_PROGRESS → REMEDIATED → RETEST_PENDING
+  → RESOLVED, plus FALSE_POSITIVE / ACCEPTED_RISK with mandatory reasons,
+  approver + expiry for risk acceptance, and reopen-before-progress for
+  false positives), assignment, sanitized comments, tenant-scoped tags,
+  bulk actions and CSV/JSON export with formula-injection protection.
+  Intelligence foundation: governed LOCAL CVE/CWE/CPE/EPSS/KEV dataset
+  with pure fixture-tested providers (NVD / FIRST EPSS / CISA KEV), an
+  incremental checksum sync engine with injected fetching (no fetcher
+  wired in this build — sync states honestly read NEVER_SYNCED/FAILED,
+  and enrichment attaches NOTHING when the dataset is empty), CVSS
+  source-trust (§32), CPE → POTENTIAL_EXPOSURE correlation, and Risk
+  Engine V2 (EPSS/KEV/exploit-reference factors, full explanations,
+  P0–P4 remediation priority separate from severity, intelligence
+  snapshot per calculation). Greenbone/OpenVAS + Nessus Professional
+  connectors (administrator-mapped logical profiles, scope-derived
+  targets only, hostile-input-hardened parsers, preview→commit report
+  imports with scope quarantine), SearchSploit as REFERENCE LOOKUP ONLY
+  (never exploit execution), SLA policies as data + computation,
+  deterministic remediation grouping, FindingObservation records
+  (one canonical vulnerability, many scanner observations), targeted
+  retests executed by the worker through the same gates, /vulnerabilities
+  + /remediation + CVE detail GUIs. No live feed was fetched and no
+  scanner was contacted: everything is verified on recorded fixtures.
+
 
 - **2026-10-07 — Prompt 10: Network VAPT Engine.** Eight network
   adapters (Nmap, Naabu, RustScan, Masscan, Netdiscover, arp-scan,

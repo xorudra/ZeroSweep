@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  API_SLUGS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
+  API_SLUGS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
   apiHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
@@ -20,7 +20,7 @@ import { ScanEventsService } from "./scan-events.service";
  *  adapters. Real adapters are selected only when their health probe passes
  *  on this host; otherwise the stage falls back to the labelled simulation
  *  adapter (Prompt 5 §39/§56) — never to a fake "real" run. */
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS];
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS];
 
 export function hostOf(value: string): string {
   try {

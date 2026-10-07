@@ -1,6 +1,6 @@
 import {
-  API_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
-  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, type AuthorizationContext,
+  API_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, isVulnScannerAdapter, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS] as const;
 
 /** Slugs whose execution requires the worker to hold the local layer-2
  *  capability (Prompt 10 §65) — meaningless and denied anywhere else. */
@@ -173,14 +173,15 @@ export class StageExecutor {
       // admin-registered instance resolved for THIS workspace by the
       // store. No instance → NOT_CONFIGURED → TOOL_UNAVAILABLE denial;
       // the DAG degrades the stage instead of inventing scanner output.
-      const isConnector = isScannerConnectorAdapter(adapter);
-      // Defense in depth (§37/§38): connectors execute ONLY in the
-      // passive stage in this phase — never as crawl/vuln-stage tools,
-      // and the ACTIVE stage's execution lands behind the approval gate
-      // in a later phase.
-      if (isConnector && ctx.stageId !== "PASSIVE_SECURITY_ANALYSIS") {
+      const isVulnScanner = isVulnScannerAdapter(adapter);
+      const isConnector = isScannerConnectorAdapter(adapter) || isVulnScanner;
+      // Defense in depth (§37/§38): proxy connectors execute ONLY in the
+      // passive stage; Prompt 11 vulnerability scanners execute ONLY in
+      // the network profiles' SAFE_VULNERABILITY_SCAN stage (§84) — and
+      // the ACTIVE stage stays approval-gated in a later phase.
+      if (isConnector && ctx.stageId !== "PASSIVE_SECURITY_ANALYSIS" && !(isVulnScanner && ctx.stageId === "SAFE_VULNERABILITY_SCAN")) {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
-        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: scanner connectors execute only in PASSIVE_SECURITY_ANALYSIS in this phase`);
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: scanner connectors execute only in their governed stage (proxy: PASSIVE_SECURITY_ANALYSIS; vulnerability scanners: SAFE_VULNERABILITY_SCAN)`);
         return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
       }
       if (isConnector && !ctx.scanner?.instanceId) {
@@ -310,6 +311,15 @@ export class StageExecutor {
         if (declared.has("scopeAllowedPorts")) config.scopeAllowedPorts = ctx.scopeRules.allowedPorts;
         if (declared.has("scopeAllowedPaths")) config.scopeAllowedPaths = ctx.scopeRules.allowedPaths;
         if (declared.has("scopeExcludedPaths")) config.scopeExcludedPaths = ctx.scopeRules.excludedPaths;
+        // Prompt 11 §6/§12/§84: vulnerability scanners also receive the
+        // scope CIDRs and the LOGICAL profile derived from the scan
+        // profile — never a scanner policy id (admin config maps it).
+        if (declared.has("scopeIncludeCidrs")) config.scopeIncludeCidrs = ctx.scopeRules.includeCidrs;
+        if (declared.has("logicalProfile")) {
+          config.logicalProfile = ctx.adapterSlug === "nessus-professional"
+            ? (ctx.profile === "NETWORK_COMPREHENSIVE" ? "NETWORK_COMPREHENSIVE" : "NETWORK_BASELINE")
+            : (ctx.profile === "NETWORK_COMPREHENSIVE" ? "COMPREHENSIVE" : "BASELINE");
+        }
         await emit("passive_analysis.started", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
       }
       // Prompt 10 derived configuration — worker-computed from the

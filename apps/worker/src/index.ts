@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -9,6 +9,8 @@ import type { OrchestrationJobData, PlaceholderJobData, ScanOrchestrationJobData
 import { StageExecutor, type StageJobData } from "./executors/stage-executor";
 import { PrismaWorkerStore } from "./store/prisma-store";
 import { prismaScannerDeps } from "./store/scanner-deps";
+import { RetestRunner } from "./executors/retest-runner";
+import type { RetestJobData } from "./jobs";
 import { DagRunner } from "./consumers/dag-runner";
 import { createBullmqStageDispatcher } from "./consumers/bullmq-dispatcher";
 import { makeWorkerId, privilegedCapabilitiesFromEnv, registrationRecord } from "./heartbeat/heartbeat";
@@ -39,6 +41,10 @@ registerVulnAdapters(registry);
 // admin-registered ScannerInstance rows. With none registered they report
 // NOT_CONFIGURED and the passive stage is honestly skipped (§66).
 registerProxyAdapters(registry, prismaScannerDeps());
+// Prompt 11 §84: vulnerability scanner connectors (Greenbone / Nessus)
+// for the network profiles' optional vulnerability stage. Unconfigured
+// they report NOT_CONFIGURED and the stage is honestly skipped (§85/§86).
+registerVulnScannerAdapters(registry, prismaScannerDeps());
 // Prompt 9: API security adapters (Kiterunner / Schemathesis / InQL /
 // GraphQLmap + the jwt_tool inspection adapter). Binaries absent from
 // the worker host report UNAVAILABLE and are never executed (§2).
@@ -53,6 +59,12 @@ const executor = new StageExecutor(registry, store, undefined, {
   workerCapabilities: privilegedCapabilitiesFromEnv(),
 });
 const runner = new DagRunner(store, executor);
+const retestRunner = new RetestRunner(store, executor);
+
+async function handleRetest(job: Job<RetestJobData>): Promise<{ ok: true; retestId: string; status: string; outcome?: string }> {
+  const result = await retestRunner.runRetest(job.data.retestId);
+  return { ok: true, retestId: job.data.retestId, ...result };
+}
 const workerId = makeWorkerId();
 let activeJobs = 0;
 let draining = false;
@@ -112,6 +124,7 @@ const workers = [
   new Worker(QUEUES.SCAN_ORCHESTRATION, handleScanOrchestration, { connection }),
   new Worker(QUEUES.ORCHESTRATION, handleScanOrchestration, { connection }),
   new Worker(QUEUES.STAGE_EXECUTION, handleStageExecution, { connection, concurrency: 4 }),
+  new Worker(QUEUES.RETEST_EXECUTION, handleRetest, { connection, concurrency: 2 }),
 ];
 for (const w of workers) {
   w.on("failed", (job, err) => logger.error("job failed", { jobId: job?.id, queue: w.name, error: err.message }));

@@ -122,7 +122,16 @@ export const ENDPOINT_REFERENCE_RE = /^[A-Z][A-Z0-9_:-]{2,63}$/;
 const endpointReferenceSchema = z.string().regex(ENDPOINT_REFERENCE_RE, "endpointReference must be an opaque reference name (e.g. ZAP_DAEMON_PROD) — URLs, hosts and IPs are never accepted");
 const credentialReferenceSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9_.:-]+$/, "credentialReference is a reference NAME, never a secret value");
 
-export const SCANNER_TOOL_SLUGS = ["owasp-zap", "burp-suite-professional", "caido"] as const;
+export const SCANNER_TOOL_SLUGS = ["owasp-zap", "burp-suite-professional", "caido", "mitmproxy", "greenbone-openvas", "nessus-professional"] as const;
+
+const scannerInstanceConfigSchema = z.object({
+  // Prompt 11 §7/§12: logical profile → administrator-approved scanner
+  // policy/config id mappings + last reported feed state. Values are
+  // opaque scanner-side identifiers held as admin metadata only.
+  profiles: z.record(z.string().min(1).max(120)).optional(),
+  feedStatus: z.string().max(64).optional(),
+  approvedInternal: z.boolean().optional(),
+}).strict();
 
 export const createScannerInstanceSchema = z.object({
   name: z.string().min(1).max(120),
@@ -132,6 +141,7 @@ export const createScannerInstanceSchema = z.object({
   credentialReference: credentialReferenceSchema.optional(),
   declaredCapabilities: z.array(z.string().min(1).max(64)).max(24).optional(),
   workspaceId: z.string().uuid().optional(),
+  config: scannerInstanceConfigSchema.optional(),
 }).strict();
 export type CreateScannerInstanceInput = z.infer<typeof createScannerInstanceSchema>;
 
@@ -140,6 +150,7 @@ export const updateScannerInstanceSchema = z.object({
   enabled: z.boolean().optional(),
   credentialReference: credentialReferenceSchema.nullable().optional(),
   declaredCapabilities: z.array(z.string().min(1).max(64)).max(24).optional(),
+  config: scannerInstanceConfigSchema.optional(),
 }).strict();
 export type UpdateScannerInstanceInput = z.infer<typeof updateScannerInstanceSchema>;
 

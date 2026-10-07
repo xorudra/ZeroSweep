@@ -16,12 +16,13 @@ import {
 
 const SLUG_BY_PRODUCT: Record<ScannerProduct, string> = {
   ZAP: "owasp-zap", BURP: "burp-suite-professional", CAIDO: "caido", MITMPROXY: "mitmproxy",
+  GREENBONE: "greenbone-openvas", NESSUS: "nessus-professional",
 };
 
 type InstanceRow = {
   id: string; organizationId: string; workspaceId: string | null; name: string;
   endpointReference: string; deploymentType: string; credentialReference: string | null;
-  declaredCapabilities: unknown; detectedCapabilities: unknown; healthStatus: string;
+  declaredCapabilities: unknown; detectedCapabilities: unknown; config?: unknown; healthStatus: string;
   version: string | null; licenseState: string | null; enabled: boolean; createdBy: string;
   createdAt: Date; updatedAt: Date; tool: { slug: string };
 };
@@ -44,6 +45,9 @@ function toRecord(row: InstanceRow): ScannerInstanceRecord {
     ...(row.version ? { version: row.version } : {}),
     ...(row.licenseState ? { licenseState: row.licenseState } : {}),
     enabled: row.enabled,
+    // Prompt 11 §7/§12: admin profile mappings + feed state for the
+    // Greenbone/Nessus connectors (metadata only, never a secret).
+    ...(row.config !== undefined ? { config: row.config } : {}),
     createdBy: row.createdBy,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
