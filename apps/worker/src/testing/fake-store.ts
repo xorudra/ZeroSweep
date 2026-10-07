@@ -1,4 +1,4 @@
-import { JwtToolAdapter, MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { CidrPolicyService, JwtToolAdapter, MockSecurityAdapter, ToolRegistry, expandCidrTargets } from "@dsrclone/security-sdk";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
 import type { ScopeRules } from "@dsrclone/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
@@ -26,7 +26,11 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS";
+  /** Prompt 10: network target state mirroring the Prisma store — the
+   *  CIDR/IP target, its scope, the store-resolved Masscan approval and
+   *  the authorized capture reference for tshark analysis. */
+  networkTarget?: { targetValue: string; targetHost: string; scope: ScopeRules; masscanApproved?: boolean; captureRef?: string };
   /** Prompt 8: scanner bindings per connector slug, mirroring the Prisma
    *  store's workspace resolution. Absent slug = NOT_CONFIGURED. */
   scannerBySlug?: Record<string, { instanceId: string; sessionProfileId?: string }>;
@@ -63,6 +67,9 @@ export class FakeStore implements ScanRunStore {
   apiServices: ProcessedResult["apiServices"] = [];
   graphqlServices: ProcessedResult["graphqlServices"] = [];
   jwtProfiles: ProcessedResult["jwtProfiles"] = [];
+  packetCaptures: ProcessedResult["packetCaptures"] = [];
+  networkChunks: Array<{ chunkId: string; rangeStart: string; rangeEnd: string; hostCount: number; status: string }> = [];
+  networkTarget: FakeStoreOptions["networkTarget"];
   apiFixtures: NonNullable<FakeStoreOptions["apiFixtures"]> = {};
   scannerBySlug: Record<string, { instanceId: string; sessionProfileId?: string }> = {};
   deadLetters: unknown[] = [];
@@ -71,19 +78,21 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
+    this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
       scanId: "scan-1", assessmentId: "a-1", targetId: "t-1", workspaceId: "ws-1", organizationId: "org-1",
-      profile, targetType: opts.targetType ?? "DOMAIN", targetValue: "example.com", targetHost: "example.com",
-      scope: TEST_SCOPE, targetVerified: true, assessmentApproved: true, registry,
+      profile, targetType: opts.targetType ?? "DOMAIN",
+      targetValue: opts.networkTarget?.targetValue ?? "example.com", targetHost: opts.networkTarget?.targetHost ?? "example.com",
+      scope: opts.networkTarget?.scope ?? TEST_SCOPE, targetVerified: true, assessmentApproved: true, registry,
       selection: {
         executableSlugs: opts.executableSlugs ?? ["mock", "local-echo"],
         ...(opts.healthBySlug ? { healthBySlug: opts.healthBySlug } : {}),
@@ -95,7 +104,7 @@ export class FakeStore implements ScanRunStore {
 
   private gate() {
     return {
-      auth: TEST_AUTH, targetHost: "example.com", scopeRules: TEST_SCOPE, targetExists: true,
+      auth: TEST_AUTH, targetHost: this.networkTarget?.targetHost ?? "example.com", scopeRules: this.networkTarget?.scope ?? TEST_SCOPE, targetExists: true,
       targetWorkspaceId: "ws-1", workspaceId: "ws-1",
       targetVerified: this.verified, assessmentApproved: true, scopeValid: true,
     };
@@ -128,12 +137,14 @@ export class FakeStore implements ScanRunStore {
     return {
       executionId, scanId: "scan-1", stageId: exec.stageType, workspaceId: "ws-1", organizationId: "org-1",
       adapterSlug: exec.adapterSlug, status: exec.status, attempt: 1, timeoutSeconds: planned.timeoutSeconds,
-      targetType: this.targetType, targetValue: "example.com", targetHost: "example.com", scopeRules: TEST_SCOPE,
+      targetType: this.targetType, targetValue: this.networkTarget?.targetValue ?? "example.com", targetHost: this.networkTarget?.targetHost ?? "example.com", scopeRules: this.networkTarget?.scope ?? TEST_SCOPE,
       auth: TEST_AUTH, targetExists: true, targetWorkspaceId: "ws-1",
       targetVerified: this.verified, assessmentApproved: true, scopeValid: true,
       networkCapable: planned.networkCapable,
       profile: this.plan.profile,
       assessmentId: "a-1",
+      masscanApproved: this.networkTarget?.masscanApproved,
+      captureRef: this.networkTarget?.captureRef,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
@@ -185,11 +196,38 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number }> {
-    this.assets.push(...processed.assets);
+  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number }> {
+    // Assets merge by host (one canonical row, provenance unioned) —
+    // mirrors the Prisma store's upsert behaviour.
+    for (const a of processed.assets) {
+      const existing = this.assets.find((x) => x.host === a.host);
+      if (existing) {
+        existing.sources = [...new Set([...existing.sources, ...a.sources])];
+        existing.ip ??= a.ip;
+        existing.osHint ??= a.osHint;
+        existing.osConfidence ??= a.osConfidence;
+      } else this.assets.push(a);
+    }
     this.findings.push(...processed.findings);
     this.endpoints.push(...processed.endpoints);
-    this.services.push(...processed.services);
+    // Services merge by (host, port, protocol) with PortResultAggregator
+    // semantics (§49): provenance unioned, richer evidence gap-filled,
+    // OPEN outranks CLOSED — mirrors the Prisma store's merge upsert.
+    const stateRank: Record<string, number> = { OPEN: 4, OPEN_FILTERED: 3, UNKNOWN: 2, FILTERED: 1, CLOSED: 0 };
+    for (const s of processed.services) {
+      const existing = this.services.find((x) => x.host === s.host && x.port === s.port && x.protocol === s.protocol);
+      if (existing) {
+        existing.sources = [...new Set([...(existing.sources ?? []), ...(s.sources ?? [])])].sort();
+        existing.product ??= s.product;
+        existing.version ??= s.version;
+        existing.cpe ??= s.cpe;
+        existing.banner ??= s.banner;
+        if (s.tls !== undefined) existing.tls = existing.tls ?? s.tls;
+        existing.confidence = Math.max(existing.confidence ?? 0, s.confidence ?? 0) || undefined;
+        if ((stateRank[s.state ?? "UNKNOWN"] ?? 0) > (stateRank[existing.state ?? "UNKNOWN"] ?? 0)) existing.state = s.state;
+        if ((!existing.name || existing.name === "unknown") && s.name) existing.name = s.name;
+      } else this.services.push(s);
+    }
     this.technologies.push(...processed.technologies);
     this.parameters.push(...processed.parameters);
     this.forms.push(...processed.forms);
@@ -198,7 +236,25 @@ export class FakeStore implements ScanRunStore {
     this.apiServices.push(...processed.apiServices);
     this.graphqlServices.push(...processed.graphqlServices);
     this.jwtProfiles.push(...processed.jwtProfiles);
-    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length };
+    this.packetCaptures.push(...processed.packetCaptures);
+    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length };
+  }
+
+  /** Prompt 10 platform hook mirroring the Prisma store: bounded target
+   *  expansion over the scan's CIDR target (§5/§62). */
+  async expandNetworkTargets(): Promise<{ mode: string; hosts: number; chunks: number; totalHosts: number } | null> {
+    const value = this.networkTarget?.targetValue;
+    if (!value) return null;
+    const verdict = new CidrPolicyService().evaluate(value, { administratorApproved: false });
+    if (verdict && verdict.approval === "DENY") {
+      return { mode: "DENIED", hosts: 0, chunks: 0, totalHosts: verdict.hostCount };
+    }
+    const expansion = expandCidrTargets(value);
+    if (!expansion) return null;
+    this.networkChunks = expansion.chunks.map((c) => ({ chunkId: c.chunkId, rangeStart: c.rangeStart, rangeEnd: c.rangeEnd, hostCount: c.hostCount, status: "PENDING" }));
+    return expansion.kind === "LIST"
+      ? { mode: "LIST", hosts: expansion.hosts.length, chunks: expansion.chunks.length, totalHosts: expansion.hosts.length }
+      : { mode: "RANGES", hosts: 0, chunks: expansion.chunks.length, totalHosts: expansion.totalHosts };
   }
 
   /** Prompt 9 platform hooks mirroring the Prisma store's behaviour. */

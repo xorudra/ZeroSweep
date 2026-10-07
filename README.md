@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 9 complete (Prompts 1–9).** Production monorepo, backend and
+> **Status — Phase 10 complete (Prompts 1–10).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -35,7 +35,26 @@ without verified scope and approval.
 > JWT inspection (fingerprints + redacted claims; tokens never stored;
 > cracking forbidden), mitmproxy traffic import, and the full
 > API_ASSESSMENT pipeline flowing into the same normalization →
-> correlation → risk tail. Everything
+> correlation → risk tail. And now the **network VAPT engine**: CIDR
+> canonicalization + size policy, protected-destination rules (private
+> ranges need an approved internal engagement; loopback/metadata/platform
+> networks are always denied), bounded target expansion (chunks, never
+> millions of rows), and eight adapters on the SDK lifecycle — Nmap
+> (typed plans only, a governed NSE script policy that can never select
+> intrusive/brute/exploit scripts, hostile-input XML parsing), Naabu,
+> RustScan (no downstream-command passthrough), Masscan (never
+> auto-selected, administrator-approval gated, hard-clamped), Netdiscover
+> + arp-scan (internal layer-2 workers only), tcpdump (bounded capture)
+> and tshark (offline analysis). Multi-scanner ports merge into one
+> canonical service with provenance; open ports are inventory — findings
+> come only from governed safe checks (cleartext services, the
+> unauthenticated Docker API, script-confirmed conditions), while
+> database/remote-admin services are exposure records with no login ever
+> attempted. Four network profiles (DISCOVERY / BASELINE /
+> COMPREHENSIVE / INTERNAL) plus NETWORK_ASSESSMENT run the full DAG
+> into the same correlation/risk tail; a /network GUI shows networks,
+> hosts, ports/services, captures and tool health. Wireshark stays a
+> manual analyst tool whose captures are imported. Everything
 > runs only inside approved scans against verified, in-scope targets.
 > Adapters whose binaries are absent report UNAVAILABLE honestly and
 > pipelines degrade — nothing fakes a real run. The AI service has no LLM
@@ -164,11 +183,47 @@ and the AI health endpoint.
 7. ✅ Safe vulnerability detection, TLS analysis, normalization, correlation & risk engine (Prompt 7)
 8. ✅ OWASP ZAP, Burp Suite & Caido integration layer (Prompt 8)
 9. ✅ API security testing & protection assessment (Prompt 9)
-10. Network VAPT 11. Reporting engine
+10. ✅ Network VAPT engine (Prompt 10)
+11. Vulnerability management & intelligence 20. Unified reporting & dashboard
 12. API/cloud/container/source-code modules 13. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 10: Network VAPT Engine.** Eight network
+  adapters (Nmap, Naabu, RustScan, Masscan, Netdiscover, arp-scan,
+  tcpdump, tshark) on the SDK lifecycle with recorded-output fixtures
+  (RFC 5737 ranges only — nothing was scanned). NetworkScope + CIDR
+  canonicalization and a size policy (small = normal, large =
+  elevated, very large = administrator, above the ceiling = denied);
+  protected destinations (loopback, link-local/metadata, platform
+  infrastructure) denied unconditionally, private ranges gated on an
+  approved internal engagement; DNS revalidation immediately before
+  execution. Bounded expansion persists NetworkScanChunk rows — never
+  per-host rows for big ranges. Nmap plans are typed-config only;
+  NSE scripts are governed by a classified catalog (SAFE /
+  REVIEW_REQUIRED selectable, INTRUSIVE / DISABLED never — even when
+  "approved"); XML output is parsed by a hardened reader (no DTD
+  subsets or external entities, size/depth caps). Masscan is
+  capability-isolated, approval-gated in the executor and
+  hard-clamped (rate/targets/ports/duration). Local layer-2 discovery
+  runs only on internal workers holding LOCAL_LAYER2_ACCESS
+  (`UNAVAILABLE_FOR_WORKER` elsewhere, proven end-to-end). Services
+  normalize with state, CPE (source-only), sanitized banners, TLS
+  facts and confidence, and merge across scanners via the
+  PortResultAggregator (one canonical row, provenance unioned, OPEN
+  outranks CLOSED). Findings come only from the governed check policy:
+  cleartext telnet/FTP, the unauthenticated Docker API on 2375/tcp,
+  and script-confirmed SMB signing — databases and remote-admin
+  services are exposure observations, and no login is ever attempted.
+  Packet captures are metadata + object storage (PacketCaptureArtifact)
+  with OWNER/ADMIN, audited raw access (RAW_PCAP_ACCESSED). New API
+  surface under /network (+ §73 scan routes), a /network GUI with host
+  detail, nine new audit actions, and worker types
+  (GENERAL_WEB/NETWORK_EXTERNAL/NETWORK_INTERNAL/PACKET_ANALYSIS)
+  driven by deployment env. Metasploit, brute force, spraying and
+  exploitation remain explicitly unimplemented (§88). Migration
+  `20261007070000_network_vapt` generated (not applied — no Docker on
+  the build host).
 - **2026-10-07 — Prompt 9: API Security Testing & Protection Assessment.**
   Guarded specification imports (OpenAPI/Swagger JSON+YAML, Postman
   collections + environments, Insomnia exports, GraphQL introspection)

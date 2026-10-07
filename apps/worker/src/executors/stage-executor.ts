@@ -1,6 +1,6 @@
 import {
-  API_SLUGS, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
-  approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, type AuthorizationContext,
+  API_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -24,7 +24,11 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS] as const;
+
+/** Slugs whose execution requires the worker to hold the local layer-2
+ *  capability (Prompt 10 §65) — meaningless and denied anywhere else. */
+export const LOCAL_DISCOVERY_SLUGS = ["netdiscover", "arp-scan"] as const;
 
 export interface ExecutionContextRecord {
   executionId: string;
@@ -69,6 +73,14 @@ export interface ExecutionContextRecord {
    *  ScannerInstance rows for this workspace — never from queue payloads
    *  or client input (§16/§17). Absent instanceId = NOT_CONFIGURED. */
   scanner?: { instanceId?: string; sessionProfileId?: string };
+  /** Prompt 10 §19/§20: Masscan runs ONLY under a recorded administrator
+   *  approval resolved by the store from platform policy state — never
+   *  from queue payloads or client input. Absent/false = denied. */
+  masscanApproved?: boolean;
+  /** Prompt 10 §45: the authorized packet-capture artifact reference this
+   *  execution may analyze (store-resolved from PacketCaptureArtifact
+   *  rows for this scan — never client input). */
+  captureRef?: string;
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -77,7 +89,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number; packetCaptures?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -100,15 +112,26 @@ export type StageExecutionOutcome =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Prompt 10 §23/§24/§65: process-level worker capabilities the executor
+ *  gates privileged adapters on. They come from the worker's own
+ *  deployment configuration (env), never from job payloads: a general
+ *  worker simply does not hold LOCAL_LAYER2_ACCESS or PACKET_CAPTURE. */
+export interface StageExecutorOptions {
+  workerCapabilities?: string[];
+}
+
 export class StageExecutor {
   private readonly objectStore: ObjectStore;
+  private readonly workerCapabilities: string[];
 
   constructor(
     private readonly registry: ToolRegistry,
     private readonly store: ExecutionStore,
     objectStore?: ObjectStore,
+    options: StageExecutorOptions = {},
   ) {
     this.objectStore = objectStore ?? new InMemoryObjectStore();
+    this.workerCapabilities = options.workerCapabilities ?? [];
   }
 
   async run(job: StageJobData): Promise<StageExecutionOutcome> {
@@ -164,6 +187,29 @@ export class StageExecutor {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
         await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no scanner instance is configured for this workspace (NOT_CONFIGURED)`);
         return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      // Prompt 10 gates (§19/§20/§44/§65) — evaluated BEFORE health and
+      // policy, because they are deployment/approval facts, not tool
+      // health: Masscan needs a recorded administrator approval; local
+      // layer-2 discovery needs this worker to actually hold
+      // LOCAL_LAYER2_ACCESS; packet capture needs PACKET_CAPTURE.
+      if (ctx.adapterSlug === "masscan" && ctx.masscanApproved !== true) {
+        await emit("network.masscan_denied", { stageId: ctx.stageId, reasonCode: "MASSCAN_NOT_APPROVED" });
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "MASSCAN_NOT_APPROVED" });
+        await this.failExecution(ctx, "POLICY", "masscan: high-speed discovery requires an explicit profile, administrator policy approval and strict rate limits (§19/§20) — no approval is recorded for this scan");
+        return { status: "DENIED", reasonCode: "MASSCAN_NOT_APPROVED" };
+      }
+      if ((LOCAL_DISCOVERY_SLUGS as readonly string[]).includes(ctx.adapterSlug)
+        && !this.workerCapabilities.includes("LOCAL_LAYER2_ACCESS")) {
+        await emit("network.local_discovery_unavailable", { stageId: ctx.stageId, tool: ctx.adapterSlug, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: local layer-2 discovery is UNAVAILABLE_FOR_WORKER — this worker does not hold LOCAL_LAYER2_ACCESS (§65)`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (ctx.adapterSlug === "tcpdump" && !this.workerCapabilities.includes("PACKET_CAPTURE")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", "tcpdump: packet capture is UNAVAILABLE_FOR_WORKER — this worker does not hold the PACKET_CAPTURE capability (§44)");
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
       }
       // Real health (§2/§55): a recon adapter whose binary is absent is
       // denied by policy as TOOL_UNAVAILABLE — never executed, never faked.
@@ -266,6 +312,40 @@ export class StageExecutor {
         if (declared.has("scopeExcludedPaths")) config.scopeExcludedPaths = ctx.scopeRules.excludedPaths;
         await emit("passive_analysis.started", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
       }
+      // Prompt 10 derived configuration — worker-computed from the
+      // persisted plan + profile, never client input (§8/§11/§13/§27):
+      // Nmap's scan mode follows the STAGE, the port profile follows the
+      // ASSESSMENT PROFILE (FULL_TCP is never derived), NSE approvals
+      // follow the profile through the script policy, local discovery
+      // gets the approved CIDR from the target, tshark gets the
+      // store-resolved capture reference.
+      let nseSelection: { snapshot: unknown; selected: string[] } | undefined;
+      if (declared.has("scanMode")) {
+        config.scanMode = ctx.stageId === "HOST_DISCOVERY" ? "HOST_DISCOVERY"
+          : ctx.stageId === "SERVICE_DETECTION" ? "SERVICE"
+          : ctx.stageId === "SAFE_NETWORK_CHECKS" ? "SAFE_CHECKS" : "PORT_SCAN";
+      }
+      if (declared.has("portProfile")) {
+        config.portProfile = ctx.profile === "NETWORK_DISCOVERY" ? "WEB_COMMON"
+          : ctx.profile === "NETWORK_COMPREHENSIVE" || ctx.profile === "NETWORK_INTERNAL" ? "STANDARD"
+          : "COMMON_SERVICES";
+      }
+      if (declared.has("approvedScriptIds")) {
+        config.approvedScriptIds = approvedNseIdsForProfile(ctx.profile ?? "");
+      }
+      if (declared.has("osDetection")) {
+        config.osDetection = ctx.profile === "NETWORK_COMPREHENSIVE" || ctx.profile === "NETWORK_INTERNAL";
+      }
+      if (declared.has("networkRange") && ctx.targetType === "CIDR") {
+        config.networkRange = ctx.targetValue;
+      }
+      if (declared.has("captureArtifactRef") && ctx.captureRef) {
+        config.captureArtifactRef = ctx.captureRef;
+      }
+      if (adapter instanceof NmapAdapter) {
+        const sel = adapter.scriptSelectionFor(config);
+        nseSelection = { snapshot: sel.snapshot, selected: sel.selected };
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -345,6 +425,16 @@ export class StageExecutor {
       if (typeof normalized.metrics.blockedOperations === "number" && normalized.metrics.blockedOperations > 0) {
         await emit("api.operation_blocked", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: normalized.metrics.blockedOperations });
       }
+      // Prompt 10 §84: aggregated network events — counts only, never
+      // per-packet data or raw output.
+      if ((NETWORK_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        if (counts.assets > 0) await emit("network.host_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: counts.assets });
+        if (processed.services.length > 0) {
+          await emit("network.port_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.services.length });
+          const identified = processed.services.filter((s) => s.name && s.name !== "unknown").length;
+          if (identified > 0) await emit("network.service_identified", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: identified });
+        }
+      }
       for (const f of processed.findings) await emit("finding.created", { stageId: ctx.stageId, isMock: f.isMock, severity: f.severity });
 
       await this.store.updateExecution(ctx.executionId, {
@@ -360,8 +450,10 @@ export class StageExecutor {
           forms: counts.forms ?? processed.forms.length,
           transactions: counts.transactions ?? processed.transactions.length,
           webSockets: counts.webSockets ?? processed.webSockets.length,
+          packetCaptures: counts.packetCaptures ?? processed.packetCaptures.length,
           suppressedEndpoints: processed.suppressedEndpoints,
           ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
+          ...(nseSelection ? { nseSnapshot: nseSelection.snapshot, nseScriptsSelected: nseSelection.selected } : {}),
           ...normalized.metrics,
         },
       });

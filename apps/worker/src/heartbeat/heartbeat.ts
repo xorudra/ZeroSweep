@@ -16,7 +16,47 @@ export const WORKER_CAPABILITIES = [
   "SUBDOMAIN_DISCOVERY", "DNS_RESOLUTION", "HTTP_PROBING", "TECHNOLOGY_DETECTION",
   "WEB_CRAWLING", "URL_DISCOVERY", "PARAMETER_DISCOVERY", "VULNERABILITY_SCANNING",
   "REPORT_EXPORT",
+  // Prompt 10 §23: external network capabilities are safe to advertise on
+  // any network-capable worker. LOCAL_NETWORK_DISCOVERY and
+  // PACKET_CAPTURE are NEVER in the base set — they arrive only through
+  // the deployment env of a dedicated internal / packet-analysis worker.
+  "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "VERSION_DETECTION",
+  "OS_HINTING", "SAFE_NETWORK_CHECKS",
 ];
+
+/** Prompt 10 §23/§24: worker types. The type + privileged capabilities
+ *  come from the worker's OWN deployment environment — a general worker
+ *  cannot promote itself, and job payloads never carry them. */
+export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS"] as const;
+export type WorkerTypeName = (typeof WORKER_TYPES)[number];
+
+export function workerTypeFromEnv(env: NodeJS.ProcessEnv = process.env): WorkerTypeName {
+  const raw = (env.DSRCLONE_WORKER_TYPE ?? "GENERAL_WEB").toUpperCase();
+  return (WORKER_TYPES as readonly string[]).includes(raw) ? (raw as WorkerTypeName) : "GENERAL_WEB";
+}
+
+export function privilegedCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const type = workerTypeFromEnv(env);
+  const declared = (env.DSRCLONE_WORKER_CAPABILITIES ?? "")
+    .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+  const allowed = new Set<string>();
+  // Layer-2 access exists only on internal workers; packet capture only
+  // on packet-analysis workers — the env of the WRONG type cannot grant
+  // them (§24/§65).
+  if (type === "NETWORK_INTERNAL" && declared.includes("LOCAL_LAYER2_ACCESS")) {
+    allowed.add("LOCAL_LAYER2_ACCESS");
+    allowed.add("LOCAL_NETWORK_DISCOVERY");
+  }
+  if (type === "PACKET_ANALYSIS" && declared.includes("PACKET_CAPTURE")) {
+    allowed.add("PACKET_CAPTURE");
+    allowed.add("PACKET_ANALYSIS");
+  }
+  return [...allowed];
+}
+
+export function workerCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [...new Set([...WORKER_CAPABILITIES, ...privilegedCapabilitiesFromEnv(env)])];
+}
 
 export function makeWorkerId(): string {
   return `worker-${hostname()}-${process.pid}`;
@@ -26,6 +66,7 @@ export interface WorkerRegistration {
   workerId: string;
   hostname: string;
   version: string;
+  workerType: string;
   status: WorkerStatus;
   capabilities: string[];
   activeJobs: number;
@@ -38,8 +79,9 @@ export function registrationRecord(workerId: string, activeJobs: number, now = n
     workerId,
     hostname: hostname(),
     version: WORKER_VERSION,
+    workerType: workerTypeFromEnv(),
     status: workerStatusFromHeartbeat({ lastHeartbeatAt: now, now, activeJobs, capacity: 4 }),
-    capabilities: WORKER_CAPABILITIES,
+    capabilities: workerCapabilitiesFromEnv(),
     activeJobs,
     startedAt: now,
     lastHeartbeat: now,

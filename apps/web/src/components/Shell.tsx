@@ -12,6 +12,7 @@ export const NAV = [
   { href: "/endpoints", label: "Endpoints" },
   { href: "/web-surface", label: "Web Surface" },
   { href: "/api-security", label: "API Security" },
+  { href: "/network", label: "Network" },
   { href: "/assessments", label: "Assessments" },
   { href: "/scans", label: "Scans" },
   { href: "/findings", label: "Findings" },

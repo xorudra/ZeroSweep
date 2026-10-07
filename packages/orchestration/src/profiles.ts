@@ -18,6 +18,7 @@ export const STAGE_TYPES = [
   "API_DISCOVERY", "SPEC_IMPORT", "ROUTE_DISCOVERY", "AUTH_MAPPING",
   "SAFE_SCHEMA_TESTING", "JWT_ANALYSIS", "GRAPHQL_ANALYSIS", "WEBSOCKET_INVENTORY",
   "API_FINDING_NORMALIZATION",
+  "TARGET_EXPANSION", "HOST_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -109,6 +110,13 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
   GRAPHQL_ANALYSIS: S("GRAPHQL_ANALYSIS", "GraphQL Analysis", "GraphQL endpoint confirmation + introspection schema inventory (InQL/GraphQLmap, §26–§29). Mutations are never executed; introspection availability is inventory, not a finding.", ["GRAPHQL_ANALYSIS"], ["JWT_ANALYSIS"], 8, 900, "CONTINUE_WITH_PARTIAL_DATA", true),
   WEBSOCKET_INVENTORY: S("WEBSOCKET_INVENTORY", "WebSocket Inventory", "Consolidate observed WebSocket endpoints (proxy traffic) with authentication-presence metadata (Prompt 9 §31/§32). Inventory only — no message injection or fuzzing exists. Platform stage.", ["WEBSOCKET_DISCOVERY"], ["GRAPHQL_ANALYSIS"], 3, 300, "FAIL_STAGE_CONTINUE"),
   API_FINDING_NORMALIZATION: S("API_FINDING_NORMALIZATION", "API Finding Normalization", "Fold safe-schema-testing findings, JWT inspection results and API-safe scanner checks into the normalized finding model with provenance (Prompt 9 §43). Platform stage — the shared NORMALIZATION/CORRELATION/RISK tail then applies unchanged.", [], ["PASSIVE_SECURITY_ANALYSIS"], 3, 300, "FAIL_STAGE_CONTINUE"),
+  // Prompt 10 §25: the network DAG — TARGET EXPANSION (platform) → HOST
+  //  DISCOVERY → PORT DISCOVERY → (port merge happens in persistence) →
+  //  SERVICE DETECTION → SAFE NETWORK CHECKS → shared tail.
+  TARGET_EXPANSION: S("TARGET_EXPANSION", "Target Expansion", "Canonicalize the network target and expand it into bounded, chunked target ranges (Prompt 10 §3–§5/§62): small ranges materialize, large ones stream as chunks — never millions of rows. Platform stage — no tool executes.", [], ["SCOPE_VALIDATION"], 3, 300, "FAIL_SCAN"),
+  HOST_DISCOVERY: S("HOST_DISCOVERY", "Host Discovery", "Discover live hosts inside the approved network scope (Nmap; local ARP discovery on internal workers only, §21/§22/§65).", ["HOST_DISCOVERY"], ["TARGET_EXPANSION"], 8, 900, "FAIL_STAGE_CONTINUE", true),
+  SERVICE_DETECTION: S("SERVICE_DETECTION", "Service Detection", "Fingerprint services and versions on discovered open ports (Nmap -sV): product, version, CPE when the tool provides it, TLS facts, OS hints with confidence (§29–§35).", ["SERVICE_DETECTION"], ["PORT_DISCOVERY"], 12, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+  SAFE_NETWORK_CHECKS: S("SAFE_NETWORK_CHECKS", "Safe Network Checks", "Governed SAFE NSE script checks over detected services (Prompt 10 §14/§37): scripts are classified and policy-selected in code; intrusive/exploit/brute/dos scripts are never selected. Findings only from confirmed check output.", ["SAFE_NETWORK_CHECKS"], ["SERVICE_DETECTION"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -146,7 +154,16 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   //  (§40) stays architecture-only in this phase: its state-changing
   //  capabilities require per-assessment admin approval machinery.
   API_ASSESSMENT: template([...HEAD, "API_DISCOVERY", "SPEC_IMPORT", "ROUTE_DISCOVERY", "AUTH_MAPPING", "SAFE_SCHEMA_TESTING", "JWT_ANALYSIS", "GRAPHQL_ANALYSIS", "WEBSOCKET_INVENTORY", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", "API_FINDING_NORMALIZATION", ...TAIL]),
-  NETWORK_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "PORT_DISCOVERY", ...TAIL]),
+  // Prompt 10 §8/§25: network profiles share one DAG; they differ in
+  //  depth (port profile + NSE approvals are worker-derived from the
+  //  profile) and in policy (NETWORK_INTERNAL runs on internal workers
+  //  under an approved internal engagement, §64/§65). NETWORK_ASSESSMENT
+  //  is kept as the baseline-equivalent profile name from Prompt 4.
+  NETWORK_DISCOVERY: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", ...TAIL]),
+  NETWORK_BASELINE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
+  NETWORK_COMPREHENSIVE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
+  NETWORK_INTERNAL: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
+  NETWORK_ASSESSMENT: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
   SOURCE_CODE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CONTAINER: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CLOUD: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
@@ -198,6 +215,25 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
     // assessors are not API tools.
     if (profile === "API_ASSESSMENT" && def.type === "SAFE_VULNERABILITY_SCAN") {
       def.adapterAllowlist = ["nuclei"];
+    }
+    // Prompt 10 §8/§11/§65: network profile shaping. Discovery stays
+    // light (Nmap host discovery only); service detection and safe
+    // checks are Nmap-only stages in every network profile.
+    const NETWORK_PROFILES = ["NETWORK_DISCOVERY", "NETWORK_BASELINE", "NETWORK_COMPREHENSIVE", "NETWORK_INTERNAL", "NETWORK_ASSESSMENT"];
+    if (NETWORK_PROFILES.includes(profile)) {
+      if (def.type === "SERVICE_DETECTION" || def.type === "SAFE_NETWORK_CHECKS") {
+        def.adapterAllowlist = ["nmap"];
+      }
+      if (profile === "NETWORK_DISCOVERY" && def.type === "HOST_DISCOVERY") {
+        def.adapterAllowlist = ["nmap"];
+      }
+      // §64/§65: internal host discovery may use local layer-2 adapters
+      // — but ONLY there, and the executor still gates them on the
+      // worker's LOCAL_LAYER2_ACCESS capability.
+      if (profile === "NETWORK_INTERNAL" && def.type === "HOST_DISCOVERY") {
+        def.capabilityGroups = [["HOST_DISCOVERY"], ["LOCAL_NETWORK_DISCOVERY"]];
+        def.adapterAllowlist = ["nmap", "netdiscover", "arp-scan"];
+      }
     }
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];

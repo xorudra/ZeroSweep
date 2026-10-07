@@ -26,6 +26,11 @@ export interface ProcessedAsset {
   dnsRecords?: DnsRecordSet[];
   httpStatus?: number;
   wildcardSuspect?: boolean;
+  /** Prompt 10 §35/§50: OS hint + confidence and the owning network —
+   *  hints only, never presented as fact. */
+  osHint?: string;
+  osConfidence?: number;
+  network?: string;
 }
 
 export interface ProcessedEndpoint {
@@ -75,6 +80,28 @@ export interface ProcessedService {
   title?: string;
   server?: string;
   scheme?: string;
+  /** Prompt 10 §29–§36/§49: network facts — port state, CPE (only when
+   *  a tool reported it), SANITIZED banner, TLS flag, identification
+   *  confidence and aggregator provenance. */
+  state?: string;
+  cpe?: string;
+  banner?: string;
+  tls?: boolean;
+  confidence?: number;
+  sources?: string[];
+}
+
+/** Prompt 10 §43: packet-capture metadata passthrough — bytes stay in
+ *  object storage; only the reference + facts persist. */
+export interface ProcessedPacketCapture {
+  artifactRef: string;
+  format: string;
+  source: string;
+  sizeBytes?: number;
+  sha256?: string;
+  durationSeconds?: number;
+  interfaceName?: string;
+  assetHost?: string;
 }
 
 export interface ProcessedTechnology {
@@ -216,6 +243,8 @@ export interface ProcessedResult {
   /** Prompt 8: proxy-observed traffic + WebSocket inventory. */
   transactions: ProcessedTransaction[];
   webSockets: ProcessedWebSocket[];
+  /** Prompt 10: packet-capture artifact metadata (§43). */
+  packetCaptures: ProcessedPacketCapture[];
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -255,7 +284,17 @@ export function processNormalizedResult(
     const host = canonicalizeHostname(svc.host) ?? canonicalHost(svc.host);
     if (!host) continue;
     const key = `${host}|${svc.port}|${svc.protocol}`;
-    if (serviceKeys.has(key)) continue;
+    if (serviceKeys.has(key)) {
+      // Same-key duplicate inside one result: gap-fill descriptive
+      // fields (PortResultAggregator semantics, §49) instead of dropping.
+      const existingSvc = services.find((s) => `${s.host}|${s.port}|${s.protocol}` === key)!;
+      existingSvc.product ??= svc.product;
+      existingSvc.version ??= svc.version;
+      existingSvc.cpe ??= svc.cpe;
+      existingSvc.banner ??= svc.banner;
+      existingSvc.sources = [...new Set([...(existingSvc.sources ?? []), ...(svc.sources ?? [])])];
+      continue;
+    }
     serviceKeys.add(key);
     services.push({
       host, port: svc.port, protocol: svc.protocol,
@@ -266,6 +305,12 @@ export function processNormalizedResult(
       ...(svc.title ? { title: svc.title } : {}),
       ...(svc.server ? { server: svc.server } : {}),
       ...(svc.scheme ? { scheme: svc.scheme } : {}),
+      ...(svc.state ? { state: svc.state } : {}),
+      ...(svc.cpe ? { cpe: svc.cpe } : {}),
+      ...(svc.banner ? { banner: svc.banner } : {}),
+      ...(svc.tls !== undefined ? { tls: svc.tls } : {}),
+      ...(svc.confidence !== undefined ? { confidence: svc.confidence } : {}),
+      ...(svc.sources?.length ? { sources: [...new Set(svc.sources)] } : {}),
     });
     if (svc.statusCode !== undefined && !httpStatusByHost.has(host)) httpStatusByHost.set(host, svc.statusCode);
   }
@@ -281,6 +326,8 @@ export function processNormalizedResult(
       if (!existing.ip && asset.ip) existing.ip = asset.ip;
       if (asset.wildcardSuspect) existing.wildcardSuspect = true;
       existing.dnsRecords = mergeDns(existing.dnsRecords, asset.dnsRecords);
+      if (!existing.osHint && asset.osHint) { existing.osHint = asset.osHint; existing.osConfidence = asset.osConfidence; }
+      if (!existing.network && asset.network) existing.network = asset.network;
       continue;
     }
     const verdict = matcher.isDiscoveredAssetInScope(host);
@@ -292,6 +339,8 @@ export function processNormalizedResult(
       sources: [...new Set([tool, ...(asset.sources ?? [])])],
       ...(asset.dnsRecords ? { dnsRecords: asset.dnsRecords } : {}),
       ...(asset.wildcardSuspect ? { wildcardSuspect: true } : {}),
+      ...(asset.osHint ? { osHint: asset.osHint, ...(asset.osConfidence !== undefined ? { osConfidence: asset.osConfidence } : {}) } : {}),
+      ...(asset.network ? { network: asset.network } : {}),
     });
   }
   const assets = [...assetByHost.values()];
@@ -570,7 +619,21 @@ export function processNormalizedResult(
   }
   const jwtProfiles = [...jwtByFingerprint.values()];
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, suppressedEndpoints, isMock: result.mock };
+  // --- packet captures (Prompt 10 §43/§74): metadata only. A relative
+  //     capture name (tcpdump's output file) is rebased onto THIS
+  //     execution's raw artifact key; storage references (tshark inputs)
+  //     pass through unchanged.
+  const packetCaptures: ProcessedPacketCapture[] = (result.packetCaptures ?? []).map((c) => ({
+    artifactRef: c.artifactRef.startsWith("scans/") || !ctx.artifactKey ? c.artifactRef : `${ctx.artifactKey}#${c.artifactRef}`,
+    format: c.format,
+    source: c.source,
+    ...(c.sizeBytes !== undefined ? { sizeBytes: c.sizeBytes } : {}),
+    ...(c.sha256 ? { sha256: c.sha256 } : {}),
+    ...(c.durationSeconds !== undefined ? { durationSeconds: c.durationSeconds } : {}),
+    ...(c.interfaceName ? { interfaceName: c.interfaceName } : {}),
+  }));
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original

@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  EnvSecretResolver, JwtToolAdapter, PROXY_SLUGS, clampDiscoveryBudget, computeRisk,
+  CidrPolicyService, EnvSecretResolver, JwtToolAdapter, PROXY_SLUGS, clampDiscoveryBudget, computeRisk, expandCidrTargets,
 } from "@dsrclone/security-sdk";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
@@ -84,12 +84,30 @@ export class PrismaWorkerStore implements ScanRunStore {
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
+      // Prompt 10 §19/§20: no administrator-approval record source exists
+      // in this phase's data model, so Masscan stays denied by default —
+      // the honest state. The approval record lands with the admin
+      // policy surface; until then the executor gate refuses Masscan.
+      masscanApproved: false,
+      // Prompt 10 §45: the newest authorized capture for this scan is
+      // what tshark may analyze — resolved from trusted rows only.
+      captureRef: await this.loadCaptureRef(exec.scanId),
       scanner: await this.loadScannerBinding(exec.tool.slug, graph.workspaceId, graph.workspace.organizationId),
       stageInputs: await this.loadStageInputs(target.id),
       simulation: {
         fixture: (plan.profile === "PASSIVE_RECON" || plan.profile === "WEB_BASELINE") && stageType === "PASSIVE_RECON",
       },
     };
+  }
+
+  /** Prompt 10 §45: latest packet-capture artifact reference for a scan. */
+  private async loadCaptureRef(scanId: string): Promise<string | undefined> {
+    const capture = await prisma.packetCaptureArtifact.findFirst({
+      where: { scanId },
+      orderBy: { createdAt: "desc" },
+      select: { storageKey: true },
+    });
+    return capture?.storageKey;
   }
 
   /** Prompt 8 scanner binding (§16): the workspace's admin-registered
@@ -184,9 +202,9 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number }> {
+  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
-    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0 };
+    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0, packetCaptures: 0 };
     const assetIdByHost = new Map<string, string>();
     for (const asset of processed.assets) {
       const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: asset.host } });
@@ -200,6 +218,11 @@ export class PrismaWorkerStore implements ScanRunStore {
               sources: [...new Set([...existing.sources, ...asset.sources])],
               httpStatus: asset.httpStatus ?? existing.httpStatus,
               discoveredByScanId: existing.discoveredByScanId ?? scanId,
+              // Prompt 10 §35: OS hints gap-fill only — a later, weaker
+              // guess never overwrites a recorded hint.
+              osHint: existing.osHint ?? asset.osHint,
+              osConfidence: existing.osConfidence ?? asset.osConfidence,
+              network: existing.network ?? asset.network,
             },
           })
         : await prisma.asset.create({
@@ -207,21 +230,49 @@ export class PrismaWorkerStore implements ScanRunStore {
               workspaceId: scan.workspaceId, targetId: scan.assessment.targetId, host: asset.host,
               ip: asset.ip, type: asset.type, scopeStatus: asset.scopeStatus,
               sources: asset.sources, httpStatus: asset.httpStatus, discoveredByScanId: scanId,
+              osHint: asset.osHint, osConfidence: asset.osConfidence, network: asset.network,
             },
           });
       assetIdByHost.set(asset.host, row.id);
     }
     // Services attach to their host's asset (Prompt 5 §32) — upserted on the
     // (assetId, port, protocol) unique key so re-runs refresh metadata.
+    // Prompt 10 §49: the update path applies PortResultAggregator
+    // semantics — provenance unions, descriptive fields gap-fill from
+    // the richer reporter, OPEN outranks CLOSED, confidence takes the
+    // max. One canonical row per (asset, port, protocol), always (§31).
+    const STATE_RANK: Record<string, number> = { OPEN: 4, OPEN_FILTERED: 3, UNKNOWN: 2, FILTERED: 1, CLOSED: 0 };
     let services = 0;
     for (const svc of processed.services) {
       const assetId = assetIdByHost.get(svc.host);
       if (!assetId) continue;
-      await prisma.service.upsert({
+      const existingSvc = await prisma.service.findUnique({
         where: { assetId_port_protocol: { assetId, port: svc.port, protocol: svc.protocol } },
-        create: { assetId, port: svc.port, protocol: svc.protocol, name: svc.name, product: svc.product, version: svc.version },
-        update: { name: svc.name, product: svc.product, version: svc.version },
       });
+      if (!existingSvc) {
+        await prisma.service.create({
+          data: {
+            assetId, port: svc.port, protocol: svc.protocol, name: svc.name, product: svc.product, version: svc.version,
+            state: svc.state ?? "OPEN", cpe: svc.cpe, banner: svc.banner, tls: svc.tls, confidence: svc.confidence,
+            sources: svc.sources ?? [],
+          },
+        });
+      } else {
+        await prisma.service.update({
+          where: { id: existingSvc.id },
+          data: {
+            name: (!existingSvc.name || existingSvc.name === "unknown") && svc.name ? svc.name : existingSvc.name,
+            product: existingSvc.product ?? svc.product,
+            version: existingSvc.version ?? svc.version,
+            cpe: existingSvc.cpe ?? svc.cpe,
+            banner: existingSvc.banner ?? svc.banner,
+            tls: existingSvc.tls ?? svc.tls,
+            confidence: Math.max(existingSvc.confidence ?? 0, svc.confidence ?? 0) || existingSvc.confidence,
+            state: (STATE_RANK[svc.state ?? "UNKNOWN"] ?? 0) > (STATE_RANK[existingSvc.state] ?? 0) ? (svc.state ?? existingSvc.state) : existingSvc.state,
+            sources: [...new Set([...existingSvc.sources, ...(svc.sources ?? [])])].sort(),
+          },
+        });
+      }
       services++;
     }
     // Technologies attach to their host's asset (§34), deduped per asset+name.
@@ -455,7 +506,57 @@ export class PrismaWorkerStore implements ScanRunStore {
       });
       jwtProfiles++;
     }
-    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles };
+    // Packet captures (Prompt 10 §43/§74): METADATA rows only — the
+    // bytes are the execution's object-storage artifact; storageKey
+    // points at it, and raw access is VIEW_RAW_PCAP-gated + audited at
+    // the API layer (§47). Deduped per scan+storageKey.
+    let packetCaptures = 0;
+    for (const cap of processed.packetCaptures) {
+      const existingCap = await prisma.packetCaptureArtifact.findFirst({ where: { scanId, storageKey: cap.artifactRef } });
+      if (existingCap) continue;
+      await prisma.packetCaptureArtifact.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId, toolExecutionId: executionId,
+          assetId: cap.assetHost ? assetIdByHost.get(cap.assetHost) : undefined,
+          format: cap.format, source: cap.source, storageKey: cap.artifactRef,
+          sha256: cap.sha256, sizeBytes: cap.sizeBytes, durationSeconds: cap.durationSeconds,
+          interfaceName: cap.interfaceName,
+        },
+      });
+      packetCaptures++;
+    }
+    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures };
+  }
+
+  /** Prompt 10 platform hook (§5/§25/§62): canonicalize the scan's CIDR
+   *  target, apply the CIDR size policy and persist BOUNDED chunk rows
+   *  for checkpointing/distribution — never one row per host. A
+   *  hard-denied size records no chunks and reports mode DENIED so the
+   *  runner can emit the protected-target event. */
+  async expandNetworkTargets(scanId: string): Promise<{ mode: string; hosts: number; chunks: number; totalHosts: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const targetValue = graph.assessment.target.value;
+    const verdict = new CidrPolicyService().evaluate(targetValue, { administratorApproved: false });
+    if (!verdict) return null; // not a CIDR target — nothing to expand
+    if (verdict.approval === "DENY") {
+      return { mode: "DENIED", hosts: 0, chunks: 0, totalHosts: verdict.hostCount };
+    }
+    const expansion = expandCidrTargets(targetValue);
+    if (!expansion) return null;
+    for (const chunk of expansion.chunks) {
+      await prisma.networkScanChunk.upsert({
+        where: { scanId_chunkId: { scanId, chunkId: chunk.chunkId } },
+        create: {
+          workspaceId: graph.workspaceId, scanId, chunkId: chunk.chunkId,
+          rangeStart: chunk.rangeStart, rangeEnd: chunk.rangeEnd, hostCount: chunk.hostCount, status: "PENDING",
+        },
+        update: { rangeStart: chunk.rangeStart, rangeEnd: chunk.rangeEnd, hostCount: chunk.hostCount },
+      });
+    }
+    return expansion.kind === "LIST"
+      ? { mode: "LIST", hosts: expansion.hosts.length, chunks: expansion.chunks.length, totalHosts: expansion.hosts.length }
+      : { mode: "RANGES", hosts: 0, chunks: expansion.chunks.length, totalHosts: expansion.totalHosts };
   }
 
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */

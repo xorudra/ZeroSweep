@@ -83,6 +83,9 @@ export const PLATFORM_STAGE_TYPES = new Set([
   // API finding normalization) — the worker runs them as engine hooks.
   "API_DISCOVERY", "SPEC_IMPORT", "AUTH_MAPPING", "JWT_ANALYSIS",
   "WEBSOCKET_INVENTORY", "API_FINDING_NORMALIZATION",
+  // Prompt 10: target expansion is computed by the engine/store hook
+  // (bounded chunking, §5/§62) — no adapter executes for it.
+  "TARGET_EXPANSION",
 ]);
 
 export class InvalidPlanError extends Error {

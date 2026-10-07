@@ -37,6 +37,14 @@ export const CAPABILITIES = [
   "JWT_INSPECTION", "JWT_CONFIGURATION_ANALYSIS",
   "GRAPHQL_ANALYSIS", "GRAPHQL_SCHEMA_ANALYSIS",
   "HTTP_TRAFFIC_CAPTURE", "WEBSOCKET_DISCOVERY", "SPEC_IMPORT",
+  // Prompt 10: network VAPT engine capabilities. HIGH_SPEED_PORT_DISCOVERY
+  // (Masscan) is deliberately not required by any default stage — the tool
+  // is elevated-policy gated and never auto-selected (§19). LOCAL_NETWORK_
+  // DISCOVERY executes only on workers advertising LOCAL_LAYER2_ACCESS
+  // (§65). There is NO credential-attack capability in this list (§88).
+  "HOST_DISCOVERY", "VERSION_DETECTION", "OS_HINTING", "SAFE_NETWORK_CHECKS",
+  "HIGH_SPEED_PORT_DISCOVERY", "LOCAL_NETWORK_DISCOVERY", "UDP_SCANNING",
+  "PACKET_CAPTURE", "PACKET_ANALYSIS",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -104,6 +112,11 @@ export interface ToolMetadata {
   inputSchema?: AdapterInputField[];
   requiresCredentials: string[];
   requiresApproval: boolean;
+  /** Prompt 10 §23/§86: worker type this adapter must run on when it is
+   *  not a general tool (NETWORK_EXTERNAL / NETWORK_INTERNAL /
+   *  PACKET_ANALYSIS). Display + scheduling metadata; enforcement lives in
+   *  the worker's capability gates. */
+  requiredWorkerType?: string;
   supportsContainerExecution: boolean;
   supportsCancellation: boolean;
   supportsProgress: boolean;

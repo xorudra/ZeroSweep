@@ -37,6 +37,12 @@ export interface NormalizedAsset {
   scopeStatus?: "IN_SCOPE" | "OUT_OF_SCOPE";
   /** True when the host resolves only to a detected wildcard DNS answer. */
   wildcardSuspect?: boolean;
+  /** OS hint from network fingerprinting (Prompt 10 §35): a HINT with a
+   *  confidence — never presented as fact. */
+  osHint?: string;
+  osConfidence?: number;
+  /** CIDR/network this host was discovered under (Prompt 10 §50). */
+  network?: string;
 }
 export interface NormalizedService {
   host: string;
@@ -52,6 +58,22 @@ export interface NormalizedService {
   /** Final redirect target when the probe followed a redirect (Prompt 5 §30).
    *  An out-of-scope target is recorded as a reference, never probed. */
   redirectLocation?: string;
+  /** Port state (Prompt 10 §32): OPEN is inventory, never a vulnerability. */
+  state?: "OPEN" | "CLOSED" | "FILTERED" | "OPEN_FILTERED" | "UNKNOWN";
+  /** CPE exactly as the scanner reported it (Prompt 10 §34) — never
+   *  fabricated; input to later vulnerability-intelligence correlation. */
+  cpe?: string;
+  /** Sanitized service banner (Prompt 10 §36): control characters and
+   *  terminal escapes stripped, HTML neutralized, size-capped BEFORE it
+   *  can reach storage or UI. */
+  banner?: string;
+  /** Whether the service negotiates TLS (Prompt 10 §29). */
+  tls?: boolean;
+  /** Version/fingerprint confidence 0..1 (Prompt 10 §33): weak banner
+   *  guesses stay low and never auto-create CVE findings. */
+  confidence?: number;
+  /** ALL adapter slugs that reported this service (Prompt 10 §31). */
+  sources?: string[];
 }
 export type EndpointType = "PAGE" | "DIRECTORY" | "FILE" | "API" | "STATIC" | "UNKNOWN";
 
@@ -247,6 +269,25 @@ export interface NormalizedJwtProfile {
   endpoint?: string;
 }
 
+/** A packet capture produced or imported for OFFLINE analysis
+ *  (Prompt 10 §43–§48). tshark analysis is preferred over live sniffing;
+ *  retention is policy-bound, never indefinite by default. */
+export interface NormalizedPacketCapture {
+  /** Object-storage reference of the raw capture artifact. */
+  artifactRef: string;
+  format: "PCAP" | "PCAPNG";
+  /** Producing tool: tcpdump capture or an imported analyst capture. */
+  source: string;
+  sizeBytes?: number;
+  sha256?: string;
+  /** Capture bound actually applied (seconds) — captures are always
+   *  duration/size bounded (§44). */
+  durationSeconds?: number;
+  /** Interface the capture was taken on, when the producing worker
+   *  recorded it — explicit interfaces only, never "any" (§44). */
+  interfaceName?: string;
+}
+
 export interface NormalizedSecurityResult {
   assets: NormalizedAsset[];
   services: NormalizedService[];
@@ -269,6 +310,12 @@ export interface NormalizedSecurityResult {
   jwtProfiles?: NormalizedJwtProfile[];
   /** Imported/discovered specification metadata (Prompt 9 §6). */
   apiSpecifications?: NormalizedApiSpecification[];
+  /** Packet capture artifacts (Prompt 10 §43/§47): METADATA ONLY — the
+   *  raw capture bytes live in object storage behind the artifact
+   *  reference; raw access is permission-gated (VIEW_RAW_PCAP) and
+   *  audited. Captures may contain credentials/PII, so no byte content
+   *  ever travels in this record. */
+  packetCaptures?: NormalizedPacketCapture[];
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

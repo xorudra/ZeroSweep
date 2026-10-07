@@ -147,6 +147,31 @@ export const VULN_CLASS_TAXONOMY: Record<string, VulnClassInfo> = {
     remediation: "Review the scanner evidence, confirm applicability, and apply the vendor guidance linked in the references.",
     technicalImpact: "See the scanner-provided description and evidence for the assessed impact.",
   },
+  // Prompt 10: network-service classes. These are created ONLY from
+  // detected-service evidence + the curated cleartext/management policy
+  // (network/network-checks.ts) or from a governed SAFE NSE script whose
+  // output confirms the condition — never from an open port alone (§37).
+  CLEARTEXT_PROTOCOL_EXPOSURE: {
+    title: "Cleartext Protocol Exposed",
+    cwe: "CWE-319",
+    owaspCategory: "A02:2021 Cryptographic Failures",
+    remediation: "Disable the cleartext service or wrap/replace it with an encrypted equivalent (SSH for Telnet, FTPS/SFTP for FTP) and restrict exposure with network controls.",
+    technicalImpact: "Credentials and session data traverse the network unencrypted and can be intercepted or modified by an on-path attacker.",
+  },
+  UNAUTHENTICATED_MANAGEMENT_API: {
+    title: "Management API Exposed Without Authentication By Design",
+    cwe: "CWE-862",
+    owaspCategory: "A01:2021 Broken Access Control",
+    remediation: "Bind the management API to a trusted interface/socket only, require authentication and TLS, and firewall it from untrusted networks.",
+    technicalImpact: "The exposed management API (e.g. an unencrypted Docker endpoint) grants unauthenticated administrative control of the host to anyone who can reach it.",
+  },
+  SMB_SIGNING_NOT_REQUIRED: {
+    title: "SMB Message Signing Not Required",
+    cwe: "CWE-294",
+    owaspCategory: "A02:2021 Cryptographic Failures",
+    remediation: "Require SMB message signing (and SMB encryption where supported) via group policy / server configuration.",
+    technicalImpact: "Without required message signing, SMB sessions are exposed to relay and man-in-the-middle attacks.",
+  },
   // Prompt 9: API security classes. The OWASP category for these comes
   // from the OWASP API Security Top 10 2023 mapping (api/taxonomy.ts),
   // applied by API-engine producers — the web taxonomy intentionally
@@ -226,6 +251,9 @@ export const VULN_CLASS_FAMILIES: Record<string, string> = {
   JWT_ISSUER_AUDIENCE_MISMATCH: "JWT",
   EXPOSED_API_DOCUMENTATION: "EXPOSURE",
   EXPOSED_DEBUG_ENDPOINT: "EXPOSURE",
+  CLEARTEXT_PROTOCOL_EXPOSURE: "NETWORK_EXPOSURE",
+  UNAUTHENTICATED_MANAGEMENT_API: "NETWORK_EXPOSURE",
+  SMB_SIGNING_NOT_REQUIRED: "NETWORK_EXPOSURE",
 };
 
 export function vulnClassFamily(vulnClass: string): string {

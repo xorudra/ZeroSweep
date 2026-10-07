@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -11,7 +11,7 @@ import { PrismaWorkerStore } from "./store/prisma-store";
 import { prismaScannerDeps } from "./store/scanner-deps";
 import { DagRunner } from "./consumers/dag-runner";
 import { createBullmqStageDispatcher } from "./consumers/bullmq-dispatcher";
-import { makeWorkerId, registrationRecord } from "./heartbeat/heartbeat";
+import { makeWorkerId, privilegedCapabilitiesFromEnv, registrationRecord } from "./heartbeat/heartbeat";
 import { recoverStaleExecutions } from "./lifecycle/recovery";
 import { metrics, METRICS } from "./telemetry/metrics";
 
@@ -43,7 +43,15 @@ registerProxyAdapters(registry, prismaScannerDeps());
 // GraphQLmap + the jwt_tool inspection adapter). Binaries absent from
 // the worker host report UNAVAILABLE and are never executed (§2).
 registerApiAdapters(registry);
-const executor = new StageExecutor(registry, store);
+// Prompt 10: network VAPT adapters (Nmap / Naabu / RustScan / Masscan /
+// Netdiscover / arp-scan / tcpdump / tshark). The executor gates the
+// privileged ones on THIS worker's own deployment capabilities (§65):
+// local layer-2 discovery and packet capture exist only when the
+// worker's env grants them (internal / packet-analysis workers).
+registerNetworkAdapters(registry);
+const executor = new StageExecutor(registry, store, undefined, {
+  workerCapabilities: privilegedCapabilitiesFromEnv(),
+});
 const runner = new DagRunner(store, executor);
 const workerId = makeWorkerId();
 let activeJobs = 0;
@@ -116,7 +124,7 @@ async function registerAndHeartbeat(): Promise<void> {
     await prisma.workerNode.upsert({
       where: { workerId },
       create: record,
-      update: { lastHeartbeat: record.lastHeartbeat, status: draining ? "DRAINING" : record.status, activeJobs, capabilities: record.capabilities as never },
+      update: { lastHeartbeat: record.lastHeartbeat, status: draining ? "DRAINING" : record.status, activeJobs, capabilities: record.capabilities as never, workerType: record.workerType },
     });
   } catch (e) {
     logger.warn("worker registration heartbeat failed (database unavailable?)", { error: e instanceof Error ? e.message : "unknown" });

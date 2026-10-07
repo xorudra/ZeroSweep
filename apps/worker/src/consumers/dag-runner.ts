@@ -44,6 +44,11 @@ export interface ScanRunStore extends ExecutionStore {
   mapApiAuthentication?(scanId: string): Promise<{ contexts: number; servicesWithAuth: number } | null>;
   analyzeJwtProfiles?(scanId: string): Promise<{ tokens: number; findings: number } | null>;
   inventoryWebSockets?(scanId: string): Promise<{ webSockets: number; authenticated: number } | null>;
+  /** Prompt 10 platform-stage hook (same optional pattern): expand the
+   *  network target into bounded chunks (§5/§62) and persist them for
+   *  checkpointing. Returns counts only — hosts are never materialized
+   *  beyond the bounded cap. */
+  expandNetworkTargets?(scanId: string): Promise<{ mode: string; hosts: number; chunks: number; totalHosts: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -290,6 +295,19 @@ export class DagRunner {
       const summary = await this.store.summarizeFindings(scanId);
       const total = typeof summary?.totalFindings === "number" ? summary.totalFindings : 0;
       await emit("api.test_completed", { stageId, totalFindings: total });
+    }
+    // Prompt 10 §5/§25/§62: target expansion is engine work — the store
+    // canonicalizes the CIDR target, applies the size policy and writes
+    // bounded chunk rows; the runner only records the counts.
+    if (stageId === "TARGET_EXPANSION" && this.store.expandNetworkTargets) {
+      const result = await this.store.expandNetworkTargets(scanId);
+      if (result) {
+        if (result.mode === "DENIED") {
+          await emit("network.protected_target_blocked", { stageId, reasonCode: "CIDR_SIZE_DENIED", totalHosts: result.totalHosts });
+        } else {
+          await emit("network.targets_expanded", { stageId, mode: result.mode, hosts: result.hosts, chunks: result.chunks, totalHosts: result.totalHosts });
+        }
+      }
     }
     return "COMPLETED";
   }

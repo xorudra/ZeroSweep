@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  API_SLUGS, LocalEchoAdapter, MockSecurityAdapter, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  API_SLUGS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
+  apiHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -20,7 +20,7 @@ import { ScanEventsService } from "./scan-events.service";
  *  adapters. Real adapters are selected only when their health probe passes
  *  on this host; otherwise the stage falls back to the labelled simulation
  *  adapter (Prompt 5 §39/§56) — never to a fake "real" run. */
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS];
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS];
 
 export function hostOf(value: string): string {
   try {
@@ -73,9 +73,13 @@ export class OrchestrationService {
       // Prompt 9: API adapters (Kiterunner / Schemathesis / InQL /
       // GraphQLmap + jwt_tool inspection) join plan-time selection.
       registerApiAdapters(registry);
+      // Prompt 10: network adapters (Nmap / Naabu / RustScan / Masscan /
+      // Netdiscover / arp-scan / tcpdump / tshark) join plan-time
+      // selection for the network profiles.
+      registerNetworkAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()) } };
     }
     return this.registryCache.registry;
   }
@@ -220,6 +224,15 @@ export class OrchestrationService {
     await this.events.record(makeEvent(scan.id, loaded.workspaceId, "scan.queued", { simulation: plan.policySnapshot.simulation }));
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "SCAN_PLANNED", resourceType: "Scan", resourceId: scan.id });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "SCAN_REQUESTED", resourceType: "Scan", resourceId: scan.id });
+    // Prompt 10 §85: network-profile scans carry the network audit
+    // actions too (request + scope validation) — counts/ids only.
+    if (plan.profile.startsWith("NETWORK_")) {
+      await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "NETWORK_SCAN_REQUESTED", resourceType: "Scan", resourceId: scan.id, metadata: { profile: plan.profile } });
+      await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "NETWORK_SCOPE_VALIDATED", resourceType: "Scan", resourceId: scan.id });
+      if (plan.profile === "NETWORK_INTERNAL") {
+        await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "INTERNAL_SCAN_APPROVED", resourceType: "Scan", resourceId: scan.id, metadata: { basis: "assessment approval + verified target (internal engagement)" } });
+      }
+    }
     const enqueued = await this.queue.enqueueScanOrchestration({ scanId: scan.id, workspaceId: loaded.workspaceId });
     return { scanId: scan.id, status: "QUEUED", plan, queueEnqueued: enqueued, simulation: plan.policySnapshot.simulation };
   }

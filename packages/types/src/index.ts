@@ -13,7 +13,10 @@ export type TargetType = (typeof TARGET_TYPES)[number];
 
 export const ASSESSMENT_PROFILES = [
   "PASSIVE_RECON", "WEB_BASELINE", "WEB_COMPREHENSIVE", "API_ASSESSMENT",
-  "NETWORK_ASSESSMENT", "SOURCE_CODE", "CONTAINER", "CLOUD", "MOBILE", "CUSTOM",
+  "NETWORK_ASSESSMENT",
+  // Prompt 10 §8: dedicated network profiles.
+  "NETWORK_DISCOVERY", "NETWORK_BASELINE", "NETWORK_COMPREHENSIVE", "NETWORK_INTERNAL",
+  "SOURCE_CODE", "CONTAINER", "CLOUD", "MOBILE", "CUSTOM",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

@@ -24,6 +24,7 @@ import { OrchestrationModule } from "./modules/orchestration/orchestration.modul
 import { AssetsModule } from "./modules/assets/assets.module";
 import { ScannersModule } from "./modules/scanners/scanners.module";
 import { ApiSecurityModule } from "./modules/api-security/api-security.module";
+import { NetworkModule } from "./modules/network/network.module";
 
 @Module({
   imports: [
@@ -31,7 +32,7 @@ import { ApiSecurityModule } from "./modules/api-security/api-security.module";
     OrganizationsModule, WorkspacesModule, TargetsModule, ScopesModule, AssessmentsModule,
     ScansModule, FindingsModule, ReportsModule, ToolsModule, IntegrationsModule,
     CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule, ScannersModule,
-    ApiSecurityModule,
+    ApiSecurityModule, NetworkModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

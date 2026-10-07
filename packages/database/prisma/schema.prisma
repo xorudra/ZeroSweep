@@ -70,6 +70,13 @@ enum AssessmentProfile {
   WEB_COMPREHENSIVE
   API_ASSESSMENT
   NETWORK_ASSESSMENT
+  // Prompt 10 §8: dedicated network profiles — discovery (light),
+  // baseline, comprehensive, and internal (approved internal engagement
+  // + internal worker required, §64/§65).
+  NETWORK_DISCOVERY
+  NETWORK_BASELINE
+  NETWORK_COMPREHENSIVE
+  NETWORK_INTERNAL
   SOURCE_CODE
   CONTAINER
   CLOUD
@@ -127,6 +134,11 @@ enum ScanStageType {
   GRAPHQL_ANALYSIS
   WEBSOCKET_INVENTORY
   API_FINDING_NORMALIZATION
+  // Prompt 10 §25: network DAG stages.
+  TARGET_EXPANSION
+  HOST_DISCOVERY
+  SERVICE_DETECTION
+  SAFE_NETWORK_CHECKS
   NORMALIZATION
   CORRELATION
   RISK_ANALYSIS
@@ -326,6 +338,17 @@ enum AuditAction {
   GRAPHQL_SCHEMA_IMPORTED
   STATE_CHANGING_OPERATION_DENIED
   API_TEST_COMPLETED
+  // Prompt 10 §85: network engine audit actions. Metadata never contains
+  // packet data, raw tool output or credentials (§85).
+  NETWORK_SCAN_REQUESTED
+  NETWORK_SCOPE_VALIDATED
+  HOST_DISCOVERED
+  PORT_DISCOVERED
+  SERVICE_IDENTIFIED
+  NETWORK_SCAN_COMPLETED
+  PROTECTED_TARGET_BLOCKED
+  INTERNAL_SCAN_APPROVED
+  RAW_PCAP_ACCESSED
 }
 
 enum NotificationType {
@@ -453,56 +476,126 @@ model Scope {
 
 // ------------------------------- Discovered surface -------------------------------
 model Asset {
-  id                 String       @id @default(uuid())
+  id                 String                  @id @default(uuid())
   workspaceId        String
   targetId           String
   host               String
   ip                 String?
-  type               String       @default("HOST")
+  type               String                  @default("HOST")
   // Discovered-asset scope verdict (Prompt 4 §33): IN_SCOPE | OUT_OF_SCOPE |
   // PENDING_REVIEW. Out-of-scope assets never become scan targets on their own.
-  scopeStatus        String       @default("IN_SCOPE")
+  scopeStatus        String                  @default("IN_SCOPE")
   // Provenance (Prompt 5 §18): adapter slugs that discovered this asset —
   // one asset, many sources, never duplicate rows per tool.
-  sources            String[]     @default([])
+  sources            String[]                @default([])
   // Live HTTP status when httpx probed this host (Prompt 5 §32); metadata,
   // never a finding by itself.
   httpStatus         Int?
   // Asset criticality for the risk engine (Prompt 7 §36): user/admin
   // classified — CRITICAL | HIGH | MEDIUM | LOW | UNSPECIFIED. Never
   // auto-raised just because a host is internet-facing.
-  criticality        String       @default("UNSPECIFIED")
+  criticality        String                  @default("UNSPECIFIED")
   // Scan that most recently discovered/refresh this asset — powers the
   // per-scan recon summary (Prompt 5 §46) without inventing a join table.
   discoveredByScanId String?
-  target             Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  // Prompt 10 §35/§50: OS HINT (never stated as fact) + confidence, and
+  // the canonical network/CIDR this host belongs to when known.
+  osHint             String?
+  osConfidence       Float?
+  network            String?
+  packetCaptures     PacketCaptureArtifact[]
+  target             Target                  @relation(fields: [targetId], references: [id], onDelete: Cascade)
   services           Service[]
   endpoints          Endpoint[]
   technologies       Technology[]
   findings           Finding[]
-  firstSeen          DateTime     @default(now())
-  lastSeen           DateTime     @updatedAt
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  firstSeen          DateTime                @default(now())
+  lastSeen           DateTime                @updatedAt
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@index([workspaceId])
   @@index([targetId, host])
 }
 
 model Service {
-  id        String   @id @default(uuid())
-  assetId   String
-  port      Int
-  protocol  String   @default("tcp")
-  name      String?
-  product   String?
-  version   String?
-  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  assetId    String
+  port       Int
+  protocol   String   @default("tcp")
+  name       String?
+  product    String?
+  version    String?
+  // Prompt 10 §29–§36/§49: normalized network service facts. state is
+  // OPEN/CLOSED/FILTERED/OPEN_FILTERED/UNKNOWN; banner is SANITIZED at
+  // parse time (control chars/escapes stripped, markup neutralized,
+  // size-capped) — it is untrusted tool output, never rendered raw;
+  // cpe is stored ONLY when a tool actually reported it, never
+  // fabricated; sources is the aggregator provenance (adapter slugs).
+  state      String   @default("OPEN")
+  cpe        String?
+  banner     String?
+  tls        Boolean?
+  confidence Float?
+  sources    String[] @default([])
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([assetId, port, protocol])
   @@index([assetId])
+}
+
+// Prompt 10 §43: packet-capture artifact METADATA. The capture bytes
+// themselves live in object storage (storageKey) — never in the
+// database and never served without the VIEW_RAW_PCAP permission + an
+// audited RAW_PCAP_ACCESSED event (§47). Retention is policy-driven
+// (§48); source distinguishes IMPORTED captures from tcpdump runs.
+model PacketCaptureArtifact {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  scanId          String?
+  assetId         String?
+  toolExecutionId String?
+  format          String // PCAP | PCAPNG
+  source          String // tcpdump | IMPORT | tshark
+  storageKey      String
+  sha256          String?
+  sizeBytes       Int?
+  durationSeconds Int?
+  interfaceName   String?
+  packetCount     Int?
+  retentionUntil  DateTime?
+  asset           Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([scanId])
+}
+
+// Prompt 10 §62: distributed scan chunk bookkeeping — one row per
+// bounded target chunk (never one row per host, §5). Status follows the
+// chunk through PENDING → RUNNING → COMPLETED/FAILED so an interrupted
+// scan resumes from checkpoints instead of restarting (§61).
+model NetworkScanChunk {
+  id          String    @id @default(uuid())
+  workspaceId String
+  scanId      String
+  chunkId     String
+  rangeStart  String
+  rangeEnd    String
+  hostCount   Int
+  status      String    @default("PENDING")
+  workerId    String?
+  attempt     Int       @default(0)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([scanId, chunkId])
+  @@index([scanId, status])
+  @@index([workspaceId])
 }
 
 model Endpoint {
@@ -1387,6 +1480,11 @@ model WorkerNode {
   workerId      String       @unique
   hostname      String
   version       String
+  // Prompt 10 §23: worker type — GENERAL_WEB | NETWORK_EXTERNAL |
+  // NETWORK_INTERNAL | PACKET_ANALYSIS. The scheduler matches stage
+  // tools to workers by type + capabilities (§24); privileged/internal
+  // workers stay isolated and never receive a Docker socket.
+  workerType    String       @default("GENERAL_WEB")
   status        WorkerStatus @default(ONLINE)
   capabilities  Json // string[]
   activeJobs    Int          @default(0)

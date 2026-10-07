@@ -24,6 +24,12 @@ export const SCAN_EVENT_TYPES = [
   "api.service_discovered", "api.spec_imported", "api.operation_blocked",
   "jwt.analyzed", "graphql.schema_imported", "api.test_completed",
   "api.auth_mapped", "websocket.inventoried",
+  // Prompt 10 — network VAPT engine events (§84). Counts/ids/verdicts
+  // only; never per-packet data, never raw tool output.
+  "network.targets_expanded", "network.host_discovered", "network.port_discovered",
+  "network.service_identified", "network.protected_target_blocked",
+  "network.internal_scan_approved", "network.masscan_denied",
+  "network.local_discovery_unavailable", "network.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 
