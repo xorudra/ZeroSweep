@@ -1,5 +1,5 @@
 import {
-  RECON_SLUGS, ScopeMatcher, ToolRegistry, evaluateToolPolicy, type AuthorizationContext,
+  RECON_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry, evaluateToolPolicy, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -15,14 +15,15 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * §14), re-evaluates authorization + scope + policy immediately before
  * execution (§11–§12), runs the adapter lifecycle, stores the raw artifact in
  * object storage, parses, normalizes, and persists through the store.
- * Executable adapters: the Phase 4 mock/local-echo pair plus the Prompt 5
- * recon adapters (subfinder … katana). Recon adapters run ONLY through
- * their validated plans and only when their binary is actually present —
- * otherwise policy denies with TOOL_UNAVAILABLE and orchestration degrades
- * the capability instead of crashing (Prompt 5 §55–§56).
+ * Executable adapters: the Phase 4 mock/local-echo pair, the Prompt 5
+ * recon adapters (subfinder … katana) and the Prompt 6 web-discovery
+ * adapters (ffuf, feroxbuster, gobuster, wfuzz, arjun). Real adapters run
+ * ONLY through their validated plans and only when their binary is
+ * actually present — otherwise policy denies with TOOL_UNAVAILABLE and
+ * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS] as const;
 
 export interface ExecutionContextRecord {
   executionId: string;
@@ -49,7 +50,11 @@ export interface ExecutionContextRecord {
    *  asset hostnames and endpoint URLs, loaded from persisted state by the
    *  store — never from queue payloads. Adapters receive only the fields
    *  their declared input schema accepts. */
-  stageInputs?: { hosts: string[]; urls: string[] };
+  stageInputs?: { hosts: string[]; urls: string[]; technologies?: string[] };
+  /** The scan's assessment profile (from the persisted plan) — drives
+   *  Prompt 6 wordlist profile selection: WEB_BASELINE → SMALL, anything
+   *  broader → STANDARD. COMPREHENSIVE is never selected automatically. */
+  profile?: string;
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -58,7 +63,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -167,6 +172,18 @@ export class StageExecutor {
       if (ctx.stageInputs) {
         if (declared.has("hosts") && ctx.stageInputs.hosts.length > 0) config.hosts = ctx.stageInputs.hosts;
         if (declared.has("urls") && ctx.stageInputs.urls.length > 0) config.urls = ctx.stageInputs.urls;
+        if (declared.has("technologies") && (ctx.stageInputs.technologies?.length ?? 0) > 0) config.technologies = ctx.stageInputs.technologies;
+      }
+      // Prompt 6 derived configuration — computed by the WORKER from the
+      // persisted plan/stage, never accepted from clients (§12/§29):
+      // wordlist profile follows the assessment profile (never
+      // COMPREHENSIVE automatically), and wfuzz's template follows the
+      // stage (parameter stage → PARAMETER template, else CONTENT).
+      if (declared.has("wordlistProfile")) {
+        config.wordlistProfile = ctx.profile === "WEB_BASELINE" ? "SMALL" : "STANDARD";
+      }
+      if (declared.has("template")) {
+        config.template = ctx.stageId === "PARAMETER_DISCOVERY" ? "PARAMETER" : "CONTENT";
       }
       const plan = await adapter.buildExecutionPlan(target, config);
 
@@ -229,6 +246,9 @@ export class StageExecutor {
           endpoints: counts.endpoints ?? processed.endpoints.length,
           services: counts.services ?? processed.services.length,
           technologies: counts.technologies ?? processed.technologies.length,
+          parameters: counts.parameters ?? processed.parameters.length,
+          forms: counts.forms ?? processed.forms.length,
+          suppressedEndpoints: processed.suppressedEndpoints,
           ...normalized.metrics,
         },
       });

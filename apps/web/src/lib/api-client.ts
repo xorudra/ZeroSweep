@@ -75,5 +75,9 @@ export const api = {
   scanAssets: (scanId: string) => apiFetch(`/scans/${scanId}/assets`),
   scanEndpoints: (scanId: string) => apiFetch(`/scans/${scanId}/endpoints`),
   reconSummary: (scanId: string) => apiFetch(`/scans/${scanId}/recon-summary`),
+  webSurface: (scanId: string) => apiFetch(`/scans/${scanId}/web-surface`),
+  assetWebSurface: (id: string) => apiFetch(`/assets/${id}/web-surface`),
+  endpoint: (id: string) => apiFetch(`/endpoints/${id}`),
+  endpointParameters: (id: string) => apiFetch(`/endpoints/${id}/parameters`),
   toolHealth: (slug: string) => apiFetch(`/tools/${slug}/health`),
 };

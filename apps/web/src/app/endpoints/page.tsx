@@ -19,7 +19,11 @@ interface EndpointRow {
   statusCode?: number | null;
   parameterNames?: string[];
   source?: string | null;
+  sources?: string[];
   scopeStatus?: string;
+  contentType?: string | null;
+  endpointType?: string;
+  classification?: string | null;
   asset?: { id: string; host: string } | null;
 }
 
@@ -27,6 +31,7 @@ const selectCls = "rounded bg-slate-900 px-2 py-1.5 text-sm text-slate-200 borde
 
 export default function Page() {
   const [scopeStatus, setScopeStatus] = useState("");
+  const [endpointType, setEndpointType] = useState("");
   const [search, setSearch] = useState("");
   const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: EndpointRow[]; total: number }>({ kind: "loading" });
 
@@ -34,13 +39,14 @@ export default function Page() {
     let cancelled = false;
     const params = new URLSearchParams({ pageSize: "50" });
     if (scopeStatus) params.set("scopeStatus", scopeStatus);
+    if (endpointType) params.set("endpointType", endpointType);
     if (search) params.set("search", search);
     setState({ kind: "loading" });
     apiFetch<{ items: EndpointRow[]; total: number }>(`/endpoints?${params.toString()}`)
       .then((data) => { if (!cancelled) setState({ kind: "ready", items: data.items ?? [], total: data.total ?? 0 }); })
       .catch((e: unknown) => { if (!cancelled) setState({ kind: "error", message: e instanceof ApiError ? e.message : "Could not reach the API." }); });
     return () => { cancelled = true; };
-  }, [scopeStatus, search]);
+  }, [scopeStatus, endpointType, search]);
 
   return (
     <>
@@ -50,6 +56,12 @@ export default function Page() {
           <option value="">All scope statuses</option>
           <option value="IN_SCOPE">In scope</option>
           <option value="OUT_OF_SCOPE">Out of scope (references)</option>
+        </select>
+        <select aria-label="Endpoint type" className={selectCls} value={endpointType} onChange={(e) => setEndpointType(e.target.value)}>
+          <option value="">All types</option>
+          {["PAGE", "DIRECTORY", "FILE", "API", "STATIC", "UNKNOWN"].map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
         </select>
         <input aria-label="Search URLs" className={selectCls} placeholder="Search URLs" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
@@ -63,7 +75,7 @@ export default function Page() {
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-slate-900/70 text-slate-400">
               <tr>
-                {["URL", "Host", "Method", "Status", "Parameters", "Source", "Scope"].map((c) => (
+                {["URL", "Host", "Method", "Status", "Type", "Content-Type", "Parameters", "Sources", "Scope"].map((c) => (
                   <th key={c} className="px-4 py-3 font-medium">{c}</th>
                 ))}
               </tr>
@@ -71,12 +83,17 @@ export default function Page() {
             <tbody>
               {state.items.map((e) => (
                 <tr key={e.id} className="border-t border-slate-800">
-                  <td className="max-w-md break-all px-4 py-3 text-slate-200">{e.url}</td>
+                  <td className="max-w-md break-all px-4 py-3 text-slate-200">
+                    <Link href={`/endpoints/${e.id}`} className="text-sky-300 hover:underline">{e.url}</Link>
+                    {e.classification ? <span className="text-amber-300"> · {e.classification}</span> : null}
+                  </td>
                   <td className="px-4 py-3">{e.asset ? <Link href={`/assets/${e.asset.id}`} className="text-sky-300 hover:underline">{e.asset.host}</Link> : "—"}</td>
                   <td className="px-4 py-3 text-slate-200">{e.method}</td>
                   <td className="px-4 py-3 text-slate-200">{e.statusCode ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-200">{e.endpointType ?? "UNKNOWN"}</td>
+                  <td className="px-4 py-3 text-slate-200">{e.contentType ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-200">{(e.parameterNames ?? []).join(", ") || "—"}</td>
-                  <td className="px-4 py-3 text-slate-200">{e.source ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-200">{[...new Set([...(e.sources ?? []), ...(e.source ? [e.source] : [])])].join(", ") || "—"}</td>
                   <td className="px-4 py-3"><Badge>{e.scopeStatus ?? "—"}</Badge></td>
                 </tr>
               ))}

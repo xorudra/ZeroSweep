@@ -41,6 +41,8 @@ export class FakeStore implements ScanRunStore {
   endpoints: ProcessedResult["endpoints"] = [];
   services: ProcessedResult["services"] = [];
   technologies: ProcessedResult["technologies"] = [];
+  parameters: ProcessedResult["parameters"] = [];
+  forms: ProcessedResult["forms"] = [];
   deadLetters: unknown[] = [];
   reportPending = false;
   paused = false;
@@ -51,7 +53,7 @@ export class FakeStore implements ScanRunStore {
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -106,11 +108,13 @@ export class FakeStore implements ScanRunStore {
       auth: TEST_AUTH, targetExists: true, targetWorkspaceId: "ws-1",
       targetVerified: this.verified, assessmentApproved: true, scopeValid: true,
       networkCapable: planned.networkCapable,
+      profile: this.plan.profile,
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
       stageInputs: {
         hosts: [...new Set(this.assets.filter((a) => a.scopeStatus === "IN_SCOPE").map((a) => a.host))],
         urls: [...new Set(this.endpoints.filter((e) => e.scopeStatus === "IN_SCOPE").map((e) => e.url))],
+        technologies: [...new Set(this.technologies.map((t) => t.name))],
       },
     };
   }
@@ -121,13 +125,15 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number }> {
+  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number }> {
     this.assets.push(...processed.assets);
     this.findings.push(...processed.findings);
     this.endpoints.push(...processed.endpoints);
     this.services.push(...processed.services);
     this.technologies.push(...processed.technologies);
-    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length };
+    this.parameters.push(...processed.parameters);
+    this.forms.push(...processed.forms);
+    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length };
   }
   async recordDeadLetter(entry: unknown): Promise<void> { this.deadLetters.push(entry); }
 }

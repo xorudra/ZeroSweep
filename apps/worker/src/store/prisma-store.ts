@@ -79,6 +79,7 @@ export class PrismaWorkerStore implements ScanRunStore {
       assessmentApproved: graph.assessment.status === "APPROVED",
       scopeValid: scopeParse.success,
       networkCapable: planned?.networkCapable ?? false,
+      profile: plan.profile,
       stageInputs: await this.loadStageInputs(target.id),
       simulation: {
         fixture: (plan.profile === "PASSIVE_RECON" || plan.profile === "WEB_BASELINE") && stageType === "PASSIVE_RECON",
@@ -90,7 +91,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  in-scope asset hostnames and endpoint URLs discovered so far. Capped so
    *  a huge inventory can't blow up an adapter invocation; out-of-scope
    *  assets are NEVER handed to downstream tools. */
-  private async loadStageInputs(targetId: string): Promise<{ hosts: string[]; urls: string[] }> {
+  private async loadStageInputs(targetId: string): Promise<{ hosts: string[]; urls: string[]; technologies: string[] }> {
     const assets = await prisma.asset.findMany({
       where: { targetId, scopeStatus: "IN_SCOPE" },
       select: { id: true, host: true },
@@ -103,7 +104,15 @@ export class PrismaWorkerStore implements ScanRunStore {
       take: 2000,
       orderBy: { createdAt: "asc" },
     });
-    return { hosts: assets.map((a) => a.host), urls: endpoints.map((e) => e.url) };
+    // Technology names detected so far (Prompt 6 §13 hints for
+    // technology-aware wordlist selection).
+    const technologies = assets.length === 0 ? [] : await prisma.technology.findMany({
+      where: { assetId: { in: assets.map((a) => a.id) } },
+      select: { name: true },
+      distinct: ["name"],
+      take: 200,
+    });
+    return { hosts: assets.map((a) => a.host), urls: endpoints.map((e) => e.url), technologies: technologies.map((t) => t.name) };
   }
 
   async updateExecution(id: string, patch: Record<string, unknown>): Promise<void> {
@@ -116,9 +125,9 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number }> {
+  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
-    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0 };
+    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0 };
     const assetIdByHost = new Map<string, string>();
     for (const asset of processed.assets) {
       const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: asset.host } });
@@ -174,27 +183,73 @@ export class PrismaWorkerStore implements ScanRunStore {
     }
     // Endpoints attach to their host's asset; deduped per asset+URL so
     // repeated stages/scans refresh status + parameter names (§33).
+    // Prompt 6: response-classification metadata, route classification and
+    // the full provenance list refresh the same way (§16/§26).
     let endpoints = 0;
+    const endpointIdByUrl = new Map<string, string>();
     for (const ep of processed.endpoints) {
       const host = hostOf(ep.url);
       const assetId = assetIdByHost.get(host);
       if (!assetId) continue;
       const existingEp = await prisma.endpoint.findFirst({ where: { assetId, url: ep.url } });
       if (existingEp) {
-        await prisma.endpoint.update({
+        const updated = await prisma.endpoint.update({
           where: { id: existingEp.id },
           data: {
             statusCode: ep.statusCode ?? existingEp.statusCode,
             parameterNames: [...new Set([...existingEp.parameterNames, ...ep.parameterNames])].sort(),
             source: ep.source ?? existingEp.source, scopeStatus: ep.scopeStatus,
+            contentType: ep.contentType ?? existingEp.contentType,
+            contentLength: ep.contentLength ?? existingEp.contentLength,
+            title: ep.title ?? existingEp.title,
+            redirectLocation: ep.redirectLocation ?? existingEp.redirectLocation,
+            endpointType: ep.endpointType !== "UNKNOWN" ? ep.endpointType : existingEp.endpointType,
+            classification: ep.classification ?? existingEp.classification,
+            sources: [...new Set([...existingEp.sources, ...ep.sources])].sort(),
           },
         });
+        endpointIdByUrl.set(ep.url, updated.id);
       } else {
-        await prisma.endpoint.create({
-          data: { assetId, url: ep.url, method: ep.method, statusCode: ep.statusCode, parameterNames: ep.parameterNames, source: ep.source, scopeStatus: ep.scopeStatus },
+        const created = await prisma.endpoint.create({
+          data: {
+            assetId, url: ep.url, method: ep.method, statusCode: ep.statusCode, parameterNames: ep.parameterNames,
+            source: ep.source, scopeStatus: ep.scopeStatus, contentType: ep.contentType, contentLength: ep.contentLength,
+            title: ep.title, redirectLocation: ep.redirectLocation, endpointType: ep.endpointType,
+            classification: ep.classification, sources: ep.sources,
+          },
         });
+        endpointIdByUrl.set(ep.url, created.id);
       }
       endpoints++;
+    }
+    // Parameters (Prompt 6 §27): upserted on (endpoint, name, location) —
+    // NAMES and provenance only; a parameter value is never written.
+    let parameters = 0;
+    for (const param of processed.parameters) {
+      const endpointId = endpointIdByUrl.get(param.endpointUrl) ?? endpointIdByUrl.get(param.endpointUrl.split("?")[0]!);
+      if (!endpointId) continue;
+      await prisma.endpointParameter.upsert({
+        where: { endpointId_name_location: { endpointId, name: param.name, location: param.location } },
+        create: { endpointId, name: param.name, location: param.location, sources: param.sources, confidence: param.confidence },
+        update: { sources: param.sources, confidence: param.confidence },
+      });
+      parameters++;
+    }
+    // Forms (§33): structure metadata, refreshed per endpoint+method.
+    let forms = 0;
+    for (const form of processed.forms) {
+      const endpointId = endpointIdByUrl.get(form.endpointUrl);
+      if (!endpointId) continue;
+      const existingForm = await prisma.endpointForm.findFirst({ where: { endpointId, method: form.method } });
+      if (existingForm) {
+        await prisma.endpointForm.update({
+          where: { id: existingForm.id },
+          data: { fieldNames: [...new Set([...existingForm.fieldNames, ...form.fieldNames])].sort(), encodingType: form.encodingType ?? existingForm.encodingType, source: form.source ?? existingForm.source },
+        });
+      } else {
+        await prisma.endpointForm.create({ data: { endpointId, method: form.method, fieldNames: form.fieldNames, encodingType: form.encodingType, source: form.source } });
+      }
+      forms++;
     }
     let findings = 0;
     for (const f of processed.findings) {
@@ -209,7 +264,7 @@ export class PrismaWorkerStore implements ScanRunStore {
       });
       findings++;
     }
-    return { assets: processed.assets.length, findings, endpoints, services, technologies };
+    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms };
   }
 
   async recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void> {

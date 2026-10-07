@@ -64,6 +64,22 @@ export function canonicalizeUrl(raw: string): string | null {
   return `${u.protocol}//${host}${port}${path}${u.search}`;
 }
 
+/**
+ * Canonical endpoint identity (Prompt 6 §21): method + origin + path, with
+ * directory forms unified — /admin and /admin/ are the SAME route for
+ * dedupe (the stored URL keeps its first-seen form; only the identity key
+ * normalizes). Query strings never take part in identity (§45).
+ */
+export function endpointIdentityKey(method: string, canonicalUrl: string): string {
+  try {
+    const u = new URL(canonicalUrl);
+    const path = u.pathname.length > 1 ? u.pathname.replace(/\/+$/, "") : u.pathname;
+    return `${method.toUpperCase()}|${u.origin}${path}`;
+  } catch {
+    return `${method.toUpperCase()}|${canonicalUrl}`;
+  }
+}
+
 /** Parameter NAMES of a URL (Prompt 5 §21) — values are never stored. */
 export function extractParameterNames(rawUrl: string): string[] {
   try {

@@ -53,6 +53,8 @@ export interface NormalizedService {
    *  An out-of-scope target is recorded as a reference, never probed. */
   redirectLocation?: string;
 }
+export type EndpointType = "PAGE" | "DIRECTORY" | "FILE" | "API" | "STATIC" | "UNKNOWN";
+
 export interface NormalizedEndpoint {
   url: string;
   method?: string;
@@ -61,7 +63,51 @@ export interface NormalizedEndpoint {
   parameterNames?: string[];
   /** Adapter slug that discovered this endpoint. */
   source?: string;
+  /** ALL adapter slugs that reported this endpoint (Prompt 6 §26):
+   *  one canonical endpoint, many sources. */
+  sources?: string[];
   scopeStatus?: "IN_SCOPE" | "OUT_OF_SCOPE";
+  /** Response classification metadata (Prompt 6 §16): inventory signals,
+   *  never vulnerability claims. */
+  contentLength?: number;
+  contentType?: string;
+  title?: string;
+  /** Redirect destination as RECORDED by the probe (Prompt 6 §20): stored
+   *  as a reference, never followed across scope by discovery. */
+  redirectLocation?: string;
+  /** Probable route kind (Prompt 6 §41/§43): API / static / file / … */
+  endpointType?: EndpointType;
+  /** Inventory prioritization label, e.g. SENSITIVE_ROUTE for /admin-style
+   *  routes (Prompt 6 §42) — a classification, NOT a vulnerability. */
+  classification?: string;
+  /** Response fingerprint from safe metadata (Prompt 6 §18) used for
+   *  soft-404 / wildcard detection. */
+  fingerprint?: string;
+  /** True when this response matches detected wildcard-route behaviour
+   *  (Prompt 6 §19). */
+  wildcardSuspect?: boolean;
+}
+
+/** A discovered parameter NAME on an endpoint (Prompt 6 §27). Values are
+ *  never stored — sensitive values stay redacted at the URL level (§7/§23). */
+export interface NormalizedEndpointParameter {
+  /** Canonical URL of the endpoint this parameter belongs to. */
+  endpointUrl: string;
+  name: string;
+  location: "QUERY" | "PATH" | "HEADER" | "COOKIE" | "BODY";
+  /** Adapter slugs that discovered this parameter (Prompt 6 §30). */
+  sources?: string[];
+  confidence?: number;
+}
+
+/** Form metadata revealed by crawling (Prompt 6 §33): field NAMES and
+ *  encoding only. Forms are never submitted by discovery (§34). */
+export interface NormalizedForm {
+  endpointUrl: string;
+  method: string;
+  fieldNames: string[];
+  encodingType?: string;
+  source?: string;
 }
 export interface NormalizedTechnology {
   name: string;
@@ -78,6 +124,10 @@ export interface NormalizedSecurityResult {
   endpoints: NormalizedEndpoint[];
   technologies: NormalizedTechnology[];
   findings: NormalizedFinding[];
+  /** Endpoint parameters discovered by web-surface stages (Prompt 6 §27). */
+  parameters?: NormalizedEndpointParameter[];
+  /** Form metadata revealed by crawlers (Prompt 6 §33). */
+  forms?: NormalizedForm[];
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

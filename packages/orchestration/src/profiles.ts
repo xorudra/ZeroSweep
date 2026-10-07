@@ -12,7 +12,8 @@ import type { FailureStrategy } from "./state-machines";
 export const STAGE_TYPES = [
   "AUTHORIZATION_CHECK", "SCOPE_VALIDATION", "PASSIVE_RECON", "ASSET_DISCOVERY",
   "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY",
-  "CRAWLING", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "SAFE_VULNERABILITY_SCAN",
+  "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY",
+  "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -32,6 +33,10 @@ export interface StageDefinition {
   /** Network-capable stages pass the authorization + scope gates AGAIN in the
    *  worker immediately before execution (Prompt 4 §11–§12). */
   networkCapable: boolean;
+  /** Optional cap on how many adapters may be selected for this stage
+   *  (Prompt 6 §48: WEB_BASELINE content discovery uses a SMALL wordlist
+   *  and a single adapter). Applied at selection time. */
+  adapterLimit?: number;
 }
 
 const S = (
@@ -50,8 +55,10 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
   TECHNOLOGY_DETECTION: S("TECHNOLOGY_DETECTION", "Technology Detection", "Fingerprint technologies on live HTTP services.", ["TECHNOLOGY_DETECTION"], ["HTTP_DISCOVERY"], 5, 600, "CONTINUE_WITH_PARTIAL_DATA", true),
   PORT_DISCOVERY: S("PORT_DISCOVERY", "Port Discovery", "Discover open ports on in-scope hosts (authorized profiles only).", ["PORT_DISCOVERY"], ["ASSET_DISCOVERY"], 10, 1200, "FAIL_STAGE_CONTINUE", true),
   CRAWLING: S("CRAWLING", "Web Crawling", "Crawl in-scope web surface for endpoints and parameters.", ["WEB_CRAWLING"], ["HTTP_DISCOVERY"], 10, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
+  CONTENT_DISCOVERY: S("CONTENT_DISCOVERY", "Content Discovery", "Discover unlinked directories, files and routes with governed wordlists (Prompt 6): registered lists only, conservative rates, soft-404 calibration, budgets enforced.", ["CONTENT_DISCOVERY"], ["CRAWLING"], 10, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
   ENDPOINT_DISCOVERY: S("ENDPOINT_DISCOVERY", "Endpoint Discovery", "Consolidate endpoints from crawling and technology detection.", ["URL_DISCOVERY"], ["TECHNOLOGY_DETECTION", "CRAWLING"], 5, 600, "CONTINUE_WITH_PARTIAL_DATA", true),
   PARAMETER_DISCOVERY: S("PARAMETER_DISCOVERY", "Parameter Discovery", "Discover parameters on in-scope endpoints.", ["PARAMETER_DISCOVERY"], ["ENDPOINT_DISCOVERY"], 5, 900, "CONTINUE_WITH_PARTIAL_DATA", true),
+  WEB_SURFACE_NORMALIZATION: S("WEB_SURFACE_NORMALIZATION", "Web Surface Normalization", "Merge crawl + content + parameter discovery into ONE canonical endpoint inventory with provenance and scope verdicts (Prompt 6 §39). Platform stage — no tool executes.", [], ["PARAMETER_DISCOVERY"], 3, 300, "FAIL_STAGE_CONTINUE"),
   SAFE_VULNERABILITY_SCAN: S("SAFE_VULNERABILITY_SCAN", "Safe Vulnerability Scan", "Non-destructive vulnerability checks against in-scope endpoints.", ["VULNERABILITY_SCANNING"], ["ENDPOINT_DISCOVERY"], 15, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
@@ -81,9 +88,9 @@ function template(types: StageType[]): StageDefinition[] {
  */
 export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   PASSIVE_RECON: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "ENDPOINT_DISCOVERY", ...TAIL]),
-  WEB_BASELINE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "ENDPOINT_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
-  WEB_COMPREHENSIVE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY", "CRAWLING", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
-  API_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  WEB_BASELINE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  WEB_COMPREHENSIVE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  API_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   NETWORK_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "PORT_DISCOVERY", ...TAIL]),
   SOURCE_CODE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CONTAINER: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
@@ -120,6 +127,10 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
       return false;
     });
     for (const s of substituted) if (!def.dependencies.includes(s)) def.dependencies.push(s);
+    // Prompt 6 §48: WEB_BASELINE content discovery is deliberately small —
+    // ONE adapter (the first by capability match), SMALL wordlists. The cap
+    // is part of the template, so the plan itself records the bound.
+    if (profile === "WEB_BASELINE" && def.type === "CONTENT_DISCOVERY") def.adapterLimit = 1;
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];
     if (def.type === "RISK_ANALYSIS") def.dependencies = ["CORRELATION"];

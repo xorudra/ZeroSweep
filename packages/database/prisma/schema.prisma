@@ -111,8 +111,10 @@ enum ScanStageType {
   TECHNOLOGY_DETECTION
   PORT_DISCOVERY
   CRAWLING
+  CONTENT_DISCOVERY
   ENDPOINT_DISCOVERY
   PARAMETER_DISCOVERY
+  WEB_SURFACE_NORMALIZATION
   SAFE_VULNERABILITY_SCAN
   NORMALIZATION
   CORRELATION
@@ -463,11 +465,79 @@ model Endpoint {
   parameterNames String[] @default([])
   source         String?
   scopeStatus    String   @default("IN_SCOPE")
-  asset          Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  // Prompt 6 §16/§26/§41-§42: response-classification metadata (safe fields
+  // only — never bodies), route classification label (SENSITIVE_ROUTE is an
+  // inventory label, not a finding), full provenance, and resource typing.
+  contentType     String?
+  contentLength   Int?
+  title           String?
+  redirectLocation String?
+  endpointType    String   @default("UNKNOWN")
+  classification  String?
+  sources         String[] @default([])
+  parameters      EndpointParameter[]
+  forms           EndpointForm[]
+  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([assetId])
+}
+
+// Prompt 6 §27: discovered parameters as first-class inventory. Only the
+// NAME, its location and provenance/confidence are ever stored — sensitive
+// parameter VALUES are never persisted anywhere in this schema.
+model EndpointParameter {
+  id         String   @id @default(uuid())
+  endpointId String
+  name       String
+  location   String   @default("QUERY")
+  sources    String[] @default([])
+  confidence Float?
+  endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([endpointId, name, location])
+  @@index([endpointId])
+}
+
+// Prompt 6 §33: form STRUCTURE metadata (action/method/field names) so
+// later safe-testing phases can reason about forms. No submitted data, no
+// credentials, and nothing here auto-submits anything.
+model EndpointForm {
+  id           String   @id @default(uuid())
+  endpointId   String
+  method       String   @default("GET")
+  fieldNames   String[] @default([])
+  encodingType String?
+  source       String?
+  endpoint     Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([endpointId])
+}
+
+// Prompt 6 §10: wordlists are governed PLATFORM data. Administrators manage
+// metadata + controlled-storage references; users select wordlists by id or
+// profile only — a filesystem path can never enter a scan through this
+// table or any API built on it.
+model Wordlist {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  description     String?
+  category        String
+  storageLocation String
+  checksum        String
+  entryCount      Int      @default(0)
+  sizeBytes       Int      @default(0)
+  enabled         Boolean  @default(true)
+  version         String?
+  profiles        String[] @default([])
+  technologies    String[] @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model Technology {

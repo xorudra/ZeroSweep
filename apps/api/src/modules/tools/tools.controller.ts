@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
-  CAPABILITIES, RISK_LEVELS, TOOL_CATEGORIES, createReconAdapters, type SecurityToolAdapter,
+  CAPABILITIES, RISK_LEVELS, TOOL_CATEGORIES, createReconAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
 } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { Roles } from "../../common/decorators/auth.decorators";
@@ -28,7 +28,7 @@ export class ToolsController {
   /** Recon adapters probed live for health (§39). Built once; the probe is
    *  a PATH lookup + `--version` on THIS host — the worker host probes again
    *  at execution time, and plan-time/execution-time health always wins. */
-  private readonly reconAdapters: SecurityToolAdapter[] = createReconAdapters();
+  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters()];
 
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 

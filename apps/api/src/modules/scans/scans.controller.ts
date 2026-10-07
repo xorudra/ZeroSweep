@@ -84,6 +84,13 @@ export class ScansController {
     return this.assets.reconSummary(user, id);
   }
 
+  /** Web-surface summary (Prompt 6 §54/§55): content/parameter discovery
+   *  metrics for this scan — endpoints, parameters, forms, tools. */
+  @Get(":id/web-surface")
+  async webSurface(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.webSurfaceSummary(user, id);
+  }
+
   @Post(":id/cancel")
   @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async cancel(@CurrentUser() user: RequestUser, @Param("id") id: string) {

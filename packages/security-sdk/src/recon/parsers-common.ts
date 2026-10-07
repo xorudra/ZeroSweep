@@ -1,4 +1,4 @@
-import type { NormalizedAsset, NormalizedEndpoint, NormalizedService, NormalizedTechnology } from "../findings/finding.types";
+import type { NormalizedAsset, NormalizedEndpoint, NormalizedEndpointParameter, NormalizedForm, NormalizedService, NormalizedTechnology } from "../findings/finding.types";
 import { canonicalizeHostname, canonicalizeUrl, extractParameterNames } from "./normalize";
 
 /**
@@ -12,6 +12,10 @@ export interface ParsedRecon {
   services: NormalizedService[];
   endpoints: NormalizedEndpoint[];
   technologies: NormalizedTechnology[];
+  /** Endpoint parameters (Prompt 6 §27) — parameter-discovery parsers only. */
+  parameters?: NormalizedEndpointParameter[];
+  /** Form metadata (Prompt 6 §33) — crawler parsers only. */
+  forms?: NormalizedForm[];
   /** Records successfully interpreted (before dedupe). */
   records: number;
   warnings: string[];

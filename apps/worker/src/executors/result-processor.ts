@@ -1,5 +1,6 @@
 import {
-  canonicalizeHostname, canonicalizeUrl, extractParameterNames, findingFingerprint, redactUrl,
+  canonicalizeHostname, canonicalizeUrl, classifyEndpointType, detectCrawlerTrap, detectWildcardGroups,
+  endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sensitiveRouteLabel,
   ScopeMatcher, type DnsRecordSet, type NormalizedSecurityResult,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
@@ -32,6 +33,33 @@ export interface ProcessedEndpoint {
   parameterNames: string[];
   source?: string;
   scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+  /** Prompt 6 §16/§26/§41–§42: safe response metadata + route labels. */
+  contentType?: string;
+  contentLength?: number;
+  title?: string;
+  redirectLocation?: string;
+  endpointType: string;
+  classification?: string;
+  sources: string[];
+  wildcardSuspect?: boolean;
+}
+
+/** Prompt 6 §27: parameter NAMES + provenance only — values never persist. */
+export interface ProcessedParameter {
+  endpointUrl: string;
+  name: string;
+  location: string;
+  sources: string[];
+  confidence?: number;
+}
+
+/** Prompt 6 §33: form structure metadata. */
+export interface ProcessedForm {
+  endpointUrl: string;
+  method: string;
+  fieldNames: string[];
+  encodingType?: string;
+  source?: string;
 }
 
 export interface ProcessedService {
@@ -76,6 +104,11 @@ export interface ProcessedResult {
   services: ProcessedService[];
   technologies: ProcessedTechnology[];
   findings: ProcessedFinding[];
+  /** Prompt 6: parameter + form inventory, and how many candidate
+   *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
+  parameters: ProcessedParameter[];
+  forms: ProcessedForm[];
+  suppressedEndpoints: number;
   isMock: boolean;
 }
 
@@ -156,36 +189,103 @@ export function processNormalizedResult(
   }
 
   // --- endpoints: canonical, deduped by method+origin+path, params merged,
-  //     values of sensitive parameters redacted before storage (§22) ---
+  //     values of sensitive parameters redacted before storage (§22).
+  //     Prompt 6 guards run BEFORE dedupe: identical-fingerprint wildcard
+  //     shells collapse to one flagged representative (§19) and
+  //     trap-shaped URLs never become inventory (§47). Classification and
+  //     provenance (sources) are attached here (§26/§41–§42). ---
+  let suppressedEndpoints = 0;
+  const { kept: wildcardKept, groups: wildcardGroups } = detectWildcardGroups(result.endpoints);
+  const wildcardRepresentatives = new Set(wildcardGroups.map((g) => g.representative.url));
+  suppressedEndpoints += wildcardGroups.reduce((n, g) => n + g.collapsed.length, 0);
   const endpointByKey = new Map<string, ProcessedEndpoint>();
-  const addEndpoint = (url: string, method: string, statusCode: number | undefined, parameterNames: string[] | undefined, source: string | undefined): void => {
-    const canonical = canonicalizeUrl(url);
+  const addEndpoint = (ep: { url: string; method?: string; statusCode?: number; parameterNames?: string[]; source?: string; sources?: string[]; contentType?: string; contentLength?: number; title?: string; redirectLocation?: string; endpointType?: string; classification?: string; fingerprint?: string; wildcardSuspect?: boolean }): void => {
+    const canonical = canonicalizeUrl(ep.url);
     if (!canonical) return;
-    const parsed = new URL(canonical);
-    const key = `${method.toUpperCase()}|${parsed.origin}${parsed.pathname}`;
+    if (detectCrawlerTrap(canonical).trap) { suppressedEndpoints++; return; }
+    const method = (ep.method ?? "GET").toUpperCase();
+    const key = endpointIdentityKey(method, canonical);
     const existing = endpointByKey.get(key);
     if (existing) {
-      existing.parameterNames = [...new Set([...existing.parameterNames, ...(parameterNames ?? extractParameterNames(canonical))])].sort();
+      existing.parameterNames = [...new Set([...existing.parameterNames, ...(ep.parameterNames ?? extractParameterNames(canonical))])].sort();
+      existing.sources = [...new Set([...existing.sources, ...(ep.sources ?? [ep.source ?? tool])])].sort();
+      if (existing.statusCode === undefined && ep.statusCode !== undefined) existing.statusCode = ep.statusCode;
+      if (!existing.contentType && ep.contentType) existing.contentType = ep.contentType;
+      if (existing.contentLength === undefined && ep.contentLength !== undefined) existing.contentLength = ep.contentLength;
+      if (!existing.redirectLocation && ep.redirectLocation) existing.redirectLocation = ep.redirectLocation;
       return;
     }
     endpointByKey.set(key, {
       url: redactUrl(canonical),
-      method: method.toUpperCase(),
-      ...(statusCode !== undefined ? { statusCode } : {}),
-      parameterNames: parameterNames ?? extractParameterNames(canonical),
-      ...(source ? { source } : {}),
+      method,
+      ...(ep.statusCode !== undefined ? { statusCode: ep.statusCode } : {}),
+      parameterNames: ep.parameterNames ?? extractParameterNames(canonical),
+      ...(ep.source ?? tool ? { source: ep.source ?? tool } : {}),
       scopeStatus: matcher.isUrlAllowed(canonical) ? "IN_SCOPE" : "OUT_OF_SCOPE",
+      ...(ep.contentType ? { contentType: ep.contentType } : {}),
+      ...(ep.contentLength !== undefined ? { contentLength: ep.contentLength } : {}),
+      ...(ep.title ? { title: ep.title } : {}),
+      ...(ep.redirectLocation ? { redirectLocation: ep.redirectLocation } : {}),
+      endpointType: ep.endpointType ?? classifyEndpointType(canonical),
+      ...(ep.classification ?? sensitiveRouteLabel(canonical) ? { classification: ep.classification ?? sensitiveRouteLabel(canonical) } : {}),
+      sources: [...new Set([tool, ...(ep.sources ?? [ep.source ?? tool])])].sort(),
+      ...(wildcardRepresentatives.has(ep.url) || ep.wildcardSuspect ? { wildcardSuspect: true } : {}),
     });
   };
-  for (const ep of result.endpoints) addEndpoint(ep.url, ep.method ?? "GET", ep.statusCode, ep.parameterNames, ep.source ?? tool);
+  for (const ep of wildcardKept) addEndpoint(ep);
   // §30: out-of-scope redirect targets become endpoint REFERENCES only.
   for (const svc of result.services) {
     if (!svc.redirectLocation) continue;
     const target = canonicalizeUrl(svc.redirectLocation);
     const fromHost = canonicalizeHostname(svc.host) ?? canonicalHost(svc.host);
-    if (target && new URL(target).hostname !== fromHost) addEndpoint(target, "GET", undefined, undefined, tool);
+    if (target && new URL(target).hostname !== fromHost) addEndpoint({ url: target });
   }
   const endpoints = [...endpointByKey.values()];
+
+  // --- parameters (Prompt 6 §27/§30): deduped per endpoint+name+location
+  //     with unioned provenance; attached ONLY to in-scope endpoints —
+  //     out-of-scope parameters are dropped, never persisted (§28/§40). ---
+  const inScopeEndpointUrls = new Set(endpoints.filter((e) => e.scopeStatus === "IN_SCOPE").flatMap((e) => [e.url, e.url.split("?")[0]!]));
+  const parameterByKey = new Map<string, ProcessedParameter>();
+  for (const param of result.parameters ?? []) {
+    const canonical = canonicalizeUrl(param.endpointUrl);
+    if (!canonical) continue;
+    const base = canonical.split("?")[0]!;
+    if (!inScopeEndpointUrls.has(redactUrl(base))) continue;
+    const key = `${base}|${param.name}|${param.location}`;
+    const existingParam = parameterByKey.get(key);
+    if (existingParam) {
+      existingParam.sources = [...new Set([...existingParam.sources, ...(param.sources ?? [tool])])].sort();
+      existingParam.confidence = Math.max(existingParam.confidence ?? 0, param.confidence ?? 0) || undefined;
+      continue;
+    }
+    parameterByKey.set(key, {
+      endpointUrl: base, name: param.name, location: param.location,
+      sources: [...new Set(param.sources ?? [tool])].sort(),
+      ...(param.confidence !== undefined ? { confidence: param.confidence } : {}),
+    });
+  }
+  const parameters = [...parameterByKey.values()];
+
+  // --- forms (§33): structure metadata deduped per endpoint+method ---
+  const formByKey = new Map<string, ProcessedForm>();
+  for (const form of result.forms ?? []) {
+    const canonical = canonicalizeUrl(form.endpointUrl);
+    if (!canonical) continue;
+    const key = `${canonical}|${form.method.toUpperCase()}`;
+    const existingForm = formByKey.get(key);
+    if (existingForm) {
+      existingForm.fieldNames = [...new Set([...existingForm.fieldNames, ...form.fieldNames])].sort();
+      continue;
+    }
+    formByKey.set(key, {
+      endpointUrl: redactUrl(canonical), method: form.method.toUpperCase(),
+      fieldNames: [...new Set(form.fieldNames)].sort(),
+      ...(form.encodingType ? { encodingType: form.encodingType } : {}),
+      ...(form.source ? { source: form.source } : {}),
+    });
+  }
+  const forms = [...formByKey.values()];
 
   // --- technologies: deduped per host+name (§34) ---
   const techByKey = new Map<string, ProcessedTechnology>();
@@ -222,7 +322,7 @@ export function processNormalizedResult(
     toolExecutionId: ctx.toolExecutionId,
     evidenceSummary: f.evidence ?? "",
   }));
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, isMock: result.mock };
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original

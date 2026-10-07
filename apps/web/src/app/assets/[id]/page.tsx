@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
-import { apiFetch, ApiError } from "@/lib/api-client";
+import { api, apiFetch, ApiError } from "@/lib/api-client";
 import { Badge, Card, EmptyState } from "@dsrclone/ui";
 
 /**
@@ -38,15 +38,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+interface WebSurfaceSummary {
+  totalEndpoints: number;
+  apiEndpoints: number;
+  sensitiveRoutes: number;
+  javascriptResources: number;
+  parametersDiscovered: number;
+  endpointsWithParameters: number;
+  formsDiscovered: number;
+  endpointsBySource?: Record<string, number>;
+  endpointsByType?: Record<string, number>;
+}
+
 export default function Page() {
   const params = useParams<{ id: string }>();
   const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; asset: AssetDetail }>({ kind: "loading" });
+  const [surface, setSurface] = useState<WebSurfaceSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     apiFetch<AssetDetail>(`/assets/${params.id}`)
       .then((asset) => { if (!cancelled) setState({ kind: "ready", asset }); })
       .catch((e: unknown) => { if (!cancelled) setState({ kind: "error", message: e instanceof ApiError ? e.message : "Could not reach the API." }); });
+    // Web-surface summary is best-effort (Prompt 6 §55).
+    api.assetWebSurface(params.id).then((s) => { if (!cancelled) setSurface(s as WebSurfaceSummary); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [params.id]);
 
@@ -100,12 +115,28 @@ export default function Page() {
           <div className="space-y-1">
             {(a.endpoints ?? []).map((e) => (
               <p key={e.id} className="break-all text-sm text-slate-200">
-                <span className="text-slate-400">{e.method}</span> {e.url}
+                <span className="text-slate-400">{e.method}</span> <Link href={`/endpoints/${e.id}`} className="text-sky-300 hover:underline">{e.url}</Link>
                 <span className="text-slate-500"> · {e.statusCode ?? "—"}{e.source ? ` · ${e.source}` : ""}{(e.parameterNames ?? []).length ? ` · params: ${(e.parameterNames ?? []).join(", ")}` : ""}{e.scopeStatus ? ` · ${e.scopeStatus}` : ""}</span>
               </p>
             ))}
           </div>
         </Card>
+
+        {surface && surface.totalEndpoints > 0 && (
+          <Card title="Web Surface (Prompt 6)">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <Field label="Endpoints">{surface.totalEndpoints}</Field>
+              <Field label="API endpoints">{surface.apiEndpoints}</Field>
+              <Field label="Sensitive routes">{surface.sensitiveRoutes}</Field>
+              <Field label="JavaScript resources">{surface.javascriptResources}</Field>
+              <Field label="Parameters discovered">{surface.parametersDiscovered}</Field>
+              <Field label="Endpoints with parameters">{surface.endpointsWithParameters}</Field>
+              <Field label="Forms discovered">{surface.formsDiscovered}</Field>
+              <Field label="By source">{surface.endpointsBySource ? Object.entries(surface.endpointsBySource).map(([k, v]) => `${k} (${v})`).join(", ") : "—"}</Field>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Discovery inventory only — route classifications are labels for prioritization, not findings.</p>
+          </Card>
+        )}
       </div>
     </>
   );

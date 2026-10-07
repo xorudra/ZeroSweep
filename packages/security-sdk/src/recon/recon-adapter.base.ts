@@ -146,6 +146,8 @@ export abstract class ReconAdapterBase extends BaseSecurityToolAdapter {
       services: p.services ?? [],
       endpoints: p.endpoints ?? [],
       technologies: p.technologies ?? [],
+      ...(p.parameters ? { parameters: p.parameters } : {}),
+      ...(p.forms ? { forms: p.forms } : {}),
       findings: [], // recon NEVER fabricates findings (§47)
       artifacts: [],
       metrics: {

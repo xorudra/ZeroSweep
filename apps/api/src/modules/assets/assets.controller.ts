@@ -18,6 +18,9 @@ const endpointQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   scopeStatus: z.enum(["IN_SCOPE", "OUT_OF_SCOPE"]).optional(),
   search: z.string().max(200).optional(),
+  method: z.string().max(10).optional(),
+  endpointType: z.enum(["PAGE", "DIRECTORY", "FILE", "API", "STATIC", "UNKNOWN"]).optional(),
+  source: z.string().max(64).optional(),
 });
 
 /**
@@ -52,6 +55,12 @@ export class AssetsController {
   async endpoints(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.assets.listAssetEndpoints(user, id);
   }
+
+  /** The asset's discovered web surface (Prompt 6 §55). */
+  @Get(":id/web-surface")
+  async webSurface(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.getAssetWebSurface(user, id);
+  }
 }
 
 @Controller("endpoints")
@@ -64,6 +73,19 @@ export class EndpointsController {
     return this.assets.listEndpoints(user, {
       page: q.page ?? 1, pageSize: q.pageSize ?? 20,
       scopeStatus: q.scopeStatus, search: q.search,
+      method: q.method, endpointType: q.endpointType, source: q.source,
     });
+  }
+
+  /** Endpoint detail with parameters + forms (Prompt 6 §55). */
+  @Get(":id")
+  async get(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.getEndpoint(user, id);
+  }
+
+  /** Discovered parameters of one endpoint — names only (§55). */
+  @Get(":id/parameters")
+  async parameters(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.listEndpointParameters(user, id);
   }
 }

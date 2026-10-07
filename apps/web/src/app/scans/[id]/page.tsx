@@ -49,6 +49,22 @@ interface ReconSummary {
   bySource?: Record<string, number>;
   toolsRun?: { slug?: string; name?: string; status: string }[];
 }
+interface WebSurfaceSummary {
+  totalEndpoints: number;
+  inScopeEndpoints: number;
+  outOfScopeEndpoints: number;
+  apiEndpoints: number;
+  sensitiveRoutes: number;
+  javascriptResources: number;
+  parametersDiscovered: number;
+  uniqueParameterNames: number;
+  endpointsWithParameters: number;
+  formsDiscovered: number;
+  endpointsBySource?: Record<string, number>;
+  endpointsByType?: Record<string, number>;
+  endpointsByStatusClass?: Record<string, number>;
+  contentDiscoveryToolsRun?: string[];
+}
 interface ScanDetails {
   id: string;
   status: string;
@@ -93,6 +109,7 @@ export default function Page() {
   const id = params.id;
   const [scan, setScan] = useState<ScanDetails | null>(null);
   const [recon, setRecon] = useState<ReconSummary | null>(null);
+  const [surface, setSurface] = useState<WebSurfaceSummary | null>(null);
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -106,6 +123,8 @@ export default function Page() {
       setEvents((ev as { items: ScanEvent[] }).items ?? []);
       // Recon summary is best-effort: older scans may have no recon data.
       api.reconSummary(id).then((r) => setRecon(r as ReconSummary)).catch(() => undefined);
+      // Web-surface summary is best-effort too (Prompt 6 §54).
+      api.webSurface(id).then((r) => setSurface(r as WebSurfaceSummary)).catch(() => undefined);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load scan");
@@ -217,7 +236,7 @@ export default function Page() {
               {(scan.executions ?? []).map((ex) => (
                 <p key={ex.id} className="text-xs text-slate-400">
                   {ex.tool ? `${ex.tool.name} (${ex.tool.slug})` : `tool execution ${ex.id.slice(0, 8)}…`} — {ex.status}
-                  {ex.metrics ? ` · assets ${ex.metrics.assets ?? 0} · services ${ex.metrics.services ?? 0} · endpoints ${ex.metrics.endpoints ?? 0}` : ""}
+                  {ex.metrics ? ` · assets ${ex.metrics.assets ?? 0} · services ${ex.metrics.services ?? 0} · endpoints ${ex.metrics.endpoints ?? 0}${ex.metrics.parameters ? ` · parameters ${ex.metrics.parameters}` : ""}` : ""}
                   {ex.error ? ` · ${ex.error}` : ""}
                   {ex.startedAt ? ` · started ${new Date(ex.startedAt).toLocaleTimeString()}` : ""}
                 </p>
@@ -261,6 +280,47 @@ export default function Page() {
               {recon.toolsRun && recon.toolsRun.length > 0 && (
                 <p className="mt-1 text-xs text-slate-500">
                   Tools run: {recon.toolsRun.map((t) => `${t.slug ?? t.name} — ${t.status}`).join(" · ")}
+                </p>
+              )}
+            </Card>
+          )}
+
+          {surface && surface.totalEndpoints > 0 && (
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-200">Web Surface</h3>
+              <p className="mt-1 text-xs text-slate-500">Content, route and parameter discovery for this scan (Prompt 6) — inventory metrics, not vulnerability counts.</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  ["Endpoints", surface.totalEndpoints],
+                  ["In scope", surface.inScopeEndpoints],
+                  ["Out of scope (recorded)", surface.outOfScopeEndpoints],
+                  ["API endpoints", surface.apiEndpoints],
+                  ["Sensitive routes", surface.sensitiveRoutes],
+                  ["JavaScript resources", surface.javascriptResources],
+                  ["Parameters", surface.parametersDiscovered],
+                  ["Unique parameter names", surface.uniqueParameterNames],
+                  ["Endpoints with parameters", surface.endpointsWithParameters],
+                  ["Forms", surface.formsDiscovered],
+                ].map(([label, value]) => (
+                  <div key={label as string}>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl text-slate-100">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {surface.endpointsBySource && Object.keys(surface.endpointsBySource).length > 0 && (
+                <p className="mt-3 text-xs text-slate-400">
+                  By source: {Object.entries(surface.endpointsBySource).map(([tool, n]) => `${tool} (${n})`).join(", ")}
+                </p>
+              )}
+              {surface.endpointsByType && Object.keys(surface.endpointsByType).length > 0 && (
+                <p className="mt-1 text-xs text-slate-400">
+                  By type: {Object.entries(surface.endpointsByType).map(([t, n]) => `${t} (${n})`).join(", ")}
+                </p>
+              )}
+              {surface.contentDiscoveryToolsRun && surface.contentDiscoveryToolsRun.length > 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Discovery tools: {[...new Set(surface.contentDiscoveryToolsRun)].join(", ")}
                 </p>
               )}
             </Card>

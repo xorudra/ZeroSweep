@@ -213,6 +213,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@dsrclone/security-sdk':
+        specifier: workspace:*
+        version: link:../security-sdk
       '@prisma/client':
         specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)

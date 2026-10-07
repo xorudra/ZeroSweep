@@ -42,6 +42,8 @@ export interface ToolSelectionOptions {
   /** Simulation adapter used when no executable adapter covers a stage.
    *  Defaults to the Mock adapter — this phase executes nothing else. */
   simulationSlug?: string;
+  /** Cap on selected adapters (Prompt 6 §48 baseline content discovery). */
+  adapterLimit?: number;
 }
 
 export function selectAdaptersForStage(
@@ -75,7 +77,13 @@ export function selectAdaptersForStage(
     candidates.push(m);
   }
 
-  const selected: SelectedAdapter[] = candidates.map((m, i) => ({
+  const limited = options.adapterLimit !== undefined ? candidates.slice(0, Math.max(0, options.adapterLimit)) : candidates;
+  if (options.adapterLimit !== undefined) {
+    for (const m of candidates.slice(limited.length)) {
+      rejected.push({ slug: m.slug, reason: `stage adapter limit (${options.adapterLimit}) reached — baseline profile bound (Prompt 6 §48)` });
+    }
+  }
+  const selected: SelectedAdapter[] = limited.map((m, i) => ({
     slug: m.slug,
     adapterId: m.id,
     name: m.name,

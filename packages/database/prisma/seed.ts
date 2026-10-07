@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { BUNDLED_WORDLISTS } from "@dsrclone/security-sdk";
 
 const prisma = new PrismaClient();
 
@@ -34,9 +35,9 @@ const TOOLS: CatalogTool[] = [
   { slug: "owasp-zap", name: "OWASP ZAP", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Open-source web application scanner and proxy." },
   { slug: "nuclei", name: "Nuclei", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION", "DOMAIN", "API"], requiresCredentials: [], description: "Template-based vulnerability scanner." },
   { slug: "nikto", name: "Nikto", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "TECHNOLOGY_DETECTION"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web server scanner for dangerous files and outdated software." },
-  { slug: "ffuf", name: "ffuf", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast web fuzzer for content and parameter discovery." },
-  { slug: "feroxbuster", name: "Feroxbuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Recursive content discovery scanner." },
-  { slug: "gobuster", name: "Gobuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "SUBDOMAIN_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "DOMAIN"], requiresCredentials: [], description: "Directory, DNS and vhost busting tool." },
+  { slug: "ffuf", name: "ffuf", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "DIRECTORY_DISCOVERY", "FILE_DISCOVERY", "VHOST_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast content discovery (directories, files, routes; vhost only when separately enabled). Implemented Prompt 6." },
+  { slug: "feroxbuster", name: "Feroxbuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "DIRECTORY_DISCOVERY", "RECURSIVE_CONTENT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Recursive content discovery with hard depth/rate limits. Implemented Prompt 6." },
+  { slug: "gobuster", name: "Gobuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "DIRECTORY_DISCOVERY", "FILE_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Directory and file discovery (dir mode only in this platform). Implemented Prompt 6." },
   { slug: "wfuzz", name: "Wfuzz", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web application fuzzer." },
   { slug: "katana", name: "Katana", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "URL_DISCOVERY", "ENDPOINT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast web crawler for endpoint discovery." },
   { slug: "arjun", name: "Arjun", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "HTTP parameter discovery suite." },
@@ -208,6 +209,38 @@ async function main(): Promise<void> {
       create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 5)", implementedPhase: 5 } },
     });
   }
+  // Prompt 6: the web content / route / parameter discovery adapters.
+  // Content discovery is intrusive-adjacent, so these run SCOPE_ONLY with
+  // the adapters' conservative default rates and governed wordlists.
+  const IMPLEMENTED_WEB_DISCOVERY: Array<{ slug: string; outputFormat: string; parser: string; defaultTimeout: number; networkPolicy: string }> = [
+    { slug: "ffuf", outputFormat: "JSON", parser: "ffuf-json", defaultTimeout: 600, networkPolicy: "SCOPE_ONLY" },
+    { slug: "feroxbuster", outputFormat: "JSON", parser: "feroxbuster-json", defaultTimeout: 900, networkPolicy: "SCOPE_ONLY" },
+    { slug: "gobuster", outputFormat: "TEXT", parser: "gobuster-text", defaultTimeout: 600, networkPolicy: "SCOPE_ONLY" },
+    { slug: "wfuzz", outputFormat: "JSON", parser: "wfuzz-json", defaultTimeout: 600, networkPolicy: "SCOPE_ONLY" },
+    { slug: "arjun", outputFormat: "JSON", parser: "arjun-json", defaultTimeout: 300, networkPolicy: "SCOPE_ONLY" },
+  ];
+  for (const impl of IMPLEMENTED_WEB_DISCOVERY) {
+    const tool = await prisma.tool.findUnique({ where: { slug: impl.slug } });
+    const catalog = TOOLS.find((x) => x.slug === impl.slug);
+    if (!tool || !catalog) continue;
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, inputSchema: { note: "Implemented adapter (Prompt 6) — validated input schema enforced in code by the security-sdk adapter; wordlists referenced by registered id only", implementedPhase: 6 } },
+      create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 6)", implementedPhase: 6 } },
+    });
+  }
+  // Prompt 6 §10: wordlists are governed platform data, seeded from the
+  // security-sdk's bundled registry so DB metadata and code can never
+  // drift. Entries themselves live in controlled storage (bundled lists
+  // ship with the worker image); only metadata is persisted here.
+  for (const w of BUNDLED_WORDLISTS) {
+    const data = {
+      description: w.description, category: w.category, storageLocation: w.storageLocation,
+      checksum: w.checksum, entryCount: w.entryCount, sizeBytes: w.sizeBytes, enabled: w.enabled,
+      profiles: [...w.profiles], technologies: w.technology ? [w.technology] : [],
+    };
+    await prisma.wordlist.upsert({ where: { name: w.name }, update: data, create: { name: w.name, ...data } });
+  }
   // The safe mock (simulation) and local echo (diagnostics).
   const mock = await prisma.tool.upsert({
     where: { slug: "mock" },
@@ -245,7 +278,7 @@ async function main(): Promise<void> {
       parser: "json", defaultTimeout: 5, networkPolicy: "NO_NETWORK", enabled: true,
     },
   });
-  console.log(`Seeded ${TOOLS.length + 2} tool catalog entries (10 recon adapters enabled — Prompt 5; other catalog adapters disabled)`);
+  console.log(`Seeded ${TOOLS.length + 2} tool catalog entries (10 recon + 5 web-discovery adapters enabled — Prompts 5–6; ${BUNDLED_WORDLISTS.length} governed wordlists; other catalog adapters disabled)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

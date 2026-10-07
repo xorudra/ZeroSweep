@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerReconAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerReconAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -32,6 +32,7 @@ const registry = new ToolRegistry();
 registry.register(new MockSecurityAdapter());
 registry.register(new LocalEchoAdapter());
 registerReconAdapters(registry);
+registerWebDiscoveryAdapters(registry);
 const executor = new StageExecutor(registry, store);
 const runner = new DagRunner(store, executor);
 const workerId = makeWorkerId();
@@ -126,7 +127,7 @@ void (async () => {
 const heartbeat = setInterval(() => void registerAndHeartbeat(), 15_000);
 heartbeat.unref?.();
 
-logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo", "subfinder", "amass", "assetfinder", "findomain", "dnsx", "httpx", "whatweb", "gau", "waybackurls", "katana"] });
+logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo", "subfinder", "amass", "assetfinder", "findomain", "dnsx", "httpx", "whatweb", "gau", "waybackurls", "katana", "ffuf", "feroxbuster", "gobuster", "wfuzz", "arjun"] });
 
 /** Graceful drain (§52): stop taking jobs, let active work finish, flush state. */
 async function shutdown(signal: string): Promise<void> {

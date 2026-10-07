@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  LocalEchoAdapter, MockSecurityAdapter, RECON_SLUGS, ToolRegistry,
-  reconHealthBySlug, registerReconAdapters,
+  LocalEchoAdapter, MockSecurityAdapter, RECON_SLUGS, ToolRegistry, WEB_DISCOVERY_SLUGS,
+  reconHealthBySlug, registerReconAdapters, registerWebDiscoveryAdapters,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
 import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
@@ -19,7 +19,7 @@ import { ScanEventsService } from "./scan-events.service";
  *  adapters. Real adapters are selected only when their health probe passes
  *  on this host; otherwise the stage falls back to the labelled simulation
  *  adapter (Prompt 5 §39/§56) — never to a fake "real" run. */
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS];
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS];
 
 export function hostOf(value: string): string {
   try {
@@ -62,6 +62,7 @@ export class OrchestrationService {
       registry.register(new MockSecurityAdapter());
       registry.register(new LocalEchoAdapter());
       registerReconAdapters(registry);
+      registerWebDiscoveryAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
       this.registryCache = { registry, healthBySlug: reconHealthBySlug(registry.list()) };

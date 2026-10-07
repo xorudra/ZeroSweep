@@ -73,7 +73,7 @@ export interface BuildScanPlanInput {
 /** Stages executed by the orchestration engine itself — never by a tool. */
 export const PLATFORM_STAGE_TYPES = new Set([
   "AUTHORIZATION_CHECK", "SCOPE_VALIDATION", "NORMALIZATION",
-  "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
+  "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION", "WEB_SURFACE_NORMALIZATION",
 ]);
 
 export class InvalidPlanError extends Error {
@@ -96,6 +96,7 @@ export function buildScanPlan(input: BuildScanPlanInput): { plan: ScanPlan; dag:
       : selectAdaptersForStage(input.registry, node, {
           ...input.selection,
           targetType: input.targetType,
+          ...(node.adapterLimit !== undefined ? { adapterLimit: node.adapterLimit } : {}),
         });
     return {
       id: node.id,

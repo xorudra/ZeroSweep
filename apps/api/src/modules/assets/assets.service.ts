@@ -17,6 +17,52 @@ export interface EndpointListQuery {
   pageSize: number;
   scopeStatus?: string;
   search?: string;
+  /** Prompt 6 §55 filters. */
+  method?: string;
+  endpointType?: string;
+  source?: string;
+}
+
+/** Web-surface metrics over endpoint rows (Prompt 6 §54): counts of what
+ *  discovery found — by provenance, type, status class and classification.
+ *  Inventory numbers only, never vulnerability claims. */
+export function summarizeWebSurface(endpoints: Array<Record<string, unknown>>) {
+  const bySource: Record<string, number> = {};
+  const byType: Record<string, number> = {};
+  const byStatusClass: Record<string, number> = {};
+  let parameters = 0;
+  let forms = 0;
+  let endpointsWithParameters = 0;
+  const parameterNames = new Set<string>();
+  for (const e of endpoints) {
+    const sources = (e.sources as string[] | undefined) ?? (e.source ? [e.source as string] : []);
+    for (const s of sources) bySource[s] = (bySource[s] ?? 0) + 1;
+    const type = (e.endpointType as string) ?? "UNKNOWN";
+    byType[type] = (byType[type] ?? 0) + 1;
+    const status = e.statusCode as number | undefined;
+    const cls = status === undefined ? "unknown" : `${Math.floor(status / 100)}xx`;
+    byStatusClass[cls] = (byStatusClass[cls] ?? 0) + 1;
+    const params = (e.parameters as Array<{ name: string }> | undefined) ?? [];
+    parameters += params.length;
+    if (params.length > 0) endpointsWithParameters++;
+    for (const p of params) parameterNames.add(p.name);
+    forms += ((e.forms as unknown[] | undefined) ?? []).length;
+  }
+  return {
+    totalEndpoints: endpoints.length,
+    inScopeEndpoints: endpoints.filter((e) => e.scopeStatus === "IN_SCOPE").length,
+    outOfScopeEndpoints: endpoints.filter((e) => e.scopeStatus === "OUT_OF_SCOPE").length,
+    apiEndpoints: endpoints.filter((e) => e.endpointType === "API").length,
+    sensitiveRoutes: endpoints.filter((e) => e.classification === "SENSITIVE_ROUTE").length,
+    javascriptResources: endpoints.filter((e) => /\.m?js($|\?)/.test(e.url as string)).length,
+    endpointsBySource: bySource,
+    endpointsByType: byType,
+    endpointsByStatusClass: byStatusClass,
+    parametersDiscovered: parameters,
+    uniqueParameterNames: parameterNames.size,
+    endpointsWithParameters,
+    formsDiscovered: forms,
+  };
 }
 
 /**
@@ -81,6 +127,9 @@ export class AssetsService {
     const where: Record<string, unknown> = { asset: { workspaceId: workspace.id } };
     if (query.scopeStatus) where.scopeStatus = query.scopeStatus;
     if (query.search) where.url = { contains: query.search, mode: "insensitive" };
+    if (query.method) where.method = query.method.toUpperCase();
+    if (query.endpointType) where.endpointType = query.endpointType;
+    if (query.source) where.OR = [{ source: query.source }, { sources: { has: query.source } }];
     const [items, total] = await Promise.all([
       this.prisma.endpoint.findMany({
         where,
@@ -92,6 +141,80 @@ export class AssetsService {
       this.prisma.endpoint.count({ where }),
     ]);
     return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  /** Endpoint detail (Prompt 6 §55): the endpoint with its classification,
+   *  provenance and full parameter/form inventory. Tenant-isolated — a
+   *  foreign endpoint id is a 404 (§57). */
+  async getEndpoint(user: RequestUser, id: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const endpoint = await this.prisma.endpoint.findFirst({
+      where: { id, asset: { workspaceId: workspace.id } },
+      include: {
+        asset: { select: { id: true, host: true } },
+        parameters: { orderBy: { name: "asc" } },
+        forms: true,
+      },
+    });
+    if (!endpoint) throw new NotFoundException("Endpoint not found");
+    return endpoint;
+  }
+
+  /** Parameters of one endpoint (§55): names, locations, provenance. */
+  async listEndpointParameters(user: RequestUser, endpointId: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const endpoint = await this.prisma.endpoint.findFirst({
+      where: { id: endpointId, asset: { workspaceId: workspace.id } },
+      select: { id: true },
+    });
+    if (!endpoint) throw new NotFoundException("Endpoint not found");
+    return this.prisma.endpointParameter.findMany({
+      where: { endpointId: endpoint.id },
+      orderBy: { name: "asc" },
+      take: 1000,
+    });
+  }
+
+  /** Per-asset web surface (§55): the asset's endpoints with parameters,
+   *  plus the §54 metrics computed over them. */
+  async getAssetWebSurface(user: RequestUser, id: string) {
+    const asset = await this.ownedAsset(user, id);
+    const endpoints = await this.prisma.endpoint.findMany({
+      where: { assetId: asset.id },
+      include: { parameters: { orderBy: { name: "asc" } }, forms: true },
+      orderBy: { url: "asc" },
+      take: 2000,
+    });
+    return { assetId: asset.id, ...summarizeWebSurface(endpoints as never), endpoints };
+  }
+
+  /** Scan web-surface summary (§54/§55): what content/parameter discovery
+   *  found in this scan — endpoints by source/type/status, parameters,
+   *  forms, sensitive routes, and the discovery tools that ran. */
+  async webSurfaceSummary(user: RequestUser, scanId: string) {
+    await this.ownedScan(user, scanId);
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const endpoints = await this.prisma.endpoint.findMany({
+      where: { asset: { workspaceId: workspace.id, discoveredByScanId: scanId } },
+      include: {
+        parameters: { select: { name: true } },
+        forms: { select: { id: true } },
+        asset: { select: { id: true, host: true } },
+      },
+      take: 10000,
+    });
+    const toolsRun = await this.prisma.toolExecution.findMany({
+      where: { scanId },
+      include: { tool: { select: { slug: true, name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const discoveryTools = ["ffuf", "feroxbuster", "gobuster", "wfuzz", "arjun", "katana", "gau", "waybackurls"];
+    return {
+      scanId,
+      ...summarizeWebSurface(endpoints as never),
+      toolsRun: toolsRun.map((t) => ({ slug: t.tool?.slug, name: t.tool?.name, status: t.status })),
+      contentDiscoveryToolsRun: toolsRun.filter((t) => discoveryTools.includes(t.tool?.slug ?? "")).map((t) => t.tool?.slug),
+    };
   }
 
   async listScanAssets(user: RequestUser, scanId: string) {

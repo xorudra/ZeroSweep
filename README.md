@@ -10,19 +10,21 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 5 complete (Prompts 1–5).** Production monorepo, backend and
+> **Status — Phase 6 complete (Prompts 1–6).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
-> catalog, the scan orchestration engine — and now the **first real adapters**:
-> ten reconnaissance tools (Subfinder, Amass, Assetfinder, Findomain, dnsx,
-> httpx, WhatWeb, gau, Waybackurls, Katana) implemented on the SDK lifecycle
-> with dedicated parsers, scope verdicts on every discovery, discovery
-> budgets, wildcard-DNS detection, sensitive-value redaction, and an
-> asset/service/technology/endpoint inventory with GUI + API. Adapters whose
-> binaries are absent report UNAVAILABLE honestly and pipelines degrade to
-> the labelled simulation adapter — nothing fakes a real run. **No
-> vulnerability scanners are integrated yet** (no Nmap/Nuclei/ZAP/etc.);
-> recon produces inventory only, never findings, and the AI service has no
-> LLM connected yet.
+> catalog, the scan orchestration engine, ten reconnaissance adapters — and
+> now the **web attack-surface discovery engine**: ffuf, Feroxbuster,
+> Gobuster (dir mode only), Wfuzz (two predefined templates only) and Arjun
+> implemented on the same SDK lifecycle, with governed wordlists (registered
+> ids/profiles, never user-supplied paths), soft-404 calibration, wildcard
+> collapse, response classification, and a canonical endpoint/parameter/form
+> inventory with provenance and scope verdicts. Content discovery is
+> intrusive-adjacent, so defaults are conservative and everything runs only
+> inside approved scans against verified, in-scope targets. Adapters whose
+> binaries are absent report UNAVAILABLE honestly and pipelines degrade —
+> nothing fakes a real run. **No vulnerability scanners are integrated yet**
+> (no Nmap/Nuclei/ZAP/etc.); discovery produces inventory only, never
+> findings, and the AI service has no LLM connected yet.
 
 ## Architecture
 
@@ -143,11 +145,35 @@ and the AI health endpoint.
 3. ✅ Universal Tool Adapter SDK, registry & safe execution framework (Prompt 3)
 4. ✅ Production scan orchestration engine, DAG pipeline, queue workers & live progress (Prompt 4)
 5. ✅ First real adapters: reconnaissance, asset discovery & web surface mapping (Prompt 5)
-6. Normalization, deduplication, risk engine 7. Reporting engine
+6. ✅ Web attack-surface, content, route & parameter discovery engine (Prompt 6)
+7. Normalization, deduplication, risk engine 8. Reporting engine
 8. API/cloud/container/source-code modules 9. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 6: Web Attack-Surface, Content, Route & Parameter
+  Discovery Engine.** Five production adapters in the security-sdk (ffuf,
+  Feroxbuster, Gobuster dir-mode-only, Wfuzz controlled-templates-only,
+  Arjun) with dedicated parsers and honest health. Governed wordlists:
+  bundled starter lists with checksums in controlled storage, admin-managed
+  references in a new `Wordlist` table, selection by registered id or
+  profile (SMALL/STANDARD/COMPREHENSIVE — never auto-comprehensive, never a
+  filesystem path). Truthful inventory: response fingerprints, soft-404
+  calibration, wildcard-route collapse, redirect recording without
+  following, API/SENSITIVE_ROUTE classification (labels, not findings),
+  crawler-trap guards, and `EndpointParameter`/`EndpointForm` inventory —
+  parameter NAMES and form structure only, values never stored. Pipeline:
+  new CONTENT_DISCOVERY + WEB_SURFACE_NORMALIZATION stages (WEB_BASELINE =
+  one adapter + SMALL lists; WEB_COMPREHENSIVE/API_ASSESSMENT = standard
+  content + parameter discovery), worker-derived wordlist profiles and
+  Wfuzz templates, per-stage PARTIAL degradation when one tool fails. APIs
+  (`/endpoints/:id`, `/endpoints/:id/parameters`, `/assets/:id/web-surface`,
+  `/scans/:id/web-surface`) and GUI (Web Surface page, endpoint detail,
+  enriched endpoint table, asset/scan panels). Everything verified against
+  recorded fixture outputs of a controlled test application — no tool was
+  run against any real target. See
+  `docs/architecture/web-surface-discovery.md` and
+  `docs/tools/web-discovery/`.
 - **2026-10-07 — Prompt 5: Real Reconnaissance Adapters.** Ten production
   adapters in the security-sdk (Subfinder, Amass, Assetfinder, Findomain,
   dnsx, httpx, WhatWeb, gau, Waybackurls, Katana) with argument-array-only
