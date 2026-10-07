@@ -229,6 +229,19 @@ export interface ProcessedFinding {
   masvsControl?: string;
   crossBuildFingerprint?: string;
   dynamicConfirmed?: boolean;
+  /** Prompt 18 §50–§63: binary identity — the registered artifact
+   *  (id + SHA-256), §56 finding type, concerned component, §62
+   *  reachability evidence state, §57 cross-build fingerprint
+   *  (absolute addresses excluded) and §63 static confidence band.
+   *  The canonical correlation fingerprint is stamped by the stores
+   *  from this identity (§58). */
+  binaryArtifactId?: string;
+  binaryArtifactHash?: string;
+  binaryFindingType?: string;
+  binaryComponent?: string;
+  binaryReachability?: string;
+  binaryFingerprint?: string;
+  staticConfidence?: string;
 }
 
 /** Prompt 12 §45: component inventory passthrough (PURL identity). */
@@ -339,6 +352,9 @@ export interface ProcessedResult {
   /** Prompt 17: mobile static-analysis payload passthrough — the
    *  stores persist it into the mobile build inventory tables. */
   mobile: import("@dsrclone/security-sdk").NormalizedMobileData;
+  /** Prompt 18: binary static-analysis payload passthrough — the
+   *  stores persist it into the binary artifact inventory tables. */
+  binary: import("@dsrclone/security-sdk").NormalizedBinaryData;
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -663,6 +679,14 @@ export function processNormalizedResult(
       ...(f.masvsControl ? { masvsControl: f.masvsControl } : {}),
       ...(f.crossBuildFingerprint ? { crossBuildFingerprint: f.crossBuildFingerprint } : {}),
       ...(f.dynamicConfirmed ? { dynamicConfirmed: true } : {}),
+      // Prompt 18 passthrough (§56–§63): binary identity fields.
+      ...(f.binaryArtifactId ? { binaryArtifactId: f.binaryArtifactId } : {}),
+      ...(f.binaryArtifactHash ? { binaryArtifactHash: f.binaryArtifactHash } : {}),
+      ...(f.binaryFindingType ? { binaryFindingType: f.binaryFindingType } : {}),
+      ...(f.binaryComponent ? { binaryComponent: f.binaryComponent } : {}),
+      ...(f.binaryReachability ? { binaryReachability: f.binaryReachability } : {}),
+      ...(f.binaryFingerprint ? { binaryFingerprint: f.binaryFingerprint } : {}),
+      ...(f.staticConfidence ? { staticConfidence: f.staticConfidence } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -829,7 +853,18 @@ export function processNormalizedResult(
     nativeLibraries: [], signing: [], sdkInventory: [], source: ctx.toolSlug ?? "unknown",
   };
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, mobile, suppressedEndpoints, isMock: result.mock };
+  // --- Binary payload (Prompt 18): static inventory passes through
+  //     with provenance intact; the stores persist it into the binary
+  //     artifact tables (sections, functions, imports, strings,
+  //     dependencies, hardening).
+  const binary: ProcessedResult["binary"] = result.binary ?? {
+    sha256: "", format: "UNKNOWN", compilerHints: [], sections: [], hardening: [],
+    functions: [], imports: [], exports: [], symbols: [], dependencies: [],
+    strings: [], stringsSummary: { total: 0, byCategory: {} }, cryptoReferences: [],
+    discoveredReferences: [], source: ctx.toolSlug ?? "unknown",
+  };
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, mobile, binary, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original
@@ -1112,14 +1147,79 @@ function correlateMobileProcessed(
   };
 }
 
+/** Prompt 18 §58–§60: a processed finding is a BINARY finding when it
+ *  carries binary identity. Binary findings correlate in their own
+ *  partition keyed on the §57 fingerprint (lineage + component + rule
+ *  + CWE + class — absolute addresses excluded): checksec and Ghidra
+ *  reporting the same hardening gap, or Ghidra and radare2 reporting
+ *  the same function issue, converge on ONE canonical finding. */
+export function isBinaryFinding(f: ProcessedFinding): boolean {
+  return f.binaryFindingType !== undefined || f.binaryArtifactHash !== undefined;
+}
+
+function correlateBinaryProcessed(
+  findings: ProcessedFinding[],
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  const groups = new Map<string, ProcessedFinding[]>();
+  for (const f of findings) groups.set(f.fingerprint, [...(groups.get(f.fingerprint) ?? []), f]);
+  const out: ProcessedFinding[] = [...groups.values()].map((members) => {
+    const primary = members[0]!;
+    const sources = [...new Set(members.flatMap((m) => m.sources))];
+    const risk = computeRisk({
+      severity: primary.severity as NormalizedFinding["severity"],
+      ...(primary.cvssScore !== undefined ? { cvssScore: primary.cvssScore } : {}),
+      confidence: primary.confidence,
+      verificationStatus: "UNVERIFIED",
+    });
+    return {
+      ...primary,
+      sources,
+      evidenceRows: members.flatMap((m) => m.evidenceRows),
+      evidenceSummary: members.map((m) => m.evidenceSummary).filter(Boolean).join("\n"),
+      riskScore: risk.score,
+      riskBand: risk.band,
+      riskExplanation: [
+        ...risk.explanation,
+        ...(sources.length > 1 ? [`CORROBORATED_BY: ${sources.join(", ")}`] : []),
+        "STATIC_ANALYSIS_ONLY: no runtime confirmation exists for binary findings in this build (§81)",
+      ],
+      confidenceBand: primary.confidence >= 0.8 ? "HIGH" : primary.confidence >= 0.5 ? "MEDIUM" : "LOW",
+      verificationStatus: "UNVERIFIED",
+    } as ProcessedFinding;
+  });
+  const byTool: CorrelationStats["byTool"] = {};
+  for (const f of findings) {
+    const entry = byTool[f.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.total += 1;
+    byTool[f.sourceTool] = entry;
+  }
+  for (const o of out) {
+    const entry = byTool[o.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.unique += 1;
+    if (o.sources.length > 1) entry.corroborated += 1;
+    byTool[o.sourceTool] = entry;
+  }
+  return {
+    findings: out,
+    stats: {
+      total: findings.length,
+      unique: out.length,
+      duplicatesMerged: findings.length - out.length,
+      corroborated: out.filter((f) => f.sources.length > 1).length,
+      byTool,
+    },
+  };
+}
+
 export function correlateProcessedFindings(
   findings: ProcessedFinding[],
   opts: { assetCriticality?: string; maxFindings?: number } = {},
 ): { findings: ProcessedFinding[]; stats: CorrelationStats } {
   const cloudFindings = findings.filter(isCloudNativeFinding);
   const directoryFindings = findings.filter((f) => !isCloudNativeFinding(f) && isDirectoryFinding(f));
-  const mobileFindings = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && isMobileFinding(f));
-  const rest = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && !isMobileFinding(f));
+  const binaryFindings = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && isBinaryFinding(f));
+  const mobileFindings = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && !isBinaryFinding(f) && isMobileFinding(f));
+  const rest = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f) && !isBinaryFinding(f) && !isMobileFinding(f));
   const mergeStats = (parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[]) => {
     const byTool: CorrelationStats["byTool"] = {};
     for (const part of parts) {
@@ -1142,6 +1242,7 @@ export function correlateProcessedFindings(
   const parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[] = [];
   if (cloudFindings.length > 0) parts.push(correlateCloudProcessed(cloudFindings));
   if (directoryFindings.length > 0) parts.push(correlateDirectoryProcessed(directoryFindings));
+  if (binaryFindings.length > 0) parts.push(correlateBinaryProcessed(binaryFindings));
   if (mobileFindings.length > 0) parts.push(correlateMobileProcessed(mobileFindings));
   const sourceFindings = rest.filter(isSourceFinding);
   const otherFindings = rest.filter((f) => !isSourceFinding(f));

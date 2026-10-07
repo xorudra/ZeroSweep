@@ -21,6 +21,7 @@ export const NAV = [
   { href: "/cloud-security", label: "Cloud Security" },
   { href: "/active-directory", label: "Active Directory" },
   { href: "/mobile-security", label: "Mobile Security" },
+  { href: "/binary-security", label: "Binary Security" },
   { href: "/assessments", label: "Assessments" },
   { href: "/scans", label: "Scans" },
   { href: "/findings", label: "Findings" },

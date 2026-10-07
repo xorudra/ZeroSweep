@@ -27,7 +27,7 @@ export const WORKER_CAPABILITIES = [
 /** Prompt 10 §23/§24: worker types. The type + privileged capabilities
  *  come from the worker's OWN deployment environment — a general worker
  *  cannot promote itself, and job payloads never carry them. */
-export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST", "CLOUD_ANALYSIS", "DIRECTORY_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_DYNAMIC_ANALYSIS"] as const;
+export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST", "CLOUD_ANALYSIS", "DIRECTORY_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_DYNAMIC_ANALYSIS", "BINARY_STATIC_ANALYSIS", "BINARY_DYNAMIC_LAB"] as const;
 export type WorkerTypeName = (typeof WORKER_TYPES)[number];
 
 export function workerTypeFromEnv(env: NodeJS.ProcessEnv = process.env): WorkerTypeName {
@@ -82,6 +82,17 @@ export function privilegedCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.e
   }
   if (type === "MOBILE_DYNAMIC_ANALYSIS" && declared.includes("MOBILE_DYNAMIC_ANALYSIS")) {
     allowed.add("MOBILE_DYNAMIC_ANALYSIS");
+  }
+  // Prompt 18 §10/§64–§72: binary capabilities stay SEPARATE —
+  // BINARY_STATIC_ANALYSIS exists only on static-analysis workers
+  // (artifacts are hostile content, parsed in the static sandbox,
+  // never executed) and BINARY_DYNAMIC_LAB only on disposable lab
+  // workers. Neither env can grant the other.
+  if (type === "BINARY_STATIC_ANALYSIS" && declared.includes("BINARY_STATIC_ANALYSIS")) {
+    allowed.add("BINARY_STATIC_ANALYSIS");
+  }
+  if (type === "BINARY_DYNAMIC_LAB" && declared.includes("BINARY_DYNAMIC_LAB")) {
+    allowed.add("BINARY_DYNAMIC_LAB");
   }
   return [...allowed];
 }

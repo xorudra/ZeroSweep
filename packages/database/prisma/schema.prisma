@@ -145,6 +145,17 @@ enum AssessmentProfile {
   MOBILE_BINARY_ANALYSIS
   MOBILE_DYNAMIC_CONTROLLED
   MOBILE_FULL_CONTROLLED
+  // Prompt 18 §11: binary assessment profiles. BINARY_METADATA_ONLY is
+  // the lightest (identify + inventory); BINARY_BASELINE is the
+  // default static pipeline; BINARY_ASSESSMENT is its alias.
+  // BINARY_CONTROLLED_DEBUG appends the governed debug-session stage
+  // (LAB + approval only, §64–§67).
+  BINARY_METADATA_ONLY
+  BINARY_BASELINE
+  BINARY_ASSESSMENT
+  BINARY_COMPREHENSIVE_STATIC
+  BINARY_DEPENDENCY_ANALYSIS
+  BINARY_CONTROLLED_DEBUG
 }
 
 enum AssessmentStatus {
@@ -257,6 +268,18 @@ enum ScanStageType {
   MOBILE_BINARY_ANALYSIS
   MOBILE_DYNAMIC_SESSION
   MOBILE_TRAFFIC_ANALYSIS
+  // Prompt 18 §10/§11: binary pipeline stages. BINARY_ARTIFACT_INTAKE
+  // and BINARY_METADATA_EXTRACTION are PLATFORM stages (engine work
+  // over the registered artifact: header parsing, string inventory,
+  // platform findings); BINARY_HARDENING_ANALYSIS and
+  // BINARY_STATIC_ANALYSIS are tool stages on BINARY_STATIC_ANALYSIS
+  // workers only; BINARY_DEBUG_SESSION is the governed lab stage
+  // (approved session + BINARY_DYNAMIC_LAB worker + kill switch).
+  BINARY_ARTIFACT_INTAKE
+  BINARY_METADATA_EXTRACTION
+  BINARY_HARDENING_ANALYSIS
+  BINARY_STATIC_ANALYSIS
+  BINARY_DEBUG_SESSION
   QUALITY_GATE
   NORMALIZATION
   CORRELATION
@@ -576,6 +599,22 @@ enum AuditAction {
   MOBILE_INSTRUMENTATION_STARTED
   MOBILE_INSTRUMENTATION_STOPPED
   MOBILE_DYNAMIC_ACTION_BLOCKED
+  // Prompt 18 §120: binary security audit actions. Metadata for these
+  // actions NEVER contains secret values, unrestricted memory content
+  // or raw artifact bytes (§30/§74/§120).
+  BINARY_UPLOADED
+  BINARY_STATIC_SCAN_STARTED
+  BINARY_STATIC_SCAN_COMPLETED
+  BINARY_ARTIFACT_ACCESSED
+  BINARY_DECOMPILATION_ACCESSED
+  BINARY_DIFF_CREATED
+  BINARY_DEBUG_REQUESTED
+  BINARY_DEBUG_APPROVED
+  BINARY_DEBUG_STARTED
+  BINARY_DEBUG_COMPLETED
+  BINARY_DEBUG_CANCELLED
+  BINARY_CRASH_CAPTURED
+  BINARY_DEBUG_ACTION_BLOCKED
 }
 
 enum NotificationType {
@@ -664,6 +703,7 @@ model Target {
   scopes        Scope[]
   assets        Asset[]
   assessments   Assessment[]
+  binaryArtifacts BinaryArtifact[]
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   deletedAt     DateTime?
@@ -1237,6 +1277,19 @@ model Finding {
   masvsControl            String? // OWASP MASVS control id (§47)
   crossBuildFingerprint   String?
   dynamicConfirmed        Boolean                   @default(false)
+  // Prompt 18 (§50–§63): binary extension block — the registered
+  // binary artifact (identity = SHA-256), §56 finding type, concerned
+  // function/library/section, §62 reachability evidence state (never
+  // an exploitability claim), §57 cross-build fingerprint (absolute
+  // addresses excluded by construction), §63 static confidence band.
+  binaryArtifactId        String?
+  binaryArtifactHash      String?
+  binaryFindingType       String?
+  binaryComponent         String?
+  binaryReachability      String?
+  binaryFingerprint       String?
+  staticConfidence        String?
+  binaryArtifact          BinaryArtifact?           @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1281,6 +1334,8 @@ model Finding {
   @@index([mobileApplicationId])
   @@index([mobileBuildId])
   @@index([crossBuildFingerprint])
+  @@index([binaryArtifactId])
+  @@index([binaryFingerprint])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -2196,6 +2251,10 @@ model SoftwareComponent {
   // Prompt 17 §42: mobile dependency inventory binds components to the
   // mobile build — same component model, never invented versions (§45).
   buildId         String?
+  // Prompt 18 §26: binary dependency inventory binds components to the
+  // binary artifact — same component model; a version exists ONLY
+  // where reliably known (§25), never inferred from a soname major.
+  binaryArtifactId String?
   name            String
   version         String?
   ecosystem       String
@@ -2208,14 +2267,17 @@ model SoftwareComponent {
   snapshot        SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   image           ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
   build           MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact  BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
   createdAt       DateTime        @default(now())
 
   @@unique([snapshotId, purl])
   @@unique([imageId, purl])
   @@unique([buildId, purl])
+  @@unique([binaryArtifactId, purl])
   @@index([snapshotId])
   @@index([imageId])
   @@index([buildId])
+  @@index([binaryArtifactId])
   @@index([ecosystem, name])
 }
 
@@ -2229,6 +2291,8 @@ model SoftwareBillOfMaterials {
   // Prompt 17 §43: mobile SBOMs bind to the build (MobileBuild → SBOM
   // → Components → CVEs, §44).
   buildId        String?
+  // Prompt 18 §27: binary SBOMs bind to the artifact the same way.
+  binaryArtifactId String?
   scanId         String?
   format         SbomFormat
   specVersion    String
@@ -2238,11 +2302,13 @@ model SoftwareBillOfMaterials {
   snapshot       SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   image          ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
   build          MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
   createdAt      DateTime        @default(now())
 
   @@index([snapshotId])
   @@index([imageId])
   @@index([buildId])
+  @@index([binaryArtifactId])
   @@index([scanId])
 }
 
@@ -2358,6 +2424,9 @@ model ContainerImage {
   snapshots    ContainerImageSnapshot[]
   components   SoftwareComponent[]
   sboms        SoftwareBillOfMaterials[]
+  // Prompt 18 §4: binaries extracted from this image are binary
+  // artifacts with their own provenance — never duplicated payloads.
+  binaryArtifacts BinaryArtifact[]
 
   @@unique([workspaceId, registry, repository, digest])
   @@index([workspaceId])
@@ -3571,6 +3640,9 @@ model MobileBuild {
   sboms             SoftwareBillOfMaterials[]
   trafficSessions   MobileTrafficSession[]
   dynamicSessions   MobileDynamicSession[]
+  // Prompt 18 §4: native artifacts of this build registered as binary
+  // artifacts link back here (provenance, never duplication).
+  binaryArtifacts   BinaryArtifact[]
   createdAt         DateTime                  @default(now())
 
   @@unique([applicationId, artifactHash])
@@ -3650,11 +3722,17 @@ model MobileNativeLibrary {
   stackCanary  Boolean?
   relro        String? // NONE | PARTIAL | FULL
   stripped     Boolean?
+  // Prompt 18 §4/§51: when the same physical library is registered as
+  // a binary artifact, the records LINK — correlation never duplicates
+  // the artifact or its findings.
+  binaryArtifactId String?
   build        MobileBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
   createdAt    DateTime    @default(now())
 
   @@index([buildId])
   @@index([workspaceId])
+  @@index([binaryArtifactId])
 }
 
 // The controlled device lab (§53/§54). Devices are DSRclone-managed
@@ -3760,4 +3838,307 @@ model MobileDynamicSession {
 
   @@index([workspaceId])
   @@index([buildId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Prompt 18 — Reverse engineering & binary security analysis
+// (§1–§95). Binaries are UNTRUSTED content: registered by SHA-256
+// identity, identified by magic bytes, parsed STATICALLY and never
+// executed, loaded as code, debugged outside the governed lab
+// policy, or extracted outside an isolated workspace (§6–§8/§100).
+// Secrets inside binaries persist as metadata only (§30) — there is
+// deliberately NO column anywhere in this section that could hold a
+// raw secret value, private key material or unrestricted memory.
+// ─────────────────────────────────────────────────────────────────────
+
+// A registered binary artifact (§3). Identity = SHA-256; physical
+// artifacts are deduplicated by hash while tenant references stay
+// separate (§4/§101). Provenance links (mobile build / container
+// image / source snapshot) preserve lineage without duplicating the
+// artifact.
+model BinaryArtifact {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  targetId          String?
+  name              String
+  // UPLOAD | MOBILE_BUILD | CONTAINER_IMAGE | SOURCE_BUILD | CONTROLLED_LAB
+  source            String    @default("UPLOAD")
+  sourceRef         String?
+  mobileBuildId     String?
+  containerImageId  String?
+  sha256            String
+  sha1              String?
+  sizeBytes         BigInt    @default(0)
+  format            String    @default("UNKNOWN") // ELF | PE | MACH_O | UNKNOWN (§5)
+  kind              String? // EXECUTABLE | SHARED_LIBRARY | OBJECT | CORE
+  architecture      String?
+  bitness           Int?
+  endianness        String?
+  platform          String?
+  environment       String    @default("PRODUCTION") // PRODUCTION | STAGING | LAB | DEVELOPMENT
+  artifactReference String? // object-storage reference — bytes never travel in rows
+  // Bounded recorded analysis payload registered with the artifact
+  // (parsed header report / tool inputs) — sanitized + secret-redacted
+  // at intake (§6/§107 discipline). NEVER raw artifact bytes.
+  analysisArtifacts Json?
+  status            String    @default("REGISTERED") // REGISTERED | ANALYZED | ANALYSIS_FAILED
+  createdBy         String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  target            Target?   @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  mobileBuild       MobileBuild? @relation(fields: [mobileBuildId], references: [id], onDelete: SetNull)
+  containerImage    ContainerImage? @relation(fields: [containerImageId], references: [id], onDelete: SetNull)
+  sections          BinarySection[]
+  hardeningProfile  BinaryHardeningProfile?
+  functions         BinaryFunction[]
+  imports           BinaryImport[]
+  exports           BinaryExport[]
+  symbols           BinarySymbol[]
+  strings           BinaryString[]
+  dependencies      BinaryDependency[]
+  cryptoReferences  BinaryCryptoReference[]
+  components        SoftwareComponent[]
+  sboms             SoftwareBillOfMaterials[]
+  findings          Finding[]
+  nativeLibraries   MobileNativeLibrary[]
+  diffsAsBase       BinaryDiff[] @relation("BinaryDiffBase")
+  diffsAsTarget     BinaryDiff[] @relation("BinaryDiffTarget")
+  debugSessions     BinaryDebugSession[]
+  crashes           BinaryCrash[]
+
+  @@unique([workspaceId, sha256])
+  @@index([workspaceId])
+  @@index([targetId])
+  @@index([sha256])
+}
+
+model BinarySection {
+  id             String         @id @default(uuid())
+  artifactId     String
+  workspaceId    String
+  name           String
+  type           String?
+  offset         BigInt?
+  size           BigInt?
+  virtualAddress String?
+  permissions    String?
+  entropy        Float?
+  source         String         @default("binary-platform-analysis")
+  artifact       BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+
+  @@unique([artifactId, name])
+  @@index([artifactId])
+}
+
+// The normalized hardening profile (§15/§16): one row per artifact,
+// per-mitigation status ENABLED | DISABLED | PARTIAL | NOT_APPLICABLE
+// | UNKNOWN in the Json profile, with per-tool provenance.
+model BinaryHardeningProfile {
+  id         String         @id @default(uuid())
+  artifactId String         @unique
+  workspaceId String
+  profile    Json           @default("[]") // [{ name, status, detail?, source }]
+  assessedAt DateTime       @default(now())
+  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model BinaryFunction {
+  id                  String         @id @default(uuid())
+  artifactId          String
+  workspaceId         String
+  name                String
+  address             String?
+  size                Int?
+  callingConvention   String?
+  // §22 stable identity from normalized bytes/signatures — never an
+  // absolute address alone.
+  fingerprint         String?
+  referencesRiskyApi  String[]       @default([])
+  confidence          Float          @default(0.7)
+  source              String
+  artifact            BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt           DateTime       @default(now())
+
+  @@unique([artifactId, name, address])
+  @@index([artifactId])
+  @@index([workspaceId, name])
+}
+
+model BinaryImport {
+  id         String         @id @default(uuid())
+  artifactId String
+  workspaceId String
+  library    String
+  symbol     String
+  address    String?
+  source     String
+  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+
+  @@index([artifactId])
+  @@index([workspaceId, symbol])
+}
+
+model BinaryExport {
+  id         String         @id @default(uuid())
+  artifactId String
+  workspaceId String
+  symbol     String
+  address    String?
+  type       String?
+  source     String
+  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+
+  @@index([artifactId])
+}
+
+model BinarySymbol {
+  id         String         @id @default(uuid())
+  artifactId String
+  workspaceId String
+  name       String
+  type       String?
+  binding    String?
+  address    String?
+  source     String
+  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+
+  @@index([artifactId])
+}
+
+// Extracted strings (§28–§30): bounded, categorized, sanitized.
+// SECRET_CANDIDATE rows carry the one-way fingerprint + redacted
+// preview ONLY — value holds the literal redaction marker.
+model BinaryString {
+  id                String         @id @default(uuid())
+  artifactId        String
+  workspaceId       String
+  value             String
+  encoding          String         @default("ASCII")
+  category          String         @default("GENERIC")
+  location          String?
+  secretFingerprint String?
+  secretType        String?
+  redactedPreview   String?
+  source            String
+  artifact          BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+
+  @@index([artifactId])
+  @@index([artifactId, category])
+}
+
+model BinaryDependency {
+  id         String         @id @default(uuid())
+  artifactId String
+  workspaceId String
+  library    String
+  // Only where reliably known (§25) — never inferred from a soname.
+  version    String?
+  path       String?
+  platform   String?
+  purl       String?
+  cpe        String?
+  // DECLARED | DETECTED_LINKED | HEURISTIC (§27)
+  sourceKind String         @default("DETECTED_LINKED")
+  confidence Float          @default(0.8)
+  source     String
+  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+
+  @@unique([artifactId, library])
+  @@index([artifactId])
+  @@index([workspaceId, library])
+}
+
+model BinaryCryptoReference {
+  id         String         @id @default(uuid())
+  artifactId String
+  workspaceId String
+  kind       String // LIBRARY | ALGORITHM | CERTIFICATE_API | KEY_MANAGEMENT_API
+  name       String
+  source     String
+  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+
+  @@index([artifactId])
+}
+
+// A cross-build comparison (§53–§55): inventories compared,
+// security regressions recorded explicitly.
+model BinaryDiff {
+  id             String         @id @default(uuid())
+  workspaceId    String
+  baseArtifactId String
+  targetArtifactId String
+  summary        Json           @default("{}")
+  regressions    Json           @default("[]")
+  detail         Json           @default("{}")
+  createdBy      String
+  baseArtifact   BinaryArtifact @relation("BinaryDiffBase", fields: [baseArtifactId], references: [id], onDelete: Cascade)
+  targetArtifact BinaryArtifact @relation("BinaryDiffTarget", fields: [targetArtifactId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+
+  @@index([workspaceId])
+  @@index([baseArtifactId])
+  @@index([targetArtifactId])
+}
+
+// A controlled debug session (§67–§71): policy-governed record. LAB
+// environment + separate approval + typed operations + NO_NETWORK
+// default + hard timeout + kill-switch state are all recorded.
+// Debugger transports are provisioned per deployment; an eligible
+// session without a transport reports NOT_PROVISIONED (§72).
+model BinaryDebugSession {
+  id              String         @id @default(uuid())
+  workspaceId     String
+  artifactId      String
+  environment     String         @default("LAB")
+  status          String         @default("REQUESTED") // REQUESTED | APPROVED | BLOCKED | ELIGIBLE | RUNNING | COMPLETED | TERMINATED | NOT_PROVISIONED
+  operations      Json           @default("[]")
+  policyDecision  Json           @default("{}")
+  networkPolicy   String         @default("NO_NETWORK")
+  timeoutSeconds  Int            @default(1800)
+  killSwitchChecked Boolean      @default(false)
+  requestedBy     String
+  approvedBy      String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  artifact        BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  crashes         BinaryCrash[]
+  createdAt       DateTime       @default(now())
+
+  @@index([workspaceId])
+  @@index([artifactId])
+}
+
+// A captured crash (§74–§77): normalized metadata + register summary
+// (bounded JSON), dedup fingerprint from exception type + normalized
+// stack + faulting function + lineage — never raw addresses. Triage
+// NEVER claims exploitability.
+model BinaryCrash {
+  id                String            @id @default(uuid())
+  workspaceId       String
+  artifactId        String
+  sessionId         String?
+  fingerprint       String
+  signal            String
+  exceptionType     String?
+  faultingFunction  String?
+  stackSummary      Json              @default("[]")
+  registerSummary   Json              @default("{}")
+  inputReference    String?
+  // LIKELY_SECURITY_RELEVANT | NEEDS_REVIEW | LIKELY_NON_SECURITY | UNKNOWN
+  triage            String            @default("NEEDS_REVIEW")
+  artifact          BinaryArtifact    @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  session           BinaryDebugSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+
+  @@index([workspaceId, fingerprint])
+  @@index([artifactId])
 }

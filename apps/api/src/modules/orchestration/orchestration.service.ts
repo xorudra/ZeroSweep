@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, mobileHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  apiHealthBySlug, binaryHealthRecord, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, mobileHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -112,10 +112,20 @@ export class OrchestrationService {
       // §58). Frida/Objection have NO adapter (§69–§74): their health
       // is a governed DISABLED / APPROVAL_REQUIRED constant in
       // mobileHealthBySlug, never a probe.
+      // Prompt 18: binary adapters (checksec / radare2 / the extended
+      // dual-mode Ghidra) join plan-time selection for the binary
+      // profiles. Registered BEFORE the mobile family so the extended
+      // Ghidra owns the shared slug — the mobile registration skips
+      // it, and mobile plans keep working because the dual-mode
+      // adapter delegates mobile configurations unchanged (§18).
+      // IDA/Binary Ninja are connectors (§96) and GDB/pwndbg/Cutter
+      // are governed descriptors: their health is a governed constant
+      // in binaryHealthRecord, never a probe.
+      registerBinaryAdapters(registry);
       registerMobileAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()), ...directoryHealthRecord(registry.list()), ...mobileHealthBySlug(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()), ...directoryHealthRecord(registry.list()), ...mobileHealthBySlug(registry.list()), ...binaryHealthRecord(registry.list()) } };
     }
     return this.registryCache.registry;
   }

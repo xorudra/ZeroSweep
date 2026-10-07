@@ -120,6 +120,19 @@ export const CAPABILITIES = [
   "DEVICE_MANAGEMENT", "APP_INSTALLATION", "LOG_COLLECTION",
   "CONTROLLED_APP_INTERACTION", "MOBILE_TRAFFIC_CAPTURE", "HTTP_ANALYSIS",
   "MOBILE_PROXY_ANALYSIS", "DYNAMIC_INSTRUMENTATION",
+  // Prompt 18: binary / reverse-engineering capabilities. The static
+  // set is what adapters implement (hardening analysis, disassembly /
+  // decompilation inventory, function/import/export/string analysis).
+  // DYNAMIC_DEBUGGING exists ONLY so the policy can name GDB/pwndbg
+  // and keep them behind the BinaryDebugPolicy (§64–§68) — LAB +
+  // approval gated, typed operations only, never an unrestricted
+  // debugger console. There is deliberately NO exploit-generation,
+  // shellcode, ROP, credential-dumping, process-injection or
+  // persistence capability anywhere in this list (§78/§123).
+  "BINARY_HARDENING_ANALYSIS", "DISASSEMBLY", "DECOMPILATION",
+  "FUNCTION_ANALYSIS", "IMPORT_EXPORT_ANALYSIS", "STRING_REFERENCE_ANALYSIS",
+  "STATIC_BINARY_ANALYSIS", "FUNCTION_INVENTORY", "STRING_ANALYSIS",
+  "DYNAMIC_DEBUGGING",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

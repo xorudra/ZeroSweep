@@ -480,3 +480,71 @@ export const registerMobileDeviceSchema = z.object({
   dedicatedNetwork: z.boolean().default(true),
 }).strict();
 export type RegisterMobileDeviceInput = z.input<typeof registerMobileDeviceSchema>;
+
+// ── Prompt 18: reverse engineering & binary analysis (§3/§92/§93) ──
+// Artifact registration carries identity + a BOUNDED registered
+// header segment for platform parsing — never executable content to
+// run. Debug-session bodies may carry command/script-shaped fields
+// ONLY so the service can refuse them explicitly + audit the attempt
+// (§93/§114); they are never executed or persisted as instructions.
+
+export const registerBinaryArtifactSchema = z.object({
+  name: z.string().min(1).max(255),
+  source: z.enum(["UPLOAD", "MOBILE_BUILD", "CONTAINER_IMAGE", "SOURCE_BUILD", "CONTROLLED_LAB"]).default("UPLOAD"),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/, "sha256 must be a SHA-256 hex digest"),
+  sha1: z.string().regex(/^[a-f0-9]{40}$/, "sha1 must be a SHA-1 hex digest").optional(),
+  sizeBytes: z.number().int().min(0),
+  declaredFormat: z.string().min(1).max(32).optional(),
+  artifactReference: z.string().min(1).max(512).optional(),
+  environment: z.enum(["PRODUCTION", "STAGING", "DEVELOPMENT", "LAB", "UNKNOWN"]).default("PRODUCTION"),
+  mobileBuildId: z.string().min(1).optional(),
+  containerImageId: z.string().min(1).optional(),
+  // Bounded header segment (base64, ≤ 1 MiB decoded) the platform
+  // stage parses — headers/rodata only, never executed (§12).
+  headerSegmentBase64: z.string().max(1_500_000).optional(),
+  // Recorded tool outputs registered at intake (sanitized + bounded
+  // by the service before persistence).
+  recordedOutputs: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+export type RegisterBinaryArtifactInput = z.input<typeof registerBinaryArtifactSchema>;
+
+export const startBinaryScanSchema = z.object({
+  profile: z.enum([
+    "BINARY_METADATA_ONLY", "BINARY_BASELINE", "BINARY_ASSESSMENT",
+    "BINARY_COMPREHENSIVE_STATIC", "BINARY_DEPENDENCY_ANALYSIS", "BINARY_CONTROLLED_DEBUG",
+  ]).default("BINARY_BASELINE"),
+}).strict();
+export type StartBinaryScanInput = z.input<typeof startBinaryScanSchema>;
+
+export const createBinaryDiffSchema = z.object({
+  baseArtifactId: z.string().min(1),
+  targetArtifactId: z.string().min(1),
+}).strict().refine((v) => v.baseArtifactId !== v.targetArtifactId, {
+  message: "baseArtifactId and targetArtifactId must differ",
+});
+export type CreateBinaryDiffInput = z.input<typeof createBinaryDiffSchema>;
+
+const debugOperationSchema = z.object({
+  operation: z.string().min(1).max(128),
+  params: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+export const createBinaryDebugSessionSchema = z.object({
+  // Typed approved operations ONLY (§68). Command/script-shaped
+  // fields are declared here solely so their presence is refused +
+  // audited (§93/§114) — they are never executed.
+  operations: z.array(debugOperationSchema).max(16).default([]),
+  timeoutSeconds: z.number().int().min(30).max(1800).optional(),
+  networkPolicy: z.enum(["NO_NETWORK", "LAB_ISOLATED"]).default("NO_NETWORK"),
+  gdbCommand: z.string().max(4096).optional(),
+  shellCommand: z.string().max(4096).optional(),
+  scriptBody: z.string().max(16384).optional(),
+  r2Command: z.string().max(4096).optional(),
+}).strict();
+export type CreateBinaryDebugSessionInput = z.input<typeof createBinaryDebugSessionSchema>;
+
+export const approveBinaryDebugSessionSchema = z.object({
+  decision: z.enum(["APPROVE", "REJECT"]),
+  note: z.string().min(1).max(500).optional(),
+}).strict();
+export type ApproveBinaryDebugSessionInput = z.input<typeof approveBinaryDebugSessionSchema>;

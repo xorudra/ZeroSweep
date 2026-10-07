@@ -1,5 +1,5 @@
 import {
-  ALL_DIRECTORY_SLUGS, API_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, MOBILE_DYNAMIC_SLUGS, MOBILE_SLUGS, MOBILE_STATIC_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  ALL_DIRECTORY_SLUGS, API_SLUGS, BINARY_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, MOBILE_DYNAMIC_SLUGS, MOBILE_SLUGS, MOBILE_STATIC_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
   activeKillSwitch, approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext, type KillSwitchContext, type KillSwitchRecord,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
@@ -24,7 +24,12 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS, ...MOBILE_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS, ...MOBILE_SLUGS, ...BINARY_SLUGS] as const;
+
+/** Prompt 18 §10: binary-only slugs (checksec / radare2). "ghidra" is
+ *  shared with the mobile family — its binary mode is selected by the
+ *  scan's binary context, never by the slug alone. */
+export const BINARY_ONLY_SLUGS = ["checksec", "radare2"] as const;
 
 /** Prompt 15 §10/§15: directory connectors resolve a registered domain
  *  through the store context — they never take an endpoint or a
@@ -160,6 +165,19 @@ export interface ExecutionContextRecord {
     dynamicSessionId?: string;
     dynamicSessionApproved?: boolean;
     trafficSessionId?: string;
+  };
+  /** Prompt 18: the scan's binary context, resolved by the STORE from
+   *  the registered BinaryArtifact row — artifact identity (the
+   *  SHA-256, §3), object-storage reference, format and environment
+   *  (§64: debug eligibility reads the environment). Never client
+   *  input. */
+  binary?: {
+    artifactId?: string;
+    artifactHash?: string;
+    artifactReference?: string;
+    artifactName?: string;
+    format?: string;
+    environment?: string;
   };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
@@ -336,7 +354,10 @@ export class StageExecutor {
       // lab adapters run ONLY on MOBILE_DYNAMIC_ANALYSIS workers in
       // the dynamic/traffic stages, only with an APPROVED lab session
       // resolved by the store, and never under an active kill switch.
-      const isMobileStatic = (MOBILE_STATIC_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      // Prompt 18: "ghidra" is shared — on a scan WITH a binary context
+      // the binary gates below own it; the mobile gates own it only on
+      // mobile scans (store-resolved context, never client input).
+      const isMobileStatic = (MOBILE_STATIC_SLUGS as readonly string[]).includes(ctx.adapterSlug) && !ctx.binary?.artifactId;
       const isMobileDynamic = (MOBILE_DYNAMIC_SLUGS as readonly string[]).includes(ctx.adapterSlug);
       if (isMobileStatic && !["MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS"].includes(ctx.stageId)) {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
@@ -389,6 +410,30 @@ export class StageExecutor {
           await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: a ${active.level} kill switch is active — dynamic work is terminated (§92)`);
           return { status: "DENIED", reasonCode: "KILL_SWITCH_ACTIVE" };
         }
+      }
+      // Prompt 18 gates (§9/§10): binary static adapters run ONLY on
+      // BINARY_STATIC_ANALYSIS workers, ONLY in the hardening/static
+      // stages, and ONLY against a store-resolved registered artifact
+      // (absent = NOT_CONFIGURED). The artifact is tool INPUT — no
+      // gate here can ever turn it into the executable (§8/§100), and
+      // GDB/pwndbg/Cutter/IDA/Binary Ninja have no adapter at all
+      // (§35–§39/§64–§66), so no job can reach them.
+      const isBinaryStatic = (BINARY_ONLY_SLUGS as readonly string[]).includes(ctx.adapterSlug)
+        || (ctx.adapterSlug === "ghidra" && Boolean(ctx.binary?.artifactId));
+      if (isBinaryStatic && !["BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS"].includes(ctx.stageId)) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: binary static adapters execute only in BINARY_HARDENING_ANALYSIS / BINARY_STATIC_ANALYSIS (§10)`);
+        return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      if (isBinaryStatic && !this.workerCapabilities.includes("BINARY_STATIC_ANALYSIS")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: binary static analysis runs only on BINARY_STATIC_ANALYSIS workers (§9/§10) — this worker does not hold BINARY_STATIC_ANALYSIS`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (isBinaryStatic && !ctx.binary?.artifactId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no binary artifact is registered for this scan (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
       }
       if ((PRIVILEGED_CLOUD_SLUGS as readonly string[]).includes(ctx.adapterSlug)
         && !this.workerCapabilities.includes("PRIVILEGED_HOST_ASSESSMENT")) {
@@ -674,6 +719,22 @@ export class StageExecutor {
         }
         if (declared.has("mobileScannerInstanceId") && ctx.scanner?.instanceId) config.mobileScannerInstanceId = ctx.scanner.instanceId;
       }
+      // Prompt 18 derived configuration — worker-computed from the
+      // scan's binary context (store-resolved), never client input
+      // (§6): artifact identity + reference only. No script, command
+      // or operation list is ever derived from scan input — radare2
+      // runs its platform STANDARD profile unless the plan recorded
+      // an approved profile name.
+      if ((BINARY_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        const binCtx = ctx.binary;
+        if (binCtx) {
+          if (declared.has("binaryArtifactId") && binCtx.artifactId) config.binaryArtifactId = binCtx.artifactId;
+          if (declared.has("binaryArtifactHash") && binCtx.artifactHash) config.binaryArtifactHash = binCtx.artifactHash;
+          if (declared.has("binaryArtifactReference") && binCtx.artifactReference) config.binaryArtifactReference = binCtx.artifactReference;
+          if (declared.has("binaryArtifactName") && binCtx.artifactName) config.binaryArtifactName = binCtx.artifactName;
+        }
+        if (declared.has("binaryAnalysisProfile")) config.binaryAnalysisProfile = "STANDARD";
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -834,6 +895,22 @@ export class StageExecutor {
         });
         if (mobPayload.endpoints.length > 0) {
           await emit("mobile.endpoints_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: mobPayload.endpoints.length, classification: "DISCOVERED_REFERENCE" });
+        }
+      }
+      // Prompt 18 §120 scan events — counts/ids only, never secret
+      // values, never decompiled code, never memory content (§30/§74).
+      const binPayload = processed.binary;
+      const binInventoryCount = binPayload.sections.length + binPayload.functions.length
+        + binPayload.imports.length + binPayload.exports.length + binPayload.dependencies.length;
+      if (binInventoryCount > 0) {
+        await emit("binary.inventory_recorded", {
+          stageId: ctx.stageId, tool: ctx.adapterSlug,
+          sections: binPayload.sections.length, functions: binPayload.functions.length,
+          imports: binPayload.imports.length, exports: binPayload.exports.length,
+          dependencies: binPayload.dependencies.length,
+        });
+        if (binPayload.discoveredReferences.length > 0) {
+          await emit("binary.references_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: binPayload.discoveredReferences.length, classification: "DISCOVERED_REFERENCE" });
         }
       }
 

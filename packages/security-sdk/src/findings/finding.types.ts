@@ -122,6 +122,25 @@ export interface NormalizedFinding {
   crossBuildFingerprint?: string;
   /** Static suggestion confirmed by a dynamic observation (§88). */
   dynamicConfirmed?: boolean;
+  // ── Prompt 18 — binary finding extensions (§56/§57/§62/§63). All
+  // optional; populated only by binary analyzers/parsers. The artifact
+  // SHA-256 is the immutable artifact identity (§3); binaryFingerprint
+  // deliberately EXCLUDES absolute addresses so the same root issue
+  // correlates across builds (§57).
+  /** Registered BinaryArtifact id (platform identity). */
+  binaryArtifactId?: string;
+  /** SHA-256 of the assessed binary artifact (§3). */
+  binaryArtifactHash?: string;
+  /** §56 finding type taxonomy. */
+  binaryFindingType?: BinaryFindingType;
+  /** Function / library / section the finding concerns (§50). */
+  binaryComponent?: string;
+  /** §62 reachability evidence state — never an exploitability claim. */
+  binaryReachability?: "REACHABLE" | "POSSIBLY_REACHABLE" | "NOT_OBSERVED" | "UNKNOWN";
+  /** §57 cross-build fingerprint: lineage + function/rule + CWE + class. */
+  binaryFingerprint?: string;
+  /** §63 static-analysis confidence band. */
+  staticConfidence?: "LOW" | "MEDIUM" | "HIGH";
 }
 
 /** Prompt 17 §49: mobile finding types — kept distinguishable end to end. */
@@ -129,6 +148,147 @@ export type MobileFindingType =
   | "MOBILE_MISCONFIGURATION" | "MOBILE_CODE_FINDING" | "MOBILE_SECRET"
   | "MOBILE_DEPENDENCY_VULNERABILITY" | "MOBILE_BINARY_FINDING"
   | "MOBILE_NETWORK_FINDING" | "MOBILE_RUNTIME_FINDING";
+
+/** Prompt 18 §56: binary finding types — kept distinguishable end to end. */
+export type BinaryFindingType =
+  | "BINARY_HARDENING_FINDING" | "BINARY_DEPENDENCY_VULNERABILITY"
+  | "BINARY_STATIC_CODE_FINDING" | "BINARY_SECRET"
+  | "BINARY_CONFIGURATION_FINDING" | "BINARY_RUNTIME_LAB_FINDING";
+
+/** Prompt 18 §5: binary formats. Unknown stays UNKNOWN — never guessed. */
+export type BinaryFormatName = "ELF" | "PE" | "MACH_O" | "UNKNOWN";
+
+/** Prompt 18 §16: hardening status vocabulary. */
+export type BinaryHardeningStatus = "ENABLED" | "DISABLED" | "PARTIAL" | "NOT_APPLICABLE" | "UNKNOWN";
+
+/** Prompt 18 §29: string classification categories. */
+export type BinaryStringCategory =
+  | "URL" | "DOMAIN" | "FILE_PATH" | "REGISTRY_PATH" | "DEBUG_STRING"
+  | "ERROR_MESSAGE" | "CRYPTO_REFERENCE" | "SECRET_CANDIDATE" | "GENERIC";
+
+export interface NormalizedBinarySection {
+  name: string;
+  type?: string;
+  offset?: number;
+  size?: number;
+  virtualAddress?: string;
+  permissions?: string; // e.g. "RWX" subset of R/W/X
+  entropy?: number;
+  source: string;
+}
+
+export interface NormalizedBinaryHardening {
+  name: string; // NX | PIE | RELRO | STACK_CANARY | FORTIFY | CFG | SAFESH | ASLR | CODE_SIGNING
+  status: BinaryHardeningStatus;
+  detail?: string;
+  source: string;
+}
+
+export interface NormalizedBinaryFunction {
+  name: string;
+  address?: string;
+  size?: number;
+  callingConvention?: string;
+  source: string;
+  confidence: number; // 0..1 (§41)
+  /** §22 stable fingerprint from normalized bytes/signatures — never
+   *  an absolute address alone. */
+  fingerprint?: string;
+  referencesRiskyApi?: string[];
+}
+
+export interface NormalizedBinaryImport {
+  library: string;
+  symbol: string;
+  address?: string;
+  source: string;
+}
+
+export interface NormalizedBinaryExport {
+  symbol: string;
+  address?: string;
+  type?: string;
+  source: string;
+}
+
+export interface NormalizedBinarySymbol {
+  name: string;
+  type?: string;
+  binding?: string;
+  address?: string;
+  source: string;
+}
+
+export interface NormalizedBinaryDependency {
+  library: string;
+  version?: string; // only where reliably known (§25/§26)
+  path?: string;
+  platform?: string;
+  purl?: string;
+  cpe?: string;
+  /** §27: declared vs detected-linked vs heuristic stay distinct. */
+  sourceKind: "DECLARED" | "DETECTED_LINKED" | "HEURISTIC";
+  confidence: number;
+  source: string;
+}
+
+export interface NormalizedBinaryString {
+  value: string; // sanitized + secret-redacted at parse time (§28/§30)
+  encoding: "ASCII" | "UTF16LE" | "UTF8";
+  location?: string; // section name / offset description
+  category: BinaryStringCategory;
+  source: string;
+  /** §30: for SECRET_CANDIDATE — fingerprint only, never the value. */
+  secretFingerprint?: string;
+  secretType?: string;
+  redactedPreview?: string;
+}
+
+export interface NormalizedBinaryCryptoReference {
+  kind: "LIBRARY" | "ALGORITHM" | "CERTIFICATE_API" | "KEY_MANAGEMENT_API";
+  name: string;
+  source: string;
+}
+
+/** A binary artifact's normalized static-analysis payload (Prompt 18
+ *  §12–§47). Everything here is derived WITHOUT executing the binary:
+ *  header parsing, tool reports and bounded string extraction. */
+export interface NormalizedBinaryData {
+  artifactName?: string;
+  sha256: string;
+  sha1?: string;
+  sizeBytes?: number;
+  format: BinaryFormatName;
+  /** EXECUTABLE | SHARED_LIBRARY | OBJECT | CORE | UNKNOWN (§5). */
+  kind?: string;
+  architecture?: string;
+  bitness?: 32 | 64;
+  endianness?: "LE" | "BE";
+  platform?: string;
+  entryPoint?: string;
+  stripped?: "STRIPPED" | "NOT_STRIPPED" | "UNKNOWN";
+  hasDebugInfo?: boolean;
+  /** Developer paths detected in debug metadata are SANITIZED before
+   *  they can appear here (§44). */
+  debugPaths?: string[];
+  compilerHints: string[];
+  sections: NormalizedBinarySection[];
+  hardening: NormalizedBinaryHardening[];
+  functions: NormalizedBinaryFunction[];
+  imports: NormalizedBinaryImport[];
+  exports: NormalizedBinaryExport[];
+  symbols: NormalizedBinarySymbol[];
+  dependencies: NormalizedBinaryDependency[];
+  /** Bounded sample of extracted strings (§28): the full set is
+   *  capped by ScanBudget (maxStrings); the summary counts are exact. */
+  strings: NormalizedBinaryString[];
+  stringsSummary: { total: number; byCategory: Record<string, number> };
+  cryptoReferences: NormalizedBinaryCryptoReference[];
+  /** §31: candidate endpoints — DISCOVERED_REFERENCE only, never
+   *  authorized, never scope-expanding. */
+  discoveredReferences: { value: string; kind: "URL" | "DOMAIN"; classification: "DISCOVERED_REFERENCE" }[];
+  source: string; // adapter slug / platform analyzer that reported this payload
+}
 
 /** Prompt 14 §58: cloud finding classes — kept distinguishable end to end. */
 export type CloudFindingClass =
@@ -925,6 +1085,8 @@ export interface NormalizedSecurityResult {
   directory?: NormalizedDirectoryData;
   /** Mobile application static-analysis payload (Prompt 17). */
   mobile?: NormalizedMobileData;
+  /** Binary static-analysis payload (Prompt 18). */
+  binary?: NormalizedBinaryData;
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

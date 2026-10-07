@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 17 complete (Prompts 1–17).** Production monorepo, backend and
+> **Status — Phase 18 complete (Prompts 1–18).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -219,10 +219,39 @@ and the AI health endpoint.
 15. ✅ Active Directory security assessment, identity graph & defensive attack-path engine (Prompt 15)
 16. ✅ Controlled penetration testing & validation workflow (Prompt 16)
 17. ✅ Mobile application VAPT — Android & iOS (Prompt 17)
-18. Lab-only modules (wireless)
+18. ✅ Reverse engineering & binary analysis (Prompt 18)
+19. Lab-only modules (wireless)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 18: Reverse Engineering & Binary Analysis.**
+  Authorized binaries became `BINARY` targets with SHA-256 artifact
+  identity: hostile-content intake (magic-byte format identification —
+  a PDF-named ELF registers as ELF; SHA-1 kept for interop only), then
+  STATIC analysis on isolated `BINARY_STATIC_ANALYSIS` workers —
+  platform header parsing for ELF/PE/Mach-O (fail-safe on malformed
+  fixtures), checksec hardening observations (NX/PIE/RELRO/canary/
+  FORTIFY/ASLR/CFG with NOT_APPLICABLE discipline), the extended
+  dual-mode Ghidra headless adapter (Prompt 17 adapter reused;
+  approved scripts only) and radare2 typed profiles (unrestricted r2
+  commands are inexpressible). Functions/imports/exports/symbols are
+  inventoried with stable fingerprints; dangerous-API findings need
+  function-reference evidence (an import alone is never a
+  vulnerability); weak crypto is judged from imported symbols, never
+  strings. Binaries are **never executed** — no running, no live
+  debugging, no emulation/detonation; an embedded marker payload in
+  the fixtures proves it. Dependencies bind to components + SBOMs
+  (versions only where evidence exists — `libssl.so.3` yields none)
+  and correlate to CVE/CVSS/EPSS/KEV against the local dataset only.
+  Secrets are fingerprint-only (P12 discipline; the planted fixture
+  token exists in no record). Cross-build diffs flag regressions;
+  controlled debugging is a governed LAB policy (separate approver,
+  kill switch, typed operations, NOT_PROVISIONED honestly when no lab
+  transport exists); IDA/Binary Ninja are license-aware commercial
+  connectors, Cutter an analyst-tool registration, GDB DISABLED
+  outside LAB and pwndbg APPROVAL_REQUIRED — none of them execute.
+  `/binary-security` GUI; migration `20261007150000_binary_security`
+  generated, not applied (Docker unavailable on the build VM).
 - **2026-10-08 — Prompt 17: Mobile Application VAPT — Android & iOS.**
   Mobile applications became verified `MOBILE_APP` targets with
   SHA-256 build identity: hostile-content intake (magic sniffing,

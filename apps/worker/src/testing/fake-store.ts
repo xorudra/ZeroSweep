@@ -2,7 +2,8 @@ import {
   CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, FIXTURE_MANIFEST_CONTENTS, FIXTURE_SOURCE_FILES,
   JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeDirectoryPosture, analyzeEncryption, analyzeIam, analyzeLdapPosture, analyzeLogging, analyzeMobilePosture, extractMobileArtifacts, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, buildIdentityGraph, classifyBaseline,
   detectRepository, diffCloudInventories, diffDirectorySnapshots, emptyMobileData, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateMobileSecurityGate, evaluateQualityGate, expandCidrTargets, findAttackPaths, mergeMobileData, parseManifests, privilegedPrincipals, resolveNestedGroups, summarizeForQualityGate, summarizeMobileForGate,
-  type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type SourceFileEntry,
+  analyzeBinaryPlatform, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders,
+  type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type SourceFileEntry,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
@@ -11,6 +12,7 @@ import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, processNormalizedResult, type ProcessedCloudResource, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
 import { isMobileProcessedFinding, stampMobileFindings, type MobileScanIdentity } from "../executors/mobile-stamp";
+import { isBinaryProcessedFinding, stampBinaryFindings, type BinaryScanIdentity } from "../executors/binary-stamp";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -33,7 +35,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP" | "BINARY";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -126,6 +128,24 @@ export interface FakeStoreOptions {
     previousResources?: NormalizedCloudResource[];
     previousIdentities?: NormalizedCloudIdentity[];
   };
+  /** Prompt 18: the fixture binary artifact the store resolves for a
+   *  binary scan — registered artifact identity (id + SHA-256), the
+   *  header segment the platform stage parses, the local intel matches
+   *  (the fixture "dataset") and the governed debug-session state.
+   *  Absent artifactId = NOT_CONFIGURED. */
+  binaryFixtures?: {
+    artifactId?: string;
+    artifactHash?: string;
+    artifactName?: string;
+    format?: string;
+    architecture?: string;
+    environment?: string;
+    artifactReference?: string;
+    headerSegment?: Buffer;
+    intelMatches?: Array<{ purl: string; cveId: string; cvssScore: number; severity: string }>;
+    debugSession?: { status: string; requestedBy: string; approvedBy?: string; environment?: string };
+    killSwitchActive?: boolean;
+  };
 }
 
 export class FakeStore implements ScanRunStore {
@@ -180,6 +200,16 @@ export class FakeStore implements ScanRunStore {
   directoryDomainStatus = "REGISTERED";
   directoryFixtures: NonNullable<FakeStoreOptions["directoryFixtures"]> = {};
   private directoryDriftComputed = false;
+  /** Prompt 18 binary state mirroring the Prisma store's artifact rows. */
+  binaryData: NormalizedBinaryData = {
+    sha256: "", format: "UNKNOWN", compilerHints: [], sections: [], hardening: [],
+    functions: [], imports: [], exports: [], symbols: [], dependencies: [],
+    strings: [], stringsSummary: { total: 0, byCategory: {} }, cryptoReferences: [],
+    discoveredReferences: [], source: "fake-store",
+  };
+  binaryGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
+  binarySbomRecord: { format: string; checksum: string; componentCount: number } | null = null;
+  binaryFixtures: NonNullable<FakeStoreOptions["binaryFixtures"]> = {};
   /** Prompt 17 mobile state mirroring the Prisma store's build rows. */
   mobileData: NormalizedMobileData = emptyMobileData("fake-store");
   mobileComponents: ProcessedComponent[] = [];
@@ -204,11 +234,11 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP" | "BINARY";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS" | "MOBILE_STATIC_BASELINE" | "MOBILE_STATIC_COMPREHENSIVE" | "MOBILE_SECRETS_ONLY" | "MOBILE_BINARY_ANALYSIS" | "MOBILE_DYNAMIC_CONTROLLED" | "MOBILE_FULL_CONTROLLED" | "MOBILE", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS" | "MOBILE_STATIC_BASELINE" | "MOBILE_STATIC_COMPREHENSIVE" | "MOBILE_SECRETS_ONLY" | "MOBILE_BINARY_ANALYSIS" | "MOBILE_DYNAMIC_CONTROLLED" | "MOBILE_FULL_CONTROLLED" | "MOBILE" | "BINARY_METADATA_ONLY" | "BINARY_BASELINE" | "BINARY_ASSESSMENT" | "BINARY_COMPREHENSIVE_STATIC" | "BINARY_DEPENDENCY_ANALYSIS" | "BINARY_CONTROLLED_DEBUG", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
@@ -217,6 +247,7 @@ export class FakeStore implements ScanRunStore {
     this.cloudSecFixtures = opts.cloudSecFixtures ?? {};
     this.directoryFixtures = opts.directoryFixtures ?? {};
     this.mobileFixtures = opts.mobileFixtures ?? {};
+    this.binaryFixtures = opts.binaryFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -337,6 +368,17 @@ export class FakeStore implements ScanRunStore {
         ...(this.mobileFixtures.dynamicSessionApproved !== undefined ? { dynamicSessionApproved: this.mobileFixtures.dynamicSessionApproved } : {}),
         ...(this.mobileFixtures.trafficSessionId ? { trafficSessionId: this.mobileFixtures.trafficSessionId } : {}),
       } : undefined,
+      // Prompt 18: the scan's binary context (§3/§6) — resolved from
+      // the registered artifact fixture, mirroring the Prisma store's
+      // BinaryArtifact lookup. No artifactId = NOT_CONFIGURED.
+      binary: this.targetType === "BINARY" ? {
+        ...(this.binaryFixtures.artifactId ? { artifactId: this.binaryFixtures.artifactId } : {}),
+        ...(this.binaryFixtures.artifactHash ? { artifactHash: this.binaryFixtures.artifactHash } : {}),
+        ...(this.binaryFixtures.artifactReference ? { artifactReference: this.binaryFixtures.artifactReference } : {}),
+        ...(this.binaryFixtures.artifactName ? { artifactName: this.binaryFixtures.artifactName } : {}),
+        ...(this.binaryFixtures.format ? { format: this.binaryFixtures.format } : {}),
+        ...(this.binaryFixtures.environment ? { environment: this.binaryFixtures.environment } : {}),
+      } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
@@ -399,9 +441,14 @@ export class FakeStore implements ScanRunStore {
   async persistResult(_scanId: string, _executionId: string, processedIn: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
     // Prompt 17 §50: mobile findings are stamped with their canonical
     // identity BEFORE persistence (mirrors the Prisma store).
-    const processed = this.mobileIdentity() && processedIn.findings.some(isMobileProcessedFinding)
+    let processed = this.mobileIdentity() && processedIn.findings.some(isMobileProcessedFinding)
       ? { ...processedIn, findings: stampMobileFindings(processedIn.findings, this.mobileIdentity()!) }
       : processedIn;
+    // Prompt 18 §50–§58: binary findings are stamped with their
+    // canonical identity BEFORE persistence (mirrors the Prisma store).
+    if (this.binaryIdentity() && processed.findings.some(isBinaryProcessedFinding)) {
+      processed = { ...processed, findings: stampBinaryFindings(processed.findings, this.binaryIdentity()!) };
+    }
     // Assets merge by host (one canonical row, provenance unioned) —
     // mirrors the Prisma store's upsert behaviour.
     for (const a of processed.assets) {
@@ -500,7 +547,8 @@ export class FakeStore implements ScanRunStore {
     // snapshot fixture once (§79).
     const dirCounts = this.persistDirectory(processed);
     const mobCounts = this.persistMobile(processed);
-    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings + mobCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
+    const binCounts = this.persistBinary(processed);
+    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings + mobCounts.findings + binCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
   }
 
   /** Prompt 17: the scan's mobile identity when a build is registered. */
@@ -625,6 +673,165 @@ export class FakeStore implements ScanRunStore {
     const evaluation = evaluateMobileSecurityGate(summary);
     this.mobileGateRecord = { status: evaluation.status, failedRules: evaluation.failedRules, warningRules: evaluation.warningRules };
     return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
+  }
+
+  /** Prompt 18: the scan's binary identity when an artifact is registered. */
+  private binaryIdentity(): BinaryScanIdentity | null {
+    const fx = this.binaryFixtures;
+    if (this.targetType !== "BINARY" || !fx.artifactId || !fx.artifactHash) return null;
+    return {
+      artifactId: fx.artifactId,
+      artifactHash: fx.artifactHash,
+      artifactName: fx.artifactName ?? "fixture-binary",
+      format: fx.format ?? "ELF",
+      ...(fx.architecture ? { architecture: fx.architecture } : {}),
+      ...(fx.environment ? { environment: fx.environment } : {}),
+    };
+  }
+
+  /** Prompt 18 binary persistence mirror (§12–§52): inventory merges
+   *  by identity key; fixture intel matches create dependency
+   *  findings (the fake "local dataset", mirroring the Prisma
+   *  store's CPE/CVE correlation); nothing is executed. */
+  private persistBinary(processed: ProcessedResult): { findings: number } {
+    const payload = processed.binary;
+    const has = payload.sections.length + payload.functions.length + payload.imports.length + payload.exports.length
+      + payload.symbols.length + payload.dependencies.length + payload.hardening.length + payload.strings.length > 0;
+    if (!has || this.targetType !== "BINARY" || !this.binaryFixtures.artifactId) return { findings: 0 };
+    const mergeBy = <T,>(list: T[], items: T[], key: (x: T) => string) => {
+      for (const item of items) {
+        const idx = list.findIndex((x) => key(x) === key(item));
+        if (idx >= 0) list[idx] = item; else list.push(item);
+      }
+    };
+    mergeBy(this.binaryData.sections, payload.sections, (s) => s.name);
+    mergeBy(this.binaryData.functions, payload.functions, (f) => `${f.name}|${f.address ?? ""}`);
+    mergeBy(this.binaryData.imports, payload.imports, (i) => `${i.library}|${i.symbol}`);
+    mergeBy(this.binaryData.exports, payload.exports, (e) => e.symbol);
+    mergeBy(this.binaryData.symbols, payload.symbols, (s) => s.name);
+    mergeBy(this.binaryData.dependencies, payload.dependencies, (d) => d.library);
+    mergeBy(this.binaryData.strings, payload.strings, (s) => `${s.value}|${s.category}`);
+    mergeBy(this.binaryData.cryptoReferences, payload.cryptoReferences, (c) => `${c.kind}|${c.name}`);
+    for (const h of payload.hardening) {
+      const existing = this.binaryData.hardening.find((x) => x.name === h.name);
+      if (!existing) this.binaryData.hardening.push(h);
+      else if (existing.status === "UNKNOWN" || h.status !== "UNKNOWN") Object.assign(existing, h);
+    }
+    for (const r of payload.discoveredReferences) {
+      if (!this.binaryData.discoveredReferences.some((x) => x.value === r.value)) this.binaryData.discoveredReferences.push(r);
+    }
+    if (payload.sha256) this.binaryData.sha256 = payload.sha256;
+    if (payload.format !== "UNKNOWN") this.binaryData.format = payload.format;
+    // Fixture intel correlation (local dataset only, §27/§49).
+    let created = 0;
+    for (const match of this.binaryFixtures.intelMatches ?? []) {
+      const component = processed.components.find((c) => c.purl === match.purl);
+      if (!component) continue;
+      const fingerprint = `intel:${match.purl}:${match.cveId}`;
+      if (this.findings.some((f) => f.fingerprint === fingerprint)) continue;
+      this.findings.push({
+        fingerprint, title: `${component.name} ${component.version ?? ""} is affected by ${match.cveId}`.trim(),
+        description: `Local intelligence dataset match for binary dependency ${match.purl} (fixture dataset).`,
+        severity: match.severity as never, confidence: 0.8, sources: ["intel-dataset"], sourceTool: "intel-dataset",
+        evidenceSummary: "", evidenceRows: [], riskScore: match.cvssScore * 10, riskBand: "HIGH",
+        riskExplanation: [], confidenceBand: "MEDIUM", verificationStatus: "UNVERIFIED",
+        cve: match.cveId, cvssScore: match.cvssScore, componentPurl: match.purl,
+        componentName: component.name, ...(component.version ? { componentVersion: component.version } : {}),
+        binaryArtifactId: this.binaryFixtures.artifactId, binaryArtifactHash: this.binaryFixtures.artifactHash,
+        binaryFindingType: "BINARY_DEPENDENCY_VULNERABILITY", binaryComponent: match.purl,
+        binaryReachability: "UNKNOWN", staticConfidence: "MEDIUM",
+      } as unknown as ProcessedResult["findings"][number]);
+      created++;
+    }
+    return { findings: created };
+  }
+
+  /** Prompt 18 platform hooks mirroring the Prisma store (§6/§64/§90). */
+  async validateBinaryArtifact(): Promise<{ artifactHash: string; format: string } | null> {
+    const identity = this.binaryIdentity();
+    if (!identity) return null;
+    return { artifactHash: identity.artifactHash, format: identity.format };
+  }
+
+  async extractBinaryMetadata(): Promise<{ sections: number; functions: number; dependencies: number; secrets: number; componentsScanned: number } | null> {
+    const identity = this.binaryIdentity();
+    if (!identity) return null;
+    const segment = this.binaryFixtures.headerSegment;
+    if (!segment) return null;
+    const report = parseBinaryHeaders(segment);
+    const sectionOf = (offset: number) => report.sections.find((s) => offset >= s.offset && offset < s.offset + s.size)?.name;
+    const strings = extractBinaryStrings(segment, { source: "binary-platform-analysis", sectionOf });
+    const analysis = analyzeBinaryPlatform({
+      artifactName: identity.artifactName, sha256: identity.artifactHash, sizeBytes: segment.length,
+      report, strings, environment: identity.environment ?? "PRODUCTION",
+    });
+    const processedExtracted = processNormalizedResult({
+      assets: [], services: [], endpoints: [], technologies: [], findings: analysis.findings,
+      artifacts: [], metrics: {}, mock: false, components: analysis.components, binary: analysis.data,
+    }, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-binary-metadata", toolSlug: "binary-platform-analysis" });
+    await this.persistResult("scan-1", "platform-binary-metadata", processedExtracted);
+    return {
+      sections: analysis.data.sections.length, functions: analysis.data.functions.length,
+      dependencies: analysis.data.dependencies.length,
+      secrets: analysis.findings.filter((f) => f.binaryFindingType === "BINARY_SECRET").length,
+      componentsScanned: analysis.components.length,
+    };
+  }
+
+  async inventoryBinaryDependencies(): Promise<{ components: number } | null> {
+    if (!this.binaryIdentity()) return null;
+    if (this.binaryData.dependencies.length === 0) return null;
+    return { components: this.components.length };
+  }
+
+  async generateBinarySbom(): Promise<{ format: string; checksum: string; components: number } | null> {
+    if (!this.binaryIdentity()) return null;
+    if (this.binarySbomRecord) return { format: this.binarySbomRecord.format, checksum: this.binarySbomRecord.checksum, components: this.binarySbomRecord.componentCount };
+    if (this.components.length === 0) return null;
+    const doc = buildCycloneDxSbom(this.components, {
+      snapshotHash: this.binaryFixtures.artifactHash ?? "fixture", repositoryName: this.binaryFixtures.artifactName ?? "fixture-binary",
+      timestamp: new Date().toISOString(),
+    }).sbom;
+    this.binarySbomRecord = { format: doc.format, checksum: doc.checksum, componentCount: doc.componentCount };
+    return { format: doc.format, checksum: doc.checksum, components: doc.componentCount };
+  }
+
+  async evaluateBinaryDebugSession(): Promise<{ status: string; reason?: string } | null> {
+    const identity = this.binaryIdentity();
+    if (!identity) return null;
+    const session = this.binaryFixtures.debugSession;
+    if (!session) return null;
+    if (session.status === "BLOCKED") return { status: "BLOCKED", reason: "session blocked by policy" };
+    const decision = evaluateBinaryDebugPolicy({
+      environment: session.environment ?? identity.environment ?? "LAB",
+      artifactAuthorized: true, targetVerified: true,
+      requestedBy: session.requestedBy,
+      ...(session.approvedBy ? { approvedBy: session.approvedBy } : {}),
+      // Eligibility is a POLICY question; transport provisioning is
+      // resolved separately below — none is provisioned in this
+      // build, so an ELIGIBLE session reports NOT_PROVISIONED (§72).
+      workerCapabilityPresent: true,
+      killSwitchActive: this.binaryFixtures.killSwitchActive ?? false,
+      operations: [{ operation: "START_APPROVED_FIXTURE" }],
+    });
+    if (decision.decision === "BLOCKED") return { status: "BLOCKED", reason: decision.reasons[0] ?? "policy" };
+    if (decision.decision === "PENDING_APPROVAL") return { status: "PENDING_APPROVAL", reason: decision.reasons[0] ?? "approval" };
+    return { status: "NOT_PROVISIONED", reason: "eligible session, but no BINARY_DYNAMIC_LAB debugger transport is provisioned in this build (§72)" };
+  }
+
+  async evaluateBinaryQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    if (!this.binaryIdentity()) return null;
+    const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
+    const binary = canonical.filter(isBinaryProcessedFinding);
+    if (binary.length === 0 && this.findings.length === 0) return null;
+    const failed: string[] = [];
+    const warnings: string[] = [];
+    if (binary.some((f) => f.severity === "CRITICAL")) failed.push("NO_CRITICAL_BINARY_FINDINGS");
+    if (binary.some((f) => f.binaryFindingType === "BINARY_SECRET")) failed.push("NO_EMBEDDED_SECRETS");
+    if (binary.some((f) => f.binaryFindingType === "BINARY_HARDENING_FINDING" && f.severity === "HIGH")) warnings.push("HARDENING_GAPS_REVIEWED");
+    const status = failed.length > 0 ? "FAILED" : warnings.length > 0 ? "PASSED_WITH_WARNINGS" : "PASSED";
+    this.binaryGateRecord = { status, failedRules: failed, warningRules: warnings };
+    return { status, failedRules: failed.length, warningRules: warnings.length };
   }
 
   /** Prompt 16/17 (§92): active kill switches for the dynamic gate. */

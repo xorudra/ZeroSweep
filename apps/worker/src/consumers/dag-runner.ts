@@ -97,6 +97,18 @@ export interface ScanRunStore extends ExecutionStore {
   extractMobileMetadata?(scanId: string): Promise<{ permissions: number; components: number; endpoints: number; secrets: number; componentsScanned: number } | null>;
   analyzeMobileManifest?(scanId: string): Promise<{ findings: number; assessments: number } | null>;
   evaluateMobileQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
+  /** Prompt 18 platform-stage hooks (same optional pattern): artifact
+   *  validation (§3/§6 — null fails the scan honestly as
+   *  NOT_CONFIGURED), metadata extraction over the registered
+   *  artifact (§12–§50), the dependency/SBOM stages for binary
+   *  profiles, the governed debug-session stage (§64–§74) and the
+   *  binary quality gate. */
+  validateBinaryArtifact?(scanId: string): Promise<{ artifactHash: string; format: string } | null>;
+  extractBinaryMetadata?(scanId: string): Promise<{ sections: number; functions: number; dependencies: number; secrets: number; componentsScanned: number } | null>;
+  inventoryBinaryDependencies?(scanId: string): Promise<{ components: number } | null>;
+  generateBinarySbom?(scanId: string): Promise<{ format: string; checksum: string; components: number } | null>;
+  evaluateBinaryDebugSession?(scanId: string): Promise<{ status: string; reason?: string } | null>;
+  evaluateBinaryQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -293,6 +305,9 @@ export class DagRunner {
     if (plan.stages.some((s) => s.type === "MOBILE_ARTIFACT_INTAKE")) {
       await emit("mobile.scan_completed", { finalStatus });
     }
+    if (plan.stages.some((s) => s.type === "BINARY_ARTIFACT_INTAKE")) {
+      await emit("binary.scan_completed", { finalStatus });
+    }
     return { status: finalStatus };
   }
 
@@ -404,9 +419,20 @@ export class DagRunner {
       const result = await this.store.detectSourceLanguages(scanId);
       if (result) await emit("source.languages_detected", { stageId, languages: result.languages, primaryLanguage: result.primaryLanguage ?? null, frameworks: result.frameworks, buildSystems: result.buildSystems });
     }
+    if (stageId === "DEPENDENCY_INVENTORY" && this.store.inventoryBinaryDependencies) {
+      // Prompt 18: binary profiles reuse the dependency stage — the
+      // binary hook answers for binary scans, the source hook below
+      // for source scans; each returns null outside its family.
+      const result = await this.store.inventoryBinaryDependencies(scanId);
+      if (result) await emit("binary.dependencies_inventoried", { stageId, components: result.components });
+    }
     if (stageId === "DEPENDENCY_INVENTORY" && this.store.inventorySourceDependencies) {
       const result = await this.store.inventorySourceDependencies(scanId);
       if (result) await emit("source.dependencies_inventoried", { stageId, components: result.components, manifests: result.manifests });
+    }
+    if (stageId === "SBOM_GENERATION" && this.store.generateBinarySbom) {
+      const result = await this.store.generateBinarySbom(scanId);
+      if (result) await emit("binary.sbom_generated", { stageId, format: result.format, checksum: result.checksum, components: result.components });
     }
     if (stageId === "SBOM_GENERATION" && this.store.generateSourceSbom) {
       const result = await this.store.generateSourceSbom(scanId);
@@ -543,6 +569,44 @@ export class DagRunner {
     }
     if (stageId === "MOBILE_DYNAMIC_SESSION" || stageId === "MOBILE_TRAFFIC_ANALYSIS") {
       await emit("mobile.dynamic_session_skipped", { stageId, reasonCode: "MOBILE_DYNAMIC_NOT_CONFIGURED", degraded: true });
+    }
+    // Prompt 18 platform stages (§10/§11): BINARY_ARTIFACT_INTAKE
+    // validates the registered artifact (missing hook or no artifact
+    // fails the scan honestly — FAIL_SCAN strategy);
+    // BINARY_METADATA_EXTRACTION runs the platform static analysis
+    // over the artifact's registered payload (header parse, strings,
+    // secrets, SCA); BINARY_DEBUG_SESSION evaluates the governed
+    // debug-session policy (§64–§74) — without an approved session /
+    // lab transport it completes as BLOCKED / NOT_PROVISIONED,
+    // never simulated, never executed here.
+    if (stageId === "BINARY_ARTIFACT_INTAKE") {
+      if (!this.store.validateBinaryArtifact) return "FAILED";
+      const result = await this.store.validateBinaryArtifact(scanId);
+      if (!result) {
+        await emit("policy.denied", { stageId, reasonCode: "BINARY_ARTIFACT_NOT_CONFIGURED" });
+        return "FAILED";
+      }
+      await emit("binary.artifact_validated", { stageId, artifactHash: result.artifactHash, format: result.format });
+    }
+    if (stageId === "BINARY_METADATA_EXTRACTION" && this.store.extractBinaryMetadata) {
+      const result = await this.store.extractBinaryMetadata(scanId);
+      if (result) {
+        await emit("binary.metadata_extracted", { stageId, sections: result.sections, functions: result.functions, dependencies: result.dependencies, componentsScanned: result.componentsScanned });
+        if (result.secrets > 0) await emit("binary.secrets_detected", { stageId, count: result.secrets });
+      }
+    }
+    if (stageId === "BINARY_DEBUG_SESSION") {
+      if (this.store.evaluateBinaryDebugSession) {
+        const result = await this.store.evaluateBinaryDebugSession(scanId);
+        if (result) await emit("binary.debug_session_evaluated", { stageId, status: result.status, ...(result.reason ? { reason: result.reason } : {}) });
+        else await emit("binary.debug_session_skipped", { stageId, reasonCode: "BINARY_DEBUG_NOT_CONFIGURED", degraded: true });
+      } else {
+        await emit("binary.debug_session_skipped", { stageId, reasonCode: "BINARY_DEBUG_NOT_CONFIGURED", degraded: true });
+      }
+    }
+    if (stageId === "QUALITY_GATE" && this.store.evaluateBinaryQualityGate) {
+      const result = await this.store.evaluateBinaryQualityGate(scanId);
+      if (result) await emit("binary.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
     }
     if (stageId === "QUALITY_GATE" && this.store.evaluateMobileQualityGate) {
       const result = await this.store.evaluateMobileQualityGate(scanId);

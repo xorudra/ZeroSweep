@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -89,6 +89,16 @@ registerCloudSecAdapters(registry, undefined, prismaCloudDeps());
 // on a DIRECTORY_ANALYSIS worker (§10), and the offensive family has
 // no adapters at all (§103).
 registerDirectoryAdapters(registry, undefined, prismaDirectoryDeps());
+// Prompt 18: binary adapters (checksec, radare2, the extended
+// dual-mode Ghidra, IDA/Binary Ninja connectors) over Prisma-resolved
+// artifact records. Registered BEFORE the mobile family so the
+// extended Ghidra adapter owns the shared slug (it delegates mobile
+// plans unchanged). Artifacts are hostile content — parsed
+// statically, NEVER executed (§8); debuggers are governed descriptors
+// only (GDB DISABLED outside LAB, Pwndbg APPROVAL_REQUIRED) and have
+// NO executing adapters; IDA/Binary Ninja transports report
+// NOT_INSTALLED until a licensed installation is provisioned (§96).
+registerBinaryAdapters(registry);
 // Prompt 17: mobile adapters (MobSF connector, JADX, apktool, Ghidra
 // + the controlled-lab ADB/mitmproxy adapters) over Prisma-resolved
 // application/build records. Static analysis runs in the sandbox —

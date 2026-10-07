@@ -46,6 +46,11 @@ export const ASSESSMENT_PROFILES = [
   // legacy alias and resolves to the MOBILE_STATIC_BASELINE chain.
   "MOBILE_STATIC_BASELINE", "MOBILE_STATIC_COMPREHENSIVE", "MOBILE_SECRETS_ONLY",
   "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_CONTROLLED", "MOBILE_FULL_CONTROLLED",
+  // Prompt 18 §11: binary profiles. BINARY_ASSESSMENT is the alias for
+  // BINARY_BASELINE; static analysis is the default — the DEBUG
+  // profile only appends the governed lab stage (§64–§67).
+  "BINARY_METADATA_ONLY", "BINARY_BASELINE", "BINARY_ASSESSMENT",
+  "BINARY_COMPREHENSIVE_STATIC", "BINARY_DEPENDENCY_ANALYSIS", "BINARY_CONTROLLED_DEBUG",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

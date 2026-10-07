@@ -43,6 +43,8 @@ export const STAGE_TYPES = [
   "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS",
   "MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_SESSION",
   "MOBILE_TRAFFIC_ANALYSIS",
+  "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS",
+  "BINARY_STATIC_ANALYSIS", "BINARY_DEBUG_SESSION",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -293,6 +295,26 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     adapterAllowlist: ["mitmproxy"],
     simulationFallback: false,
   },
+  BINARY_ARTIFACT_INTAKE: S("BINARY_ARTIFACT_INTAKE", "Binary Artifact Intake", "Validate the registered artifact for this scan: SHA-256 identity, magic-byte format, intake verdict recorded at registration (Prompt 18 §3/§5/§6). Platform stage: a scan without a registered artifact fails honestly as NOT_CONFIGURED. The artifact is NEVER executed (§8/§100).", [], ["SCOPE_VALIDATION"], 3, 120, "FAIL_SCAN"),
+  BINARY_METADATA_EXTRACTION: S("BINARY_METADATA_EXTRACTION", "Binary Metadata Extraction", "Platform static analysis over the registered artifact (§12–§50): header parsing, section inventory, hardening profile, imports/exports/symbols, bounded string extraction + classification, secret candidates (fingerprint only), crypto inventory, dependency inventory and SCA inputs. Pure parsing — nothing is executed.", [], ["BINARY_ARTIFACT_INTAKE"], 8, 900, "FAIL_STAGE_CONTINUE"),
+  BINARY_HARDENING_ANALYSIS: {
+    ...S("BINARY_HARDENING_ANALYSIS", "Binary Hardening Analysis", "checksec hardening properties of the registered artifact (Prompt 18 §15) on BINARY_STATIC_ANALYSIS workers. Statuses normalize to ENABLED/DISABLED/PARTIAL/NOT_APPLICABLE/UNKNOWN (§16).", ["BINARY_HARDENING_ANALYSIS"], ["BINARY_METADATA_EXTRACTION"], 4, 600, "FAIL_STAGE_CONTINUE"),
+    capabilityGroups: [["BINARY_HARDENING_ANALYSIS"]],
+    adapterAllowlist: ["checksec"],
+    simulationFallback: false,
+  },
+  BINARY_STATIC_ANALYSIS: {
+    ...S("BINARY_STATIC_ANALYSIS", "Binary Static Analysis", "Deep static analysis of the registered artifact (Prompt 18 §18–§34): Ghidra headless inventory (approved scripts only) and radare2 typed-operation profiles on BINARY_STATIC_ANALYSIS workers. No artifact-supplied script or command is ever run (§20/§34/§93).", ["BINARY_STATIC_ANALYSIS", "STATIC_BINARY_ANALYSIS"], ["BINARY_HARDENING_ANALYSIS"], 14, 1800, "FAIL_STAGE_CONTINUE"),
+    capabilityGroups: [["BINARY_STATIC_ANALYSIS"], ["STATIC_BINARY_ANALYSIS"]],
+    adapterAllowlist: ["ghidra", "radare2"],
+    simulationFallback: false,
+  },
+  BINARY_DEBUG_SESSION: {
+    ...S("BINARY_DEBUG_SESSION", "Binary Debug Session (Lab)", "Governed controlled-debugging stage (Prompt 18 §64–§74): eligible ONLY with a LAB environment, an approved BinaryDebugSession (separate approver), a BINARY_DYNAMIC_LAB worker and no active kill switch. Typed operations only — no unrestricted debugger console exists (§68/§69/§93). Without a provisioned lab transport the stage reports NOT_PROVISIONED honestly.", ["DYNAMIC_DEBUGGING"], ["BINARY_STATIC_ANALYSIS"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["DYNAMIC_DEBUGGING"]],
+    adapterAllowlist: [],
+    simulationFallback: false,
+  },
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -407,6 +429,14 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   MOBILE_DYNAMIC_CONTROLLED: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_DYNAMIC_SESSION", "MOBILE_TRAFFIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   MOBILE_FULL_CONTROLLED: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "MOBILE_BINARY_ANALYSIS", "MOBILE_DYNAMIC_SESSION", "MOBILE_TRAFFIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   MOBILE: template([...HEAD, "MOBILE_ARTIFACT_INTAKE", "MOBILE_METADATA_EXTRACTION", "MOBILE_MANIFEST_ANALYSIS", "MOBILE_STATIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  // Prompt 18 §11: binary profiles. Static is the default; the debug
+  // profile appends ONLY the governed BINARY_DEBUG_SESSION stage.
+  BINARY_METADATA_ONLY: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  BINARY_BASELINE: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  BINARY_ASSESSMENT: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  BINARY_COMPREHENSIVE_STATIC: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS", "DEPENDENCY_INVENTORY", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  BINARY_DEPENDENCY_ANALYSIS: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "DEPENDENCY_INVENTORY", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  BINARY_CONTROLLED_DEBUG: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS", "BINARY_DEBUG_SESSION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   CUSTOM: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
 };
 

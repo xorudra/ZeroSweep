@@ -59,6 +59,14 @@ export const SCAN_EVENT_TYPES = [
   "mobile.build_validated", "mobile.metadata_extracted", "mobile.secrets_detected",
   "mobile.endpoints_discovered", "mobile.manifest_analyzed", "mobile.inventory_recorded",
   "mobile.dynamic_session_skipped", "mobile.quality_gate_evaluated", "mobile.scan_completed",
+  // Prompt 18 — binary events (§120-adjacent scan events).
+  // Counts/ids/verdicts only; never secret values, raw strings dumps
+  // or decompiled source.
+  "binary.artifact_validated", "binary.metadata_extracted", "binary.secrets_detected",
+  "binary.inventory_recorded", "binary.references_discovered",
+  "binary.dependencies_inventoried", "binary.sbom_generated",
+  "binary.debug_session_evaluated", "binary.debug_session_skipped",
+  "binary.quality_gate_evaluated", "binary.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

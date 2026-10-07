@@ -2,13 +2,14 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, analyzeMobilePosture, extractMobileArtifacts, buildSpdxSbom, emptyMobileData, evaluateMobileSecurityGate, mergeMobileData, planMobileRetest, summarizeMobileForGate, type CvssRecord, type KillSwitchRecord, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, analyzeMobilePosture, extractMobileArtifacts, buildSpdxSbom, emptyMobileData, evaluateMobileSecurityGate, mergeMobileData, planMobileRetest, summarizeMobileForGate, analyzeBinaryPlatform, binaryFindingFingerprint, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders, planBinaryRetest, type CvssRecord, type KillSwitchRecord, type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, processNormalizedResult, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
 import { isMobileProcessedFinding, stampMobileFindings, type MobileScanIdentity } from "../executors/mobile-stamp";
+import { isBinaryProcessedFinding, stampBinaryFindings, type BinaryScanIdentity } from "../executors/binary-stamp";
 
 /**
  * Prisma implementation of the worker stores. Workers load ALL trusted state
@@ -112,6 +113,10 @@ export class PrismaWorkerStore implements ScanRunStore {
       // build's SHA-256 identity, the artifact reference and the
       // APPROVED lab session ids. Never client input.
       mobile: await this.loadMobileContext(graph.workspaceId, target.id, target.type),
+      // Prompt 18 (§3/§6): binary context resolved from the registered
+      // BinaryArtifact row — the artifact's SHA-256 identity, object
+      // reference, format and environment. Never client input.
+      binary: await this.loadBinaryContext(graph.workspaceId, target.id, target.type),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -264,6 +269,48 @@ export class PrismaWorkerStore implements ScanRunStore {
     };
   }
 
+  /** Prompt 18: binary context for a scan's target — the registered
+   *  BinaryArtifact bound to the target (the SHA-256 is the artifact
+   *  identity, §3). Retests therefore resolve the artifact row
+   *  directly. */
+  private async loadBinaryContext(workspaceId: string, targetId: string, targetType: string): Promise<ExecutionContextRecord["binary"]> {
+    if (targetType !== "BINARY") return undefined;
+    const artifact = await prisma.binaryArtifact.findFirst({
+      where: { workspaceId, targetId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!artifact) return {};
+    return {
+      artifactId: artifact.id,
+      artifactHash: artifact.sha256,
+      ...(artifact.artifactReference ? { artifactReference: artifact.artifactReference } : {}),
+      artifactName: artifact.name,
+      format: artifact.format,
+      environment: artifact.environment,
+    };
+  }
+
+  /** Prompt 18: the scan's registered artifact row (shared by the
+   *  binary hooks and payload persistence). */
+  private async binaryArtifactForScan(scanId: string) {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment || graph.assessment.target.type !== "BINARY") return null;
+    const artifact = await prisma.binaryArtifact.findFirst({
+      where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!artifact) return null;
+    return { graph, artifact };
+  }
+
+  private binaryIdentityOf(artifact: { id: string; sha256: string; name: string; format: string; architecture: string | null; environment: string }): BinaryScanIdentity {
+    return {
+      artifactId: artifact.id, artifactHash: artifact.sha256, artifactName: artifact.name,
+      format: artifact.format, ...(artifact.architecture ? { architecture: artifact.architecture } : {}),
+      environment: artifact.environment,
+    };
+  }
+
   /** Prompt 17: the scan's registered application + latest build rows
    *  (shared by the mobile hooks and payload persistence). */
   private async mobileBuildForScan(scanId: string) {
@@ -399,6 +446,16 @@ export class PrismaWorkerStore implements ScanRunStore {
       const mobileCtx = await this.mobileBuildForScan(scanId);
       if (mobileCtx) {
         processed = { ...processedIn, findings: stampMobileFindings(processedIn.findings, this.mobileIdentityOf(mobileCtx.app, mobileCtx.build)) };
+      }
+    }
+    // Prompt 18 §50–§58: binary findings are stamped with their
+    // canonical identity (artifact + §57 fingerprint) BEFORE
+    // persistence so correlation, diffing and retests key on the same
+    // fingerprint across tools and builds.
+    if (processed.findings.some(isBinaryProcessedFinding)) {
+      const binaryCtx = await this.binaryArtifactForScan(scanId);
+      if (binaryCtx) {
+        processed = { ...processed, findings: stampBinaryFindings(processed.findings, this.binaryIdentityOf(binaryCtx.artifact)) };
       }
     }
     const assetIdByHost = new Map<string, string>();
@@ -774,6 +831,14 @@ export class PrismaWorkerStore implements ScanRunStore {
           owaspMobile: f.owaspMobile, masvsControl: f.masvsControl,
           crossBuildFingerprint: f.crossBuildFingerprint,
           dynamicConfirmed: f.dynamicConfirmed ?? false,
+          // Prompt 18 (§50–§63): binary identity — artifact row +
+          // SHA-256, §56 type, concerned component, §62 reachability
+          // evidence state, §57 cross-build fingerprint, §63 static
+          // confidence band.
+          binaryArtifactId: f.binaryArtifactId, binaryArtifactHash: f.binaryArtifactHash,
+          binaryFindingType: f.binaryFindingType, binaryComponent: f.binaryComponent,
+          binaryReachability: f.binaryReachability, binaryFingerprint: f.binaryFingerprint,
+          staticConfidence: f.staticConfidence,
           ...(f.secret ? {
             secretMetadata: {
               create: {
@@ -1048,7 +1113,8 @@ export class PrismaWorkerStore implements ScanRunStore {
     // diffed against the pre-collection persisted state (§79/§80).
     const directoryCounts = await this.persistDirectoryPayload(scan, processed);
     const mobileCounts = await this.persistMobilePayload(scan, processed);
-    return { assets: processed.assets.length, findings: findings + directoryCounts.findings + mobileCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
+    const binaryCounts = await this.persistBinaryPayload(scan, processed);
+    return { assets: processed.assets.length, findings: findings + directoryCounts.findings + mobileCounts.findings + binaryCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
   }
 
   /** Reconstruct the normalized directory inventory for a domain from
@@ -1120,6 +1186,214 @@ export class PrismaWorkerStore implements ScanRunStore {
 
   /** Persist one result's directory payload + run the posture analysis
    *  over the persisted inventory (§57–§78). Returns row counts. */
+  /** Prompt 18 binary payload persistence (§12–§52): artifact
+   *  inventory upserts by identity key (sections by name, functions
+   *  by name+address, dependencies by library), the merged hardening
+   *  profile, components + SBOM records bound to the artifact
+   *  (§26/§27) and dependency→CVE correlation against the LOCAL
+   *  intelligence dataset only (§27/§49 — the production dataset is
+   *  empty in this build ⇒ zero matches, never invented). Extracted
+   *  references persist as DISCOVERED_REFERENCE rows inside the
+   *  string inventory — they never expand scope (§31). Secret
+   *  candidate rows carry fingerprints only (§30). */
+  private async persistBinaryPayload(
+    scan: { id: string; workspaceId: string },
+    processed: ProcessedResult,
+  ): Promise<{ findings: number }> {
+    const payload = processed.binary;
+    const inventoryCount = payload.sections.length + payload.functions.length + payload.imports.length
+      + payload.exports.length + payload.symbols.length + payload.dependencies.length + payload.hardening.length;
+    if (inventoryCount === 0) return { findings: 0 };
+    const ctx = await this.binaryArtifactForScan(scan.id);
+    if (!ctx) return { findings: 0 };
+    const { artifact } = ctx;
+    const ws = scan.workspaceId;
+    for (const s of payload.sections) {
+      const data = {
+        type: s.type, offset: s.offset !== undefined ? BigInt(Math.trunc(s.offset)) : undefined,
+        size: s.size !== undefined ? BigInt(Math.trunc(s.size)) : undefined,
+        virtualAddress: s.virtualAddress, permissions: s.permissions, entropy: s.entropy, source: s.source,
+      };
+      const existing = await prisma.binarySection.findFirst({ where: { artifactId: artifact.id, name: s.name } });
+      if (existing) await prisma.binarySection.update({ where: { id: existing.id }, data });
+      else await prisma.binarySection.create({ data: { artifactId: artifact.id, workspaceId: ws, name: s.name, ...data } });
+    }
+    if (payload.hardening.length > 0) {
+      const existingProfile = await prisma.binaryHardeningProfile.findUnique({ where: { artifactId: artifact.id } });
+      const merged = new Map<string, unknown>();
+      for (const h of ((existingProfile?.profile as unknown[]) ?? [])) {
+        const rec = h as { name?: string };
+        if (rec.name) merged.set(rec.name, h);
+      }
+      for (const h of payload.hardening) {
+        const prev = merged.get(h.name) as { status?: string } | undefined;
+        // A concrete status from any tool beats UNKNOWN (§16).
+        if (!prev || prev.status === "UNKNOWN" || h.status !== "UNKNOWN") merged.set(h.name, h);
+      }
+      const profile = [...merged.values()] as never;
+      if (existingProfile) await prisma.binaryHardeningProfile.update({ where: { artifactId: artifact.id }, data: { profile, assessedAt: new Date() } });
+      else await prisma.binaryHardeningProfile.create({ data: { artifactId: artifact.id, workspaceId: ws, profile } });
+    }
+    for (const fn of payload.functions) {
+      const existing = await prisma.binaryFunction.findFirst({ where: { artifactId: artifact.id, name: fn.name, address: fn.address ?? null } });
+      const data = {
+        size: fn.size, callingConvention: fn.callingConvention, fingerprint: fn.fingerprint,
+        referencesRiskyApi: fn.referencesRiskyApi ?? [], confidence: fn.confidence, source: fn.source,
+      };
+      if (existing) await prisma.binaryFunction.update({ where: { id: existing.id }, data });
+      else await prisma.binaryFunction.create({ data: { artifactId: artifact.id, workspaceId: ws, name: fn.name, address: fn.address, ...data } });
+    }
+    for (const imp of payload.imports) {
+      const existing = await prisma.binaryImport.findFirst({ where: { artifactId: artifact.id, library: imp.library, symbol: imp.symbol } });
+      if (!existing) await prisma.binaryImport.create({ data: { artifactId: artifact.id, workspaceId: ws, library: imp.library, symbol: imp.symbol, address: imp.address, source: imp.source } });
+    }
+    for (const exp of payload.exports) {
+      const existing = await prisma.binaryExport.findFirst({ where: { artifactId: artifact.id, symbol: exp.symbol } });
+      if (!existing) await prisma.binaryExport.create({ data: { artifactId: artifact.id, workspaceId: ws, symbol: exp.symbol, address: exp.address, type: exp.type, source: exp.source } });
+    }
+    for (const sym of payload.symbols) {
+      const existing = await prisma.binarySymbol.findFirst({ where: { artifactId: artifact.id, name: sym.name } });
+      if (!existing) await prisma.binarySymbol.create({ data: { artifactId: artifact.id, workspaceId: ws, name: sym.name, type: sym.type, binding: sym.binding, address: sym.address, source: sym.source } });
+    }
+    for (const str of payload.strings) {
+      const existing = await prisma.binaryString.findFirst({ where: { artifactId: artifact.id, value: str.value, category: str.category, secretFingerprint: str.secretFingerprint ?? null } });
+      if (!existing) {
+        await prisma.binaryString.create({
+          data: {
+            artifactId: artifact.id, workspaceId: ws, value: str.value, encoding: str.encoding,
+            category: str.category, location: str.location, secretFingerprint: str.secretFingerprint,
+            secretType: str.secretType, redactedPreview: str.redactedPreview, source: str.source,
+          },
+        });
+      }
+    }
+    for (const dep of payload.dependencies) {
+      const existing = await prisma.binaryDependency.findFirst({ where: { artifactId: artifact.id, library: dep.library } });
+      const data = {
+        version: dep.version, path: dep.path, platform: dep.platform, purl: dep.purl, cpe: dep.cpe,
+        sourceKind: dep.sourceKind, confidence: dep.confidence, source: dep.source,
+      };
+      if (existing) await prisma.binaryDependency.update({ where: { id: existing.id }, data });
+      else await prisma.binaryDependency.create({ data: { artifactId: artifact.id, workspaceId: ws, library: dep.library, ...data } });
+    }
+    for (const c of payload.cryptoReferences) {
+      const existing = await prisma.binaryCryptoReference.findFirst({ where: { artifactId: artifact.id, kind: c.kind, name: c.name } });
+      if (!existing) await prisma.binaryCryptoReference.create({ data: { artifactId: artifact.id, workspaceId: ws, kind: c.kind, name: c.name, source: c.source } });
+    }
+    // Components + SBOM bound to the artifact (§26/§27).
+    for (const c of processed.components) {
+      await prisma.softwareComponent.upsert({
+        where: { binaryArtifactId_purl: { binaryArtifactId: artifact.id, purl: c.purl } },
+        create: {
+          binaryArtifactId: artifact.id,
+          name: c.name, version: c.version, ecosystem: c.ecosystem, purl: c.purl,
+          sourceManifest: c.sourceManifest, scope: c.scope as never,
+          dependencyScope: c.dependencyScope as never, licenses: c.licenses ?? [],
+        },
+        update: { version: c.version, licenses: c.licenses ?? [] },
+      });
+    }
+    if (processed.components.length > 0) {
+      const cyclonedx = buildCycloneDxSbom(processed.components, {
+        snapshotHash: artifact.sha256, repositoryName: artifact.name, timestamp: new Date().toISOString(),
+      });
+      const spdx = buildSpdxSbom(processed.components, {
+        snapshotHash: artifact.sha256, repositoryName: artifact.name, timestamp: new Date().toISOString(),
+      });
+      for (const doc of [cyclonedx.sbom, spdx.sbom]) {
+        const existing = await prisma.softwareBillOfMaterials.findFirst({ where: { binaryArtifactId: artifact.id, format: doc.format as never } });
+        if (!existing) {
+          await prisma.softwareBillOfMaterials.create({
+            data: {
+              binaryArtifactId: artifact.id, scanId: scan.id, format: doc.format as never,
+              specVersion: doc.specVersion, checksum: doc.checksum,
+              artifactRef: `sbom://binary-artifact/${artifact.id}/${doc.checksum}`,
+              componentCount: doc.componentCount,
+            },
+          });
+        }
+      }
+    }
+    // Dependency → CVE correlation vs the LOCAL dataset (§27/§49).
+    let intelFindings = 0;
+    if (processed.components.length > 0) {
+      const names = [...new Set(processed.components.map((c) => c.name.toLowerCase()))];
+      const cpes = await prisma.cpeRecord.findMany({
+        where: { OR: names.map((n) => ({ canonical: { contains: `:${n}:` } })) },
+        take: 500,
+      }).catch(() => []);
+      if (cpes.length > 0) {
+        const cveIds = [...new Set(cpes.flatMap((c) => c.cveIds))];
+        const [cves, epssRows, kevRows] = await Promise.all([
+          prisma.cveRecord.findMany({ where: { cveId: { in: cveIds } } }),
+          prisma.epssRecord.findMany({ where: { cveId: { in: cveIds } }, orderBy: { date: "desc" } }),
+          prisma.kevRecord.findMany({ where: { cveId: { in: cveIds } } }),
+        ]);
+        const dataset = new InMemoryIntelligenceDataset();
+        for (const c of cves) {
+          const record: Parameters<InMemoryIntelligenceDataset["upsertCve"]>[0] = {
+            cveId: c.cveId, description: c.description, cweIds: c.cweIds,
+            references: (c.references as { label: string; url: string }[] | null) ?? [], source: c.source,
+          };
+          if (c.cvssScore != null) {
+            record.cvss = { version: (c.cvssVersion ?? "3.1") as CvssRecord["version"], baseScore: c.cvssScore, ...(c.cvssVector ? { vector: c.cvssVector } : {}), source: c.source } as typeof record.cvss;
+          }
+          dataset.upsertCve(record);
+        }
+        const seenEpss = new Set<string>();
+        for (const e of epssRows) {
+          if (seenEpss.has(e.cveId)) continue;
+          seenEpss.add(e.cveId);
+          dataset.upsertEpss({ cveId: e.cveId, score: e.score, percentile: e.percentile, date: e.date.toISOString().slice(0, 10), source: e.source });
+        }
+        for (const k of kevRows) dataset.upsertKev({ cveId: k.cveId, source: k.source, ...(k.vendorProject ? { vendorProject: k.vendorProject } : {}), ...(k.product ? { product: k.product } : {}), ...(k.dateAdded ? { dateAdded: k.dateAdded.toISOString().slice(0, 10) } : {}) });
+        for (const cpe of cpes) dataset.upsertCpe({ canonical: cpe.canonical, part: cpe.part, vendor: cpe.vendor, product: cpe.product, ...(cpe.version ? { version: cpe.version } : {}), cveIds: cpe.cveIds, source: cpe.source });
+        const matches = matchComponentsAgainstIntel(processed.components, dataset);
+        const enriched = enrichDependencyFindings(matches, dataset);
+        for (const m of enriched) {
+          const existingFinding = await prisma.finding.findFirst({ where: { scanId: scan.id, fingerprint: m.sourceFingerprint } });
+          if (existingFinding) continue;
+          await prisma.finding.create({
+            data: {
+              workspaceId: ws, scanId: scan.id,
+              title: m.title, description: m.description,
+              severity: m.severity as never, confidence: m.confidence,
+              fingerprint: m.sourceFingerprint, isMock: false,
+              status: "OPEN", verificationStatus: "UNVERIFIED",
+              sources: [m.sourceTool], vulnClass: "DEPENDENCY_VULNERABILITY",
+              cve: m.cve, cwe: m.cwe, cvssScore: m.cvssScore, cvssVector: m.cvssVector,
+              componentPurl: m.componentPurl, dependencyScope: m.dependencyScope,
+              reachability: "POTENTIAL_EXPOSURE",
+              binaryArtifactId: artifact.id, binaryArtifactHash: artifact.sha256,
+              binaryFindingType: "BINARY_DEPENDENCY_VULNERABILITY",
+              binaryComponent: m.componentPurl,
+              binaryReachability: "UNKNOWN", staticConfidence: "MEDIUM",
+              binaryFingerprint: binaryFindingFingerprint({
+                lineage: `${artifact.format}:${artifact.architecture ?? "unknown"}:${artifact.name}`,
+                component: m.componentPurl ?? "dependency", ruleId: "BINARY_DEPENDENCY_VULNERABILITY",
+                ...(m.cwe ? { cwe: m.cwe } : {}), findingClass: "BINARY_DEPENDENCY_VULNERABILITY",
+                location: m.componentPurl ?? "dependency",
+              }),
+              evidence: { create: { sourceTool: m.sourceTool, evidenceType: "TEXT", summary: m.evidence } },
+              references: { create: m.references.map((url) => ({ type: "OTHER", label: url, url })) },
+              history: { create: { workspaceId: ws, event: "CREATED", metadata: { sourceTool: m.sourceTool, origin: "INTEL_MATCH" } as never } },
+            },
+          });
+          intelFindings++;
+        }
+      }
+    }
+    await prisma.binaryArtifact.update({
+      where: { id: artifact.id },
+      data: {
+        status: "ANALYZED",
+        ...(artifact.format === "UNKNOWN" && payload.format !== "UNKNOWN" ? { format: payload.format } : {}),
+        ...(payload.architecture && !artifact.architecture ? { architecture: payload.architecture } : {}),
+      },
+    }).catch(() => undefined);
+    return { findings: intelFindings };
+  }
+
   /** Prompt 17 mobile payload persistence (§20–§52): build inventory
    *  (deep links, components, endpoints, native libraries) upserts by
    *  identity key; build components + SBOM records (§42–§45); platform
@@ -2374,6 +2648,172 @@ export class PrismaWorkerStore implements ScanRunStore {
     return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
   }
 
+  /** BINARY_ARTIFACT_INTAKE (§3/§6): the scan's registered artifact
+   *  is the intake verdict — identity + format recorded at
+   *  registration. No artifact ⇒ NOT_CONFIGURED (the runner fails the
+   *  scan honestly). */
+  async validateBinaryArtifact(scanId: string): Promise<{ artifactHash: string; format: string } | null> {
+    const ctx = await this.binaryArtifactForScan(scanId);
+    if (!ctx) return null;
+    return { artifactHash: ctx.artifact.sha256, format: ctx.artifact.format };
+  }
+
+  /** BINARY_METADATA_EXTRACTION (§12–§50): run the platform static
+   *  analysis over the artifact's registered header segment — header
+   *  parsing, hardening, string inventory, secret candidates, crypto
+   *  inventory, dependency inventory — and persist through the
+   *  ordinary result path. PURE PARSING: the segment is data; nothing
+   *  is executed, loaded or mapped as code (§8/§100). */
+  async extractBinaryMetadata(scanId: string): Promise<{ sections: number; functions: number; dependencies: number; secrets: number; componentsScanned: number } | null> {
+    const ctx = await this.binaryArtifactForScan(scanId);
+    if (!ctx) return null;
+    const { artifact } = ctx;
+    const artifacts = (artifact.analysisArtifacts ?? {}) as Record<string, unknown>;
+    const segmentB64 = typeof artifacts.headerSegmentBase64 === "string" ? artifacts.headerSegmentBase64 : undefined;
+    if (!segmentB64) return null;
+    const segment = Buffer.from(segmentB64, "base64");
+    if (segment.length === 0 || segment.length > 1024 * 1024) return null;
+    const report = parseBinaryHeaders(segment);
+    const sectionOf = (offset: number) => report.sections.find((s) => offset >= s.offset && offset < s.offset + s.size)?.name;
+    const strings = extractBinaryStrings(segment, { source: "binary-platform-analysis", sectionOf });
+    const analysis = analyzeBinaryPlatform({
+      artifactName: artifact.name, sha256: artifact.sha256,
+      ...(artifact.sha1 ? { sha1: artifact.sha1 } : {}),
+      sizeBytes: Number(artifact.sizeBytes),
+      report, strings, environment: artifact.environment,
+    });
+    const processedExtracted = processNormalizedResult({
+      assets: [], services: [], endpoints: [], technologies: [], findings: analysis.findings,
+      artifacts: [], metrics: {}, mock: false,
+      components: analysis.components, binary: analysis.data,
+    }, { scopeRules: { includeHosts: [], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] }, toolExecutionId: "platform-binary-metadata", toolSlug: "binary-platform-analysis" });
+    await this.persistResult(scanId, "platform-binary-metadata", processedExtracted);
+    return {
+      sections: analysis.data.sections.length,
+      functions: analysis.data.functions.length,
+      dependencies: analysis.data.dependencies.length,
+      secrets: analysis.findings.filter((f) => f.binaryFindingType === "BINARY_SECRET").length,
+      componentsScanned: analysis.components.length,
+    };
+  }
+
+  /** DEPENDENCY_INVENTORY for binary profiles (§25–§27): the
+   *  persisted dependency inventory of the scan's artifact. */
+  async inventoryBinaryDependencies(scanId: string): Promise<{ components: number } | null> {
+    const ctx = await this.binaryArtifactForScan(scanId);
+    if (!ctx) return null;
+    const deps = await prisma.binaryDependency.count({ where: { artifactId: ctx.artifact.id } });
+    if (deps === 0) return null;
+    const components = await prisma.softwareComponent.count({ where: { binaryArtifactId: ctx.artifact.id } });
+    return { components };
+  }
+
+  /** SBOM_GENERATION for binary profiles (§27): the artifact's SBOM
+   *  was generated at payload persistence; this hook reports it (and
+   *  generates from persisted components when a payload arrived
+   *  without one). */
+  async generateBinarySbom(scanId: string): Promise<{ format: string; checksum: string; components: number } | null> {
+    const ctx = await this.binaryArtifactForScan(scanId);
+    if (!ctx) return null;
+    const existing = await prisma.softwareBillOfMaterials.findFirst({
+      where: { binaryArtifactId: ctx.artifact.id, format: "CYCLONEDX_JSON" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) return { format: existing.format, checksum: existing.checksum, components: existing.componentCount };
+    const rows = await prisma.softwareComponent.findMany({ where: { binaryArtifactId: ctx.artifact.id } });
+    if (rows.length === 0) return null;
+    const components = rows.map((r) => ({
+      name: r.name, ...(r.version ? { version: r.version } : {}), ecosystem: r.ecosystem, purl: r.purl,
+      sourceManifest: r.sourceManifest, scope: r.scope as never, dependencyScope: r.dependencyScope as never,
+      licenses: r.licenses, ...(r.supplier ? { supplier: r.supplier } : {}),
+    }));
+    const doc = buildCycloneDxSbom(components, {
+      snapshotHash: ctx.artifact.sha256, repositoryName: ctx.artifact.name, timestamp: new Date().toISOString(),
+    }).sbom;
+    await prisma.softwareBillOfMaterials.create({
+      data: {
+        binaryArtifactId: ctx.artifact.id, scanId, format: doc.format as never,
+        specVersion: doc.specVersion, checksum: doc.checksum,
+        artifactRef: `sbom://binary-artifact/${ctx.artifact.id}/${doc.checksum}`,
+        componentCount: doc.componentCount,
+      },
+    });
+    return { format: doc.format, checksum: doc.checksum, components: doc.componentCount };
+  }
+
+  /** BINARY_DEBUG_SESSION (§64–§74): evaluate the governed session
+   *  for the scan's artifact. No session ⇒ null (the runner records
+   *  the stage as skipped/NOT_CONFIGURED). An eligible session
+   *  without a provisioned lab transport reports NOT_PROVISIONED —
+   *  in this build no debugger transport exists, so no session ever
+   *  fabricates a run (§72). A kill switch terminates eligibility. */
+  async evaluateBinaryDebugSession(scanId: string): Promise<{ status: string; reason?: string } | null> {
+    const ctx = await this.binaryArtifactForScan(scanId);
+    if (!ctx) return null;
+    const session = await prisma.binaryDebugSession.findFirst({
+      where: { workspaceId: ctx.graph.workspaceId, artifactId: ctx.artifact.id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!session) return null;
+    if (session.status === "BLOCKED") return { status: "BLOCKED", reason: "session blocked by policy" };
+    const switches = this.activeKillSwitches
+      ? await this.activeKillSwitches({ organizationId: ctx.graph.workspace.organizationId, workspaceId: ctx.graph.workspaceId, scanId, targetId: ctx.graph.assessment.targetId, sessionId: session.id }).catch(() => [])
+      : [];
+    const decision = evaluateBinaryDebugPolicy({
+      environment: ctx.artifact.environment,
+      artifactAuthorized: true,
+      targetVerified: ctx.graph.assessment.target.verified,
+      requestedBy: session.requestedBy,
+      ...(session.approvedBy ? { approvedBy: session.approvedBy } : {}),
+      // Eligibility is a POLICY question; transport provisioning is
+      // resolved separately below — no BINARY_DYNAMIC_LAB transport
+      // is provisioned in this build, so an ELIGIBLE session reports
+      // NOT_PROVISIONED (§72).
+      workerCapabilityPresent: true,
+      killSwitchActive: switches.length > 0,
+      operations: (session.operations as { operation: string }[]) ?? [],
+    });
+    if (decision.decision === "BLOCKED") {
+      await prisma.binaryDebugSession.update({ where: { id: session.id }, data: { status: "BLOCKED", policyDecision: decision as never } }).catch(() => undefined);
+      return { status: "BLOCKED", reason: decision.reasons[0] ?? "policy" };
+    }
+    if (decision.decision === "PENDING_APPROVAL") return { status: "PENDING_APPROVAL", reason: decision.reasons[0] ?? "approval" };
+    await prisma.binaryDebugSession.update({ where: { id: session.id }, data: { status: "NOT_PROVISIONED", policyDecision: decision as never } }).catch(() => undefined);
+    return { status: "NOT_PROVISIONED", reason: "eligible session, but no BINARY_DYNAMIC_LAB debugger transport is provisioned in this build (§72)" };
+  }
+
+  /** QUALITY_GATE — binary gate (§63): fails on any Critical binary
+   *  finding, any embedded-secret finding, or any KEV-listed
+   *  dependency finding. */
+  async evaluateBinaryQualityGate(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const ctx = await this.binaryArtifactForScan(scanId);
+    if (!ctx) return null;
+    const rows = await prisma.finding.findMany({ where: { scanId, duplicateOfId: null } });
+    if (rows.length === 0) return null;
+    const failed: string[] = [];
+    const warnings: string[] = [];
+    if (rows.some((r) => r.binaryArtifactId === ctx.artifact.id && r.severity === "CRITICAL")) failed.push("NO_CRITICAL_BINARY_FINDINGS");
+    if (rows.some((r) => r.binaryFindingType === "BINARY_SECRET")) failed.push("NO_EMBEDDED_SECRETS");
+    if (rows.some((r) => r.binaryFindingType === "BINARY_DEPENDENCY_VULNERABILITY" && r.kevListed)) failed.push("NO_KEV_DEPENDENCIES");
+    if (rows.some((r) => r.binaryFindingType === "BINARY_HARDENING_FINDING" && r.severity === "HIGH")) warnings.push("HARDENING_GAPS_REVIEWED");
+    const status = failed.length > 0 ? "FAILED" : warnings.length > 0 ? "PASSED_WITH_WARNINGS" : "PASSED";
+    await prisma.qualityGateResult.create({
+      data: {
+        scanId, policyVersion: "binary-gate-v1", status: status as never,
+        summary: { failedRules: failed, warningRules: warnings } as never,
+        failedRules: failed as never, warningRules: warnings as never,
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: ctx.graph.requestedBy, organizationId: ctx.graph.workspace.organizationId, workspaceId: ctx.graph.workspaceId,
+        action: "BINARY_STATIC_SCAN_COMPLETED" as never, resourceType: "BINARY_ARTIFACT", resourceId: ctx.artifact.id,
+        metadata: { scanId, gateStatus: status } as never,
+      },
+    }).catch(() => undefined);
+    return { status, failedRules: failed.length, warningRules: warnings.length };
+  }
+
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
   async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
     const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
@@ -2750,6 +3190,56 @@ export class PrismaWorkerStore implements ScanRunStore {
         canonicalFingerprint: finding.crossBuildFingerprint, stageId: mobilePlan.stageType,
       };
     }
+    // Prompt 18: binary findings retest ARTIFACT-OVER-ARTIFACT — the
+    // child scan runs the targeted static check in its original
+    // stage family against the target's CURRENT artifact (the fixed
+    // build), and judgement compares the §57 binary fingerprint,
+    // which deliberately excludes the artifact hash. A failed stage
+    // is never a pass (§58 discipline).
+    if (finding.binaryArtifactId && finding.binaryFingerprint) {
+      const binaryPlan = planBinaryRetest({
+        ...(finding.ruleId ? { ruleId: finding.ruleId } : {}),
+        sourceTool: retest.sourceTool,
+        ...(finding.binaryFindingType ? { binaryFindingType: finding.binaryFindingType } : {}),
+      });
+      const scopeParseBinary = scopeRulesSchema.safeParse(graph.assessment.scope?.rules ?? {});
+      const childBinary = await prisma.scan.create({
+        data: { workspaceId: finding.workspaceId, assessmentId: graph.assessmentId, requestedBy: retest.requestedBy, status: "QUEUED" },
+      });
+      const stagePlanBinary = {
+        id: binaryPlan.stageType, type: binaryPlan.stageType, name: "Targeted Binary Retest",
+        description: "Prompt 18 targeted binary retest: re-run the original static check against the NEW artifact only. The artifact is parsed, never executed.",
+        requiredCapabilities: [], dependencies: [] as string[],
+        selectedAdapters: [{ slug: binaryPlan.adapterSlug, adapterId: binaryPlan.adapterSlug, name: binaryPlan.adapterSlug, riskLevel: "LOW", preference: "REQUIRED", simulation: false, reason: binaryPlan.reason }],
+        weight: 100, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: false, status: "QUEUED",
+      };
+      await prisma.scanPlan.create({
+        data: {
+          scanId: childBinary.id, assessmentId: graph.assessmentId, profile: "CUSTOM",
+          plan: {
+            scanId: childBinary.id, assessmentId: graph.assessmentId, targetId: graph.assessment.targetId,
+            workspaceId: finding.workspaceId, organizationId: graph.workspace.organizationId,
+            profile: "CUSTOM", targetType: graph.assessment.target.type, targetValue: graph.assessment.target.value,
+            targetHost: graph.assessment.target.value, scope: scopeParseBinary.success ? scopeParseBinary.data : {},
+            stages: [stagePlanBinary], dependencies: {}, selectedTools: [binaryPlan.adapterSlug],
+            policySnapshot: { targetVerified: graph.assessment.target.verified, assessmentApproved: graph.assessment.status === "APPROVED", executableSlugs: [binaryPlan.adapterSlug], simulation: false },
+          } as never,
+          policySnapshot: { retest: true, retestId, binaryRetest: true } as never,
+        },
+      });
+      await prisma.scanStage.create({
+        data: { scanId: childBinary.id, type: binaryPlan.stageType as never, status: "QUEUED", dependencies: [], weight: 100, metadata: { retestId } as never },
+      });
+      const execution = await this.ensureExecution(childBinary.id, binaryPlan.stageType, binaryPlan.adapterSlug, 1);
+      await prisma.retestRequest.update({
+        where: { id: retestId },
+        data: { status: "RUNNING", scanId: childBinary.id, startedAt: new Date() },
+      });
+      return {
+        executionId: execution.id, scanId: childBinary.id,
+        canonicalFingerprint: finding.binaryFingerprint, stageId: binaryPlan.stageType,
+      };
+    }
     // Prompt 13 §77: cloud-native findings retest in their original
     // stage kind; everything else keeps the Prompt 11 stage.
     const cloudRetest = finding.origin ? planCloudNativeRetest({ origin: finding.origin, sourceTool: retest.sourceTool, controlId: finding.controlId ?? undefined }) : null;
@@ -2794,10 +3284,12 @@ export class PrismaWorkerStore implements ScanRunStore {
 
   /** Canonical fingerprints the retest scan actually produced. */
   async retestScanFingerprints(scanId: string): Promise<string[]> {
-    const rows = await prisma.finding.findMany({ where: { scanId }, select: { fingerprint: true, crossBuildFingerprint: true } });
+    const rows = await prisma.finding.findMany({ where: { scanId }, select: { fingerprint: true, crossBuildFingerprint: true, binaryFingerprint: true } });
     // Prompt 17 §89/§51: mobile retests compare CROSS-BUILD keys —
     // both identities are offered; other families match on fingerprint.
-    return rows.flatMap((r) => [r.fingerprint, r.crossBuildFingerprint]).filter((x): x is string => !!x);
+    // Prompt 18: binary retests compare the §57 binary fingerprint
+    // (cross-artifact by construction) the same way.
+    return rows.flatMap((r) => [r.fingerprint, r.crossBuildFingerprint, r.binaryFingerprint]).filter((x): x is string => !!x);
   }
 
   /**
