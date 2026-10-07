@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { api, ApiError } from "@/lib/api-client";
 import { Badge, Card, EmptyState } from "@dsrclone/ui";
@@ -48,6 +49,18 @@ interface ReconSummary {
   outOfScopeEndpoints: number;
   bySource?: Record<string, number>;
   toolsRun?: { slug?: string; name?: string; status: string }[];
+}
+interface ScanFindingsSummary {
+  totalFindings: number;
+  uniqueFindings: number;
+  duplicatesMerged: number;
+  bySeverity: Record<string, number>;
+  confirmed: number;
+  likely: number;
+  unverified: number;
+  falsePositives: number;
+  acceptedRisks: number;
+  byTool: Record<string, { total: number; contributed: number }>;
 }
 interface WebSurfaceSummary {
   totalEndpoints: number;
@@ -110,6 +123,7 @@ export default function Page() {
   const [scan, setScan] = useState<ScanDetails | null>(null);
   const [recon, setRecon] = useState<ReconSummary | null>(null);
   const [surface, setSurface] = useState<WebSurfaceSummary | null>(null);
+  const [findingsSummary, setFindingsSummary] = useState<ScanFindingsSummary | null>(null);
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -125,6 +139,7 @@ export default function Page() {
       api.reconSummary(id).then((r) => setRecon(r as ReconSummary)).catch(() => undefined);
       // Web-surface summary is best-effort too (Prompt 6 §54).
       api.webSurface(id).then((r) => setSurface(r as WebSurfaceSummary)).catch(() => undefined);
+      api.scanFindingsSummary(id).then((r) => setFindingsSummary(r as ScanFindingsSummary)).catch(() => undefined);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load scan");
@@ -323,6 +338,38 @@ export default function Page() {
                   Discovery tools: {[...new Set(surface.contentDiscoveryToolsRun)].join(", ")}
                 </p>
               )}
+            </Card>
+          )}
+
+          {findingsSummary && findingsSummary.uniqueFindings > 0 && (
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-200">Findings</h3>
+              <p className="mt-1 text-xs text-slate-500">Safe vulnerability detection + TLS assessment for this scan (Prompt 7) — canonical findings after correlation; duplicates merged, never deleted.</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  ["Unique findings", findingsSummary.uniqueFindings],
+                  ["Duplicates merged", findingsSummary.duplicatesMerged],
+                  ["Critical", findingsSummary.bySeverity.CRITICAL ?? 0],
+                  ["High", findingsSummary.bySeverity.HIGH ?? 0],
+                  ["Medium", findingsSummary.bySeverity.MEDIUM ?? 0],
+                  ["Low", findingsSummary.bySeverity.LOW ?? 0],
+                  ["Likely (corroborated)", findingsSummary.likely],
+                  ["Unverified", findingsSummary.unverified],
+                  ["False positives", findingsSummary.falsePositives],
+                  ["Accepted risks", findingsSummary.acceptedRisks],
+                ].map(([label, value]) => (
+                  <div key={label as string}>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl text-slate-100">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {findingsSummary.byTool && Object.keys(findingsSummary.byTool).length > 0 && (
+                <p className="mt-3 text-xs text-slate-400">
+                  Tool contribution: {Object.entries(findingsSummary.byTool).map(([tool, s]) => `${tool} (${s.contributed} canonical of ${s.total} reports)`).join(", ")}
+                </p>
+              )}
+              <p className="mt-2 text-xs"><Link href={`/findings?scanId=${id}`} className="text-sky-300 hover:underline">Open this scan&rsquo;s findings →</Link></p>
             </Card>
           )}
 

@@ -1,9 +1,10 @@
 import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
+import { computeRisk } from "@dsrclone/security-sdk";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
-import type { ProcessedResult } from "../executors/result-processor";
+import { correlateProcessedFindings, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
 
 /**
  * Prisma implementation of the worker stores. Workers load ALL trusted state
@@ -91,7 +92,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  in-scope asset hostnames and endpoint URLs discovered so far. Capped so
    *  a huge inventory can't blow up an adapter invocation; out-of-scope
    *  assets are NEVER handed to downstream tools. */
-  private async loadStageInputs(targetId: string): Promise<{ hosts: string[]; urls: string[]; technologies: string[] }> {
+  private async loadStageInputs(targetId: string): Promise<{ hosts: string[]; urls: string[]; technologies: string[]; services: string[] }> {
     const assets = await prisma.asset.findMany({
       where: { targetId, scopeStatus: "IN_SCOPE" },
       select: { id: true, host: true },
@@ -112,7 +113,19 @@ export class PrismaWorkerStore implements ScanRunStore {
       distinct: ["name"],
       take: 200,
     });
-    return { hosts: assets.map((a) => a.host), urls: endpoints.map((e) => e.url), technologies: technologies.map((t) => t.name) };
+    // TLS services for the Prompt 7 TLS stage (§13): only services that
+    // look like TLS endpoints (https scheme/name or TLS ports) on in-scope
+    // assets — host:port pairs, capped like the rest of the inputs.
+    const tlsServices = assets.length === 0 ? [] : await prisma.service.findMany({
+      where: {
+        assetId: { in: assets.map((a) => a.id) },
+        OR: [{ name: { in: ["https", "ssl", "tls"] } }, { port: { in: [443, 8443] } }],
+      },
+      include: { asset: { select: { host: true } } },
+      take: 200,
+    });
+    const services = [...new Set(tlsServices.map((s) => `${s.asset.host}:${s.port}`))];
+    return { hosts: assets.map((a) => a.host), urls: endpoints.map((e) => e.url), technologies: technologies.map((t) => t.name), services };
   }
 
   async updateExecution(id: string, patch: Record<string, unknown>): Promise<void> {
@@ -253,18 +266,127 @@ export class PrismaWorkerStore implements ScanRunStore {
     }
     let findings = 0;
     for (const f of processed.findings) {
-      await prisma.finding.create({
+      // Prompt 7 §16/§17/§29: the full normalized record persists — CVE /
+      // CWE / CVSS only when present on the processed finding (sourced by
+      // the tool output or the curated taxonomy upstream, never invented
+      // here). Every source gets its own evidence row; references are
+      // validated upstream by sanitizeReferenceUrl (§54).
+      const created = await prisma.finding.create({
         data: {
           workspaceId: scan.workspaceId, scanId, assetId: f.host ? assetIdByHost.get(f.host) : undefined,
           title: f.title, description: f.description, severity: f.severity as never, confidence: f.confidence,
           host: f.host, endpoint: f.endpoint, fingerprint: f.fingerprint, isMock: f.isMock,
           toolExecutionId: executionId, status: "OPEN", verificationStatus: "UNVERIFIED",
-          evidence: { create: { sourceTool: f.sourceTool, evidenceType: "TEXT", summary: f.evidenceSummary, fingerprint: f.fingerprint } },
+          vulnClass: f.vulnClass, sources: f.sources,
+          cve: f.cve, cwe: f.cwe, owaspCategory: f.owaspCategory,
+          cvssScore: f.cvssScore, cvssVector: f.cvssVector,
+          port: f.port, protocol: f.protocol, parameter: f.parameter,
+          technicalImpact: f.technicalImpact, businessImpact: f.businessImpact, remediation: f.remediation,
+          evidence: {
+            create: f.evidenceRows.map((e) => ({
+              sourceTool: e.sourceTool, evidenceType: "TEXT", summary: e.summary,
+              fingerprint: e.fingerprint, matchedAt: e.matchedAt,
+              metadata: (e.metadata ?? undefined) as never,
+            })),
+          },
+          references: { create: f.references.map((r) => ({ type: r.type, label: r.label, url: r.url })) },
+          history: { create: { workspaceId: scan.workspaceId, event: "CREATED", metadata: { sourceTool: f.sourceTool } as never } },
         },
       });
+      void created;
       findings++;
     }
     return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms };
+  }
+
+  /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
+  async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
+    const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
+    if (rows.length === 0) return null;
+    const bySeverity: Record<string, number> = {};
+    for (const r of rows) bySeverity[r.severity] = (bySeverity[r.severity] ?? 0) + 1;
+    return { totalFindings: rows.length, bySeverity };
+  }
+
+  /** CORRELATION stage hook (§18–§22): canonicalize the scan's findings.
+   *  Duplicates are marked duplicateOfId=canonical and their evidence rows
+   *  are re-homed to the canonical finding — evidence is NEVER deleted
+   *  (§20). Canonical rows absorb merged sources/confidence/risk. */
+  async correlateScanFindings(scanId: string): Promise<{ canonical: number; duplicates: number; stats: Record<string, unknown> } | null> {
+    const rows = await prisma.finding.findMany({
+      where: { scanId },
+      include: { evidence: true, references: true, asset: { select: { criticality: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (rows.length === 0) return null;
+    const processed: ProcessedFinding[] = rows.map((r) => ({
+      title: r.title, description: r.description, severity: r.severity, confidence: r.confidence,
+      host: r.host ?? undefined, endpoint: r.endpoint ?? undefined, fingerprint: r.fingerprint ?? r.id,
+      isMock: r.isMock, sourceTool: r.evidence[0]?.sourceTool ?? "unknown", toolExecutionId: r.toolExecutionId ?? "",
+      evidenceSummary: r.evidence[0]?.summary ?? "",
+      vulnClass: r.vulnClass ?? undefined, sources: r.sources,
+      evidenceRows: r.evidence.map((e) => ({ sourceTool: e.sourceTool, summary: e.summary ?? "", fingerprint: e.fingerprint ?? undefined, matchedAt: e.matchedAt ?? undefined })),
+      references: r.references.map((x) => ({ type: x.type, label: x.label, url: x.url })),
+      cve: r.cve ?? undefined, cwe: r.cwe ?? undefined, owaspCategory: r.owaspCategory ?? undefined,
+      cvssScore: r.cvssScore ?? undefined, cvssVector: r.cvssVector ?? undefined,
+      port: r.port ?? undefined, protocol: r.protocol ?? undefined, parameter: r.parameter ?? undefined,
+      technicalImpact: r.technicalImpact ?? undefined, businessImpact: r.businessImpact ?? undefined,
+      remediation: r.remediation ?? undefined,
+    }));
+    const criticality = rows.find((r) => r.asset)?.asset?.criticality ?? "UNSPECIFIED";
+    const { findings: canonical, stats } = correlateProcessedFindings(processed, { assetCriticality: criticality, maxFindings: 1000 });
+    // Each canonical finding's evidence rows carry the SOURCE fingerprints
+    // of its member rows (correlateProcessedFindings preserves them), so
+    // members map back to persisted rows deterministically.
+    const rowByFingerprint = new Map(rows.map((r) => [r.fingerprint ?? r.id, r]));
+    let duplicates = 0;
+    for (const c of canonical) {
+      const memberFingerprints = c.evidenceRows.map((e) => e.fingerprint).filter((x): x is string => !!x);
+      const memberRows = memberFingerprints.map((fp) => rowByFingerprint.get(fp)).filter((r): r is NonNullable<typeof r> => !!r);
+      const primaryRow = memberRows[0];
+      if (!primaryRow) continue;
+      await prisma.finding.update({
+        where: { id: primaryRow.id },
+        data: {
+          fingerprint: c.fingerprint, sources: c.sources, confidence: c.confidence,
+          confidenceBand: c.confidenceBand, verificationStatus: (c.verificationStatus ?? "UNVERIFIED") as never,
+          riskScore: c.riskScore, riskBand: c.riskBand, riskExplanation: (c.riskExplanation ?? undefined) as never,
+          severity: c.severity as never,
+          cve: c.cve ?? primaryRow.cve,
+          cwe: c.cwe ?? primaryRow.cwe,
+          cvssScore: c.cvssScore ?? primaryRow.cvssScore, remediation: c.remediation ?? primaryRow.remediation,
+        },
+      });
+      // Re-home duplicate evidence + mark duplicates (§20: never delete).
+      for (const member of memberRows.slice(1)) {
+        await prisma.findingEvidence.updateMany({ where: { findingId: member.id }, data: { findingId: primaryRow.id } });
+        await prisma.finding.update({ where: { id: member.id }, data: { duplicateOfId: primaryRow.id } });
+        await prisma.findingHistory.create({ data: { findingId: member.id, workspaceId: member.workspaceId, event: "CORRELATED", metadata: { canonicalFindingId: primaryRow.id } as never } });
+        duplicates++;
+      }
+      if (c.sources.length > 1) {
+        await prisma.findingHistory.create({ data: { findingId: primaryRow.id, workspaceId: primaryRow.workspaceId, event: "CORRELATED", metadata: { sources: c.sources } as never } });
+      }
+    }
+    return { canonical: canonical.length, duplicates, stats: stats as unknown as Record<string, unknown> };
+  }
+
+  /** RISK stage hook (§34/§35): recompute risk for canonical findings
+   *  (duplicates keep pointing at their canonical row). */
+  async recalculateFindingRisk(scanId: string): Promise<{ updated: number } | null> {
+    const rows = await prisma.finding.findMany({ where: { scanId, duplicateOfId: null }, include: { asset: { select: { criticality: true } } } });
+    if (rows.length === 0) return null;
+    let updated = 0;
+    for (const r of rows) {
+      const risk = computeRisk({
+        severity: r.severity as never, cvssScore: r.cvssScore ?? undefined, confidence: r.confidence,
+        assetCriticality: (r.asset?.criticality ?? "UNSPECIFIED") as never,
+        verificationStatus: r.verificationStatus as never,
+      });
+      await prisma.finding.update({ where: { id: r.id }, data: { riskScore: risk.score, riskBand: risk.band, riskExplanation: risk.explanation as never } });
+      updated++;
+    }
+    return { updated };
   }
 
   async recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void> {

@@ -18,6 +18,10 @@ export interface PlannedStage {
   name: string;
   description: string;
   requiredCapabilities: string[];
+  /** Prompt 7 §14/§50: any-of capability groups + per-profile allowlist,
+   *  recorded on the plan so the executed selection is auditable. */
+  capabilityGroups?: string[][];
+  adapterAllowlist?: string[];
   dependencies: StageType[];
   selectedAdapters: SelectedAdapter[];
   weight: number;
@@ -104,6 +108,8 @@ export function buildScanPlan(input: BuildScanPlanInput): { plan: ScanPlan; dag:
       name: node.name,
       description: node.description,
       requiredCapabilities: [...node.requiredCapabilities],
+      ...(node.capabilityGroups ? { capabilityGroups: node.capabilityGroups.map((g) => [...g]) } : {}),
+      ...(node.adapterAllowlist ? { adapterAllowlist: [...node.adapterAllowlist] } : {}),
       dependencies: [...node.dependencies],
       selectedAdapters: selection.selected,
       weight: node.weight,

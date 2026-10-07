@@ -277,6 +277,15 @@ enum AuditAction {
   SCAN_COMPLETED
   POLICY_DENIED
   SCOPE_VIOLATION
+  // Prompt 7 §66: vulnerability-scan + finding lifecycle audit actions.
+  VULNERABILITY_SCAN_STARTED
+  VULNERABILITY_SCAN_COMPLETED
+  FINDING_CREATED
+  FINDING_CORRELATED
+  FINDING_REVIEWED
+  FINDING_CONFIRMED
+  FINDING_FALSE_POSITIVE
+  RISK_RECALCULATED
   REPORT_GENERATED
   CREDENTIAL_CREATED
   ROLE_CHANGED
@@ -420,6 +429,10 @@ model Asset {
   // Live HTTP status when httpx probed this host (Prompt 5 §32); metadata,
   // never a finding by itself.
   httpStatus         Int?
+  // Asset criticality for the risk engine (Prompt 7 §36): user/admin
+  // classified — CRITICAL | HIGH | MEDIUM | LOW | UNSPECIFIED. Never
+  // auto-raised just because a host is internet-facing.
+  criticality        String       @default("UNSPECIFIED")
   // Scan that most recently discovered/refresh this asset — powers the
   // per-scan recon summary (Prompt 5 §46) without inventing a join table.
   discoveredByScanId String?
@@ -729,6 +742,24 @@ model Finding {
   verificationStatus FindingVerificationStatus @default(UNVERIFIED)
   duplicateOfId      String?
   fingerprint        String?
+  // Prompt 7: curated vulnerability class + cross-tool correlation state.
+  vulnClass          String?
+  // Contributing tool slugs after correlation (§18/§21): one canonical
+  // finding, many sources; duplicates point at it via duplicateOfId and
+  // their evidence rows are re-homed here, never deleted (§20).
+  sources            String[]                  @default([])
+  // Deterministic risk engine output (§34/§35): 0–100 score, band and the
+  // explained inputs (JSON: base/confidence/criticality/exposure factors).
+  riskScore          Float?
+  riskBand           String?
+  riskExplanation    Json?
+  confidenceBand     String?
+  // Manual review workflow (§32/§33): who reviewed, when, and why. The
+  // original scanner evidence is never overwritten by a review.
+  reviewStatus       String?
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  reviewNotes        String?
   // Provenance (Prompt 4 §35): fixture findings are permanently flagged so
   // they can never be presented as real security results.
   isMock             Boolean                   @default(false)
@@ -741,13 +772,38 @@ model Finding {
   duplicates         Finding[]                 @relation("FindingDuplicates")
   evidence           FindingEvidence[]
   references         FindingReference[]
+  history            FindingHistory[]
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
 
   @@index([workspaceId])
   @@index([scanId])
+  @@index([assetId])
   @@index([severity])
+  @@index([status])
   @@index([fingerprint])
+  @@index([cve])
+  @@index([cwe])
+  @@index([verificationStatus])
+  @@index([createdAt])
+}
+
+// Immutable finding lifecycle events (Prompt 7 §37): created, severity
+// changed, reviewed, confirmed, false positive, accepted risk, resolved,
+// reopened — the audit trail retesting relies on. Rows are append-only.
+model FindingHistory {
+  id        String   @id @default(uuid())
+  findingId String
+  workspaceId String
+  event     String // CREATED | SEVERITY_CHANGED | REVIEWED | CONFIRMED | FALSE_POSITIVE | ACCEPTED_RISK | RESOLVED | REOPENED | CORRELATED | RISK_RECALCULATED
+  actorId   String?
+  notes     String?
+  metadata  Json?
+  finding   Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([findingId])
+  @@index([workspaceId])
 }
 
 model FindingEvidence {
@@ -760,6 +816,10 @@ model FindingEvidence {
   artifactLocation String?
   summary          String?
   fingerprint      String?
+  // Prompt 7 §29: where the tool matched + scanner metadata (check id,
+  // signature family, redacted request/response snippets, checksums).
+  matchedAt        String?
+  metadata         Json?
   finding          Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
 

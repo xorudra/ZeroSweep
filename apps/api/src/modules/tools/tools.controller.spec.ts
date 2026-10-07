@@ -55,13 +55,29 @@ describe("ToolsController", () => {
   it("health returns status metadata only", async () => {
     const { ctrl } = make();
     const h = await ctrl.health("nuclei");
-    expect(h).toMatchObject({ slug: "nuclei", healthStatus: "UNKNOWN" });
+    // Prompt 7: nuclei is now an IMPLEMENTED adapter, so live probe health
+    // wins over the stored catalog value — binary absent on this host means
+    // an honest UNAVAILABLE, never a faked HEALTHY (§49).
+    expect(h).toMatchObject({ slug: "nuclei", healthStatus: "UNAVAILABLE" });
+  });
+
+  it("template policy endpoint exposes the governed catalog, OWNER/ADMIN only (§4/§47)", () => {
+    const { ctrl } = make();
+    const policy = ctrl.templatePolicy();
+    expect(policy.snapshot.version).toBeTruthy();
+    const byId = Object.fromEntries(policy.templates.map((t) => [t.id, t.classification]));
+    expect(byId["http-missing-security-headers"]).toBe("SAFE");
+    expect(byId["sqli-error-based"]).toBe("INTRUSIVE");
+    expect(byId["default-login-check"]).toBe("DISABLED");
+    expect(policy.selectionRules.neverAutomated).toEqual(["INTRUSIVE", "DISABLED"]);
+    const roles = Reflect.getMetadata(ROLES_KEY, ToolsController.prototype.templatePolicy) as string[];
+    expect(roles).toEqual(["OWNER", "ADMIN"]);
   });
 
   it("has no execution endpoint and restricts PATCH to OWNER/ADMIN", () => {
     const proto = ToolsController.prototype as unknown as Record<string, unknown>;
     const methods = Object.getOwnPropertyNames(proto).filter((n) => n !== "constructor");
-    expect(methods.sort()).toEqual(["capabilities", "categories", "get", "health", "list", "update"]);
+    expect(methods.sort()).toEqual(["capabilities", "categories", "get", "health", "list", "templatePolicy", "update"]);
     expect(methods.some((m) => /exec|run|command|scan/i.test(m))).toBe(false);
     const roles = Reflect.getMetadata(ROLES_KEY, ToolsController.prototype.update) as string[];
     expect(roles).toEqual(["OWNER", "ADMIN"]);

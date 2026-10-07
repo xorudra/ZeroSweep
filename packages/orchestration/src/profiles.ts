@@ -37,6 +37,15 @@ export interface StageDefinition {
    *  (Prompt 6 §48: WEB_BASELINE content discovery uses a SMALL wordlist
    *  and a single adapter). Applied at selection time. */
   adapterLimit?: number;
+  /** Any-of capability groups (Prompt 7 §14): an adapter is a candidate
+   *  when it fully covers ANY one group. Used by SAFE_VULNERABILITY_SCAN,
+   *  which unions vulnerability scanners (VULNERABILITY_SCANNING) with
+   *  TLS assessors (TLS_ANALYSIS) in one stage. */
+  capabilityGroups?: Capability[][];
+  /** Per-profile adapter allowlist (Prompt 7 §50): when set, only these
+   *  slugs may be selected for the stage (WEB_BASELINE runs Nuclei + TLS
+   *  but not Nikto; WEB_COMPREHENSIVE runs all four). */
+  adapterAllowlist?: string[];
 }
 
 const S = (
@@ -59,7 +68,10 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
   ENDPOINT_DISCOVERY: S("ENDPOINT_DISCOVERY", "Endpoint Discovery", "Consolidate endpoints from crawling and technology detection.", ["URL_DISCOVERY"], ["TECHNOLOGY_DETECTION", "CRAWLING"], 5, 600, "CONTINUE_WITH_PARTIAL_DATA", true),
   PARAMETER_DISCOVERY: S("PARAMETER_DISCOVERY", "Parameter Discovery", "Discover parameters on in-scope endpoints.", ["PARAMETER_DISCOVERY"], ["ENDPOINT_DISCOVERY"], 5, 900, "CONTINUE_WITH_PARTIAL_DATA", true),
   WEB_SURFACE_NORMALIZATION: S("WEB_SURFACE_NORMALIZATION", "Web Surface Normalization", "Merge crawl + content + parameter discovery into ONE canonical endpoint inventory with provenance and scope verdicts (Prompt 6 §39). Platform stage — no tool executes.", [], ["PARAMETER_DISCOVERY"], 3, 300, "FAIL_STAGE_CONTINUE"),
-  SAFE_VULNERABILITY_SCAN: S("SAFE_VULNERABILITY_SCAN", "Safe Vulnerability Scan", "Non-destructive vulnerability checks against in-scope endpoints.", ["VULNERABILITY_SCANNING"], ["ENDPOINT_DISCOVERY"], 15, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+  SAFE_VULNERABILITY_SCAN: {
+    ...S("SAFE_VULNERABILITY_SCAN", "Safe Vulnerability Scan", "Safe vulnerability detection (Nuclei governed SAFE templates + Nikto) and TLS assessment (testssl.sh + SSLyze) over the normalized web surface (Prompt 7 §14). Intrusive templates are excluded by the template policy.", ["VULNERABILITY_SCANNING"], ["WEB_SURFACE_NORMALIZATION"], 15, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["VULNERABILITY_SCANNING"], ["TLS_ANALYSIS"]],
+  },
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -131,6 +143,13 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
     // ONE adapter (the first by capability match), SMALL wordlists. The cap
     // is part of the template, so the plan itself records the bound.
     if (profile === "WEB_BASELINE" && def.type === "CONTENT_DISCOVERY") def.adapterLimit = 1;
+    // Prompt 7 §50: WEB_BASELINE vulnerability detection is conservative —
+    // Nuclei SAFE templates + TLS assessment only. Nikto joins in
+    // WEB_COMPREHENSIVE (which also carries the larger approved template
+    // set via the worker's profile-derived approvals).
+    if (profile === "WEB_BASELINE" && def.type === "SAFE_VULNERABILITY_SCAN") {
+      def.adapterAllowlist = ["nuclei", "testssl", "sslyze"];
+    }
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];
     if (def.type === "RISK_ANALYSIS") def.dependencies = ["CORRELATION"];

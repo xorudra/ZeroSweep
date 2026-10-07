@@ -3,7 +3,7 @@ import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/or
 import type { ScopeRules } from "@dsrclone/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
-import type { ProcessedResult } from "../executors/result-processor";
+import { correlateProcessedFindings, type ProcessedResult } from "../executors/result-processor";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -115,8 +115,36 @@ export class FakeStore implements ScanRunStore {
         hosts: [...new Set(this.assets.filter((a) => a.scopeStatus === "IN_SCOPE").map((a) => a.host))],
         urls: [...new Set(this.endpoints.filter((e) => e.scopeStatus === "IN_SCOPE").map((e) => e.url))],
         technologies: [...new Set(this.technologies.map((t) => t.name))],
+        // TLS services (§13): TLS-looking services on in-scope assets.
+        services: [...new Set(this.services
+          .filter((s) => s.scheme === "https" || [443, 8443].includes(s.port) || ["https", "ssl", "tls"].includes(s.name))
+          .map((s) => `${s.host}:${s.port}`))],
       },
     };
+  }
+
+  /** Prompt 7 hooks mirroring the Prisma store's pipeline behaviour. */
+  correlatedFindings: ProcessedResult["findings"] = [];
+  findingStats: Record<string, unknown> | null = null;
+
+  async summarizeFindings(): Promise<Record<string, unknown> | null> {
+    if (this.findings.length === 0) return null;
+    const bySeverity: Record<string, number> = {};
+    for (const f of this.findings) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+    return { totalFindings: this.findings.length, bySeverity };
+  }
+
+  async correlateScanFindings(): Promise<{ canonical: number; duplicates: number; stats: Record<string, unknown> } | null> {
+    if (this.findings.length === 0) return null;
+    const { findings, stats } = correlateProcessedFindings(this.findings, { maxFindings: 1000 });
+    this.correlatedFindings = findings;
+    this.findingStats = stats as unknown as Record<string, unknown>;
+    return { canonical: findings.length, duplicates: stats.duplicatesMerged, stats: stats as unknown as Record<string, unknown> };
+  }
+
+  async recalculateFindingRisk(): Promise<{ updated: number } | null> {
+    if (this.correlatedFindings.length === 0) return null;
+    return { updated: this.correlatedFindings.length };
   }
   async updateExecution(id: string, patch: Record<string, unknown>): Promise<void> {
     const exec = this.executions.get(id);

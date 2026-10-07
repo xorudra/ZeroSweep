@@ -91,6 +91,53 @@ export class ScansController {
     return this.assets.webSurfaceSummary(user, id);
   }
 
+  /** Findings for one scan (Prompt 7 §38): canonical findings by default
+   *  (duplicates merged into them), ordered by risk. */
+  @Get(":id/findings")
+  async scanFindings(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const scan = await this.prisma.scan.findFirst({ where: { id, workspaceId: workspace.id } });
+    if (!scan) throw new NotFoundException("Scan not found");
+    const items = await this.prisma.finding.findMany({
+      where: { scanId: id, workspaceId: workspace.id, duplicateOfId: null },
+      orderBy: [{ riskScore: "desc" }, { createdAt: "desc" }], take: 200,
+    });
+    return { items, total: items.length };
+  }
+
+  /** Scan findings summary (§45) + tool contribution (§46), computed from
+   *  this scan's REAL persisted findings only. */
+  @Get(":id/findings-summary")
+  async scanFindingsSummary(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    const workspace = await resolveWorkspace(this.prisma, user);
+    const scan = await this.prisma.scan.findFirst({ where: { id, workspaceId: workspace.id } });
+    if (!scan) throw new NotFoundException("Scan not found");
+    const all = await this.prisma.finding.findMany({ where: { scanId: id, workspaceId: workspace.id } });
+    const canonical = all.filter((f) => !f.duplicateOfId);
+    const bySeverity: Record<string, number> = {};
+    for (const f of canonical) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+    const byTool: Record<string, { total: number; contributed: number }> = {};
+    for (const f of all) {
+      for (const tool of f.sources ?? []) {
+        byTool[tool] = byTool[tool] ?? { total: 0, contributed: 0 };
+        byTool[tool].total++;
+      }
+    }
+    for (const f of canonical) for (const tool of f.sources ?? []) byTool[tool]!.contributed++;
+    return {
+      totalFindings: all.length,
+      uniqueFindings: canonical.length,
+      duplicatesMerged: all.length - canonical.length,
+      bySeverity,
+      confirmed: canonical.filter((f) => f.verificationStatus === "CONFIRMED").length,
+      likely: canonical.filter((f) => f.verificationStatus === "LIKELY").length,
+      unverified: canonical.filter((f) => f.verificationStatus === "UNVERIFIED").length,
+      falsePositives: canonical.filter((f) => f.status === "FALSE_POSITIVE").length,
+      acceptedRisks: canonical.filter((f) => f.status === "ACCEPTED_RISK").length,
+      byTool,
+    };
+  }
+
   @Post(":id/cancel")
   @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async cancel(@CurrentUser() user: RequestUser, @Param("id") id: string) {

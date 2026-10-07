@@ -54,13 +54,20 @@ export function selectAdaptersForStage(
   const rejected: { slug: string; reason: string }[] = [];
   const candidates: ToolMetadata[] = [];
 
-  const pool = stage.requiredCapabilities.length === 0
+  const groups: string[][] = stage.capabilityGroups && stage.capabilityGroups.length > 0
+    ? stage.capabilityGroups
+    : stage.requiredCapabilities.length > 0 ? [stage.requiredCapabilities] : [];
+  const pool = groups.length === 0
     ? []
     : registry.query({ targetType: options.targetType }).filter((a) =>
-        stage.requiredCapabilities.every((cap) => a.metadata.capabilities.includes(cap)));
+        groups.some((g) => g.every((cap) => a.metadata.capabilities.includes(cap as never))));
 
   for (const adapter of pool) {
     const m = adapter.metadata;
+    if (stage.adapterAllowlist && !stage.adapterAllowlist.includes(m.slug)) {
+      rejected.push({ slug: m.slug, reason: "not in this profile's adapter allowlist for the stage (Prompt 7 §50)" });
+      continue;
+    }
     if (!options.executableSlugs.includes(m.slug)) {
       rejected.push({ slug: m.slug, reason: "adapter is catalog metadata only — not executable in this phase" });
       continue;

@@ -1,5 +1,6 @@
 import {
-  RECON_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry, evaluateToolPolicy, type AuthorizationContext,
+  NucleiAdapter, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  approvedReviewIdsForProfile, evaluateToolPolicy, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -23,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS] as const;
 
 export interface ExecutionContextRecord {
   executionId: string;
@@ -50,7 +51,7 @@ export interface ExecutionContextRecord {
    *  asset hostnames and endpoint URLs, loaded from persisted state by the
    *  store — never from queue payloads. Adapters receive only the fields
    *  their declared input schema accepts. */
-  stageInputs?: { hosts: string[]; urls: string[]; technologies?: string[] };
+  stageInputs?: { hosts: string[]; urls: string[]; technologies?: string[]; services?: string[] };
   /** The scan's assessment profile (from the persisted plan) — drives
    *  Prompt 6 wordlist profile selection: WEB_BASELINE → SMALL, anything
    *  broader → STANDARD. COMPREHENSIVE is never selected automatically. */
@@ -173,6 +174,23 @@ export class StageExecutor {
         if (declared.has("hosts") && ctx.stageInputs.hosts.length > 0) config.hosts = ctx.stageInputs.hosts;
         if (declared.has("urls") && ctx.stageInputs.urls.length > 0) config.urls = ctx.stageInputs.urls;
         if (declared.has("technologies") && (ctx.stageInputs.technologies?.length ?? 0) > 0) config.technologies = ctx.stageInputs.technologies;
+        if (declared.has("services") && (ctx.stageInputs.services?.length ?? 0) > 0) config.services = ctx.stageInputs.services;
+      }
+      // Prompt 7 derived configuration — worker-computed, never client
+      // input (§4/§8/§52): Nuclei template approvals follow the PROFILE
+      // (WEB_COMPREHENSIVE carries the pre-approved REVIEW_REQUIRED set;
+      // baseline runs SAFE only), and rates default to the platform
+      // budget's conservative values. The template snapshot chosen here is
+      // frozen into the execution metrics below (§6).
+      let templateSelection: { snapshot: unknown; selected: string[] } | undefined;
+      if (declared.has("approvedTemplateIds")) {
+        config.approvedTemplateIds = approvedReviewIdsForProfile(ctx.profile ?? "");
+      }
+      if (declared.has("requestsPerSecond")) config.requestsPerSecond = 50;
+      if (declared.has("concurrency") && ctx.adapterSlug === "nuclei") config.concurrency = 10;
+      if (adapter instanceof NucleiAdapter) {
+        const sel = adapter.selectionFor(config);
+        templateSelection = { snapshot: sel.snapshot, selected: sel.selected.map((t) => t.id) };
       }
       // Prompt 6 derived configuration — computed by the WORKER from the
       // persisted plan/stage, never accepted from clients (§12/§29):
@@ -249,6 +267,7 @@ export class StageExecutor {
           parameters: counts.parameters ?? processed.parameters.length,
           forms: counts.forms ?? processed.forms.length,
           suppressedEndpoints: processed.suppressedEndpoints,
+          ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
           ...normalized.metrics,
         },
       });

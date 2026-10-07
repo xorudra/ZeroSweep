@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
-  CAPABILITIES, RISK_LEVELS, TOOL_CATEGORIES, createReconAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
+  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
 } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { Roles } from "../../common/decorators/auth.decorators";
@@ -28,7 +28,7 @@ export class ToolsController {
   /** Recon adapters probed live for health (§39). Built once; the probe is
    *  a PATH lookup + `--version` on THIS host — the worker host probes again
    *  at execution time, and plan-time/execution-time health always wins. */
-  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters()];
+  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters()];
 
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
@@ -60,6 +60,36 @@ export class ToolsController {
     const set = new Set<string>();
     for (const a of adapters) for (const c of (a.capabilities as string[]) ?? []) set.add(c);
     return [...set].sort();
+  }
+
+  /**
+   * Nuclei template governance (Prompt 7 §4/§47): the admin UI reads the
+   * governed catalog + snapshot + selection rules from here so what it
+   * shows is exactly what the worker enforces. Owner/Admin only. There is
+   * deliberately NO endpoint to upload templates or add template paths —
+   * custom templates are an architecture note (§48), not an upload box.
+   */
+  @Get("template-policy")
+  @Roles("OWNER", "ADMIN")
+  templatePolicy() {
+    return {
+      snapshot: NUCLEI_TEMPLATE_SNAPSHOT,
+      templates: NUCLEI_TEMPLATE_CATALOG.map((t) => ({
+        id: t.id, name: t.name, classification: t.classification,
+        vulnClass: t.vulnClass, severity: t.severity,
+        ...(t.approvedForComprehensive ? { approvedForComprehensive: true } : {}),
+      })),
+      selectionRules: {
+        automated: "SAFE templates, plus REVIEW_REQUIRED templates explicitly approved for the profile",
+        neverAutomated: ["INTRUSIVE", "DISABLED"],
+        approvedReviewByProfile: {
+          WEB_BASELINE: approvedReviewIdsForProfile("WEB_BASELINE"),
+          WEB_COMPREHENSIVE: approvedReviewIdsForProfile("WEB_COMPREHENSIVE"),
+        },
+        unknownTemplates: "REVIEW_REQUIRED — never SAFE by default, never auto-selected without approval",
+        customTemplates: "Not supported for upload in this phase (§48): administrator-reviewed, version-controlled template collections only, admitted through the same classification policy.",
+      },
+    };
   }
 
   @Get(":id")

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { TemplatePolicyPanel } from "@/components/TemplatePolicyPanel";
 
 interface AdapterDetail {
   adapterVersion?: string;
@@ -106,6 +107,7 @@ export default function Page() {
         </div>
         <p className="mt-4 text-xs text-slate-500">Tools in DSRclone run only through authorized, scope-checked, approved assessment workflows in isolated workers. This page intentionally has no run or command control.</p>
       </Card>
+      {t.slug === "nuclei" ? <TemplatePolicyPanel /> : null}
     </>
   );
 }

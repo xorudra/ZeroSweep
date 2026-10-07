@@ -30,6 +30,12 @@ export interface ScanRunStore extends ExecutionStore {
   ensureExecution(scanId: string, stageType: string, adapterSlug: string, attempt: number): Promise<{ id: string; status: string }>;
   markReportPending(scanId: string): Promise<void>;
   isPaused(scanId: string): Promise<boolean>;
+  /** Prompt 7 platform-stage data hooks (optional: stores that do not
+   *  implement them leave those stages as deterministic completions —
+   *  the production and fake stores both implement them). */
+  summarizeFindings?(scanId: string): Promise<Record<string, unknown> | null>;
+  correlateScanFindings?(scanId: string): Promise<{ canonical: number; duplicates: number; stats: Record<string, unknown> } | null>;
+  recalculateFindingRisk?(scanId: string): Promise<{ updated: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -210,13 +216,28 @@ export class DagRunner {
     stageId: string,
     emit: (type: ScanEventRecord["type"], payload: ScanEventRecord["payload"]) => Promise<void>,
   ): Promise<"COMPLETED" | "FAILED"> {
-    void scanId;
     if (stageId === "AUTHORIZATION_CHECK" || stageId === "SCOPE_VALIDATION") {
       const gate = evaluateAuthorizationGate(run.gate);
       if (!gate.allowed) {
         await emit(gate.reasonCode === "TARGET_OUT_OF_SCOPE" ? "scope.violation" : "policy.denied", { stageId, reasonCode: gate.reasonCode });
         return "FAILED";
       }
+    }
+    // Prompt 7 §14: the finding pipeline stages do real deterministic work
+    // over persisted findings when the store supports it.
+    if (stageId === "NORMALIZATION" && this.store.summarizeFindings) {
+      const summary = await this.store.summarizeFindings(scanId);
+      if (summary) await emit("finding.normalized", { stageId, ...summary });
+    }
+    if (stageId === "CORRELATION" && this.store.correlateScanFindings) {
+      const result = await this.store.correlateScanFindings(scanId);
+      if (result && result.duplicates > 0) {
+        await emit("finding.correlated", { stageId, canonical: result.canonical, duplicatesMerged: result.duplicates });
+      }
+    }
+    if (stageId === "RISK_ANALYSIS" && this.store.recalculateFindingRisk) {
+      const result = await this.store.recalculateFindingRisk(scanId);
+      if (result) await emit("risk.calculated", { stageId, updated: result.updated });
     }
     return "COMPLETED";
   }

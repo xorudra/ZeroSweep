@@ -11,7 +11,8 @@ export const SCAN_EVENT_TYPES = [
   "scan.paused", "scan.resumed",
   "stage.ready", "stage.started", "stage.progress", "stage.completed", "stage.failed", "stage.skipped",
   "tool.queued", "tool.started", "tool.completed", "tool.failed",
-  "finding.created", "asset.discovered", "asset.out_of_scope", "endpoint.discovered",
+  "finding.created", "finding.correlated", "finding.normalized", "risk.calculated",
+  "asset.discovered", "asset.out_of_scope", "endpoint.discovered",
   "scan.completed", "scan.failed", "scan.cancelled",
   "policy.denied", "scope.violation",
 ] as const;

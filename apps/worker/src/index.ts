@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerReconAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -33,6 +33,7 @@ registry.register(new MockSecurityAdapter());
 registry.register(new LocalEchoAdapter());
 registerReconAdapters(registry);
 registerWebDiscoveryAdapters(registry);
+registerVulnAdapters(registry);
 const executor = new StageExecutor(registry, store);
 const runner = new DagRunner(store, executor);
 const workerId = makeWorkerId();

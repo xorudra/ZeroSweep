@@ -1,7 +1,9 @@
 import {
-  canonicalizeHostname, canonicalizeUrl, classifyEndpointType, detectCrawlerTrap, detectWildcardGroups,
+  canonicalizeHostname, canonicalizeUrl, classifyEndpointType, correlateFindings as sdkCorrelateFindings,
+  detectCrawlerTrap, detectWildcardGroups,
   endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sensitiveRouteLabel,
-  ScopeMatcher, type DnsRecordSet, type NormalizedSecurityResult,
+  ScopeMatcher, type CorrelationStats, type DnsRecordSet, type NormalizedFinding,
+  type NormalizedSecurityResult, type NormalizedVulnFinding,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 
@@ -84,6 +86,20 @@ export interface ProcessedTechnology {
   confidence?: number;
 }
 
+export interface ProcessedEvidence {
+  sourceTool: string;
+  summary: string;
+  fingerprint?: string;
+  matchedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ProcessedReference {
+  type: string;
+  label: string;
+  url: string;
+}
+
 export interface ProcessedFinding {
   title: string;
   description: string;
@@ -96,6 +112,31 @@ export interface ProcessedFinding {
   sourceTool: string;
   toolExecutionId: string;
   evidenceSummary: string;
+  /** Prompt 7 rich normalization (§16/§17): carried ONLY when the tool
+   *  output or the curated taxonomy provides them — never invented. */
+  vulnClass?: string;
+  sources: string[];
+  evidenceRows: ProcessedEvidence[];
+  references: ProcessedReference[];
+  cve?: string;
+  cwe?: string;
+  owaspCategory?: string;
+  cvssScore?: number;
+  cvssVector?: string;
+  port?: number;
+  protocol?: string;
+  parameter?: string;
+  technicalImpact?: string;
+  businessImpact?: string;
+  remediation?: string;
+  /** Risk-engine output, filled by the CORRELATION stage (§34/§35). */
+  riskScore?: number;
+  riskBand?: string;
+  riskExplanation?: string[];
+  confidenceBand?: string;
+  verificationStatus?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
 }
 
 export interface ProcessedResult {
@@ -307,21 +348,54 @@ export function processNormalizedResult(
     });
   }
 
-  const findings: ProcessedFinding[] = result.findings.map((f) => ({
-    title: f.title,
-    description: f.description,
-    severity: f.severity,
-    confidence: f.confidence,
-    host: f.host,
-    endpoint: f.endpoint,
-    fingerprint: f.sourceFingerprint && f.sourceFingerprint !== "mock-fixture"
-      ? f.sourceFingerprint
-      : findingFingerprint({ toolFamily: f.sourceTool, asset: f.host ?? "unknown", endpoint: f.endpoint, vulnClass: f.title }),
-    isMock: result.mock,
-    sourceTool: f.sourceTool,
-    toolExecutionId: ctx.toolExecutionId,
-    evidenceSummary: f.evidence ?? "",
-  }));
+  const findings: ProcessedFinding[] = result.findings.map((f) => {
+    const v = f as NormalizedFinding & Partial<NormalizedVulnFinding>;
+    return {
+      title: f.title,
+      description: f.description,
+      severity: f.severity,
+      confidence: f.confidence,
+      host: f.host,
+      endpoint: f.endpoint,
+      fingerprint: f.sourceFingerprint && f.sourceFingerprint !== "mock-fixture"
+        ? f.sourceFingerprint
+        : findingFingerprint({ toolFamily: f.sourceTool, asset: f.host ?? "unknown", endpoint: f.endpoint, vulnClass: f.title }),
+      isMock: result.mock,
+      sourceTool: f.sourceTool,
+      toolExecutionId: ctx.toolExecutionId,
+      evidenceSummary: f.evidence ?? "",
+      ...(v.vulnClass ? { vulnClass: v.vulnClass } : {}),
+      sources: [f.sourceTool],
+      evidenceRows: [{
+        sourceTool: f.sourceTool,
+        summary: f.evidence ?? "",
+        ...(f.sourceFingerprint ? { fingerprint: f.sourceFingerprint } : {}),
+        ...(v.evidenceDetail?.matchedAt ? { matchedAt: v.evidenceDetail.matchedAt } : {}),
+        ...(v.evidenceDetail ? {
+          metadata: {
+            ...(v.evidenceDetail.checkId ? { checkId: v.evidenceDetail.checkId } : {}),
+            ...(v.evidenceDetail.signatureFamily ? { signatureFamily: v.evidenceDetail.signatureFamily } : {}),
+            ...(v.evidenceDetail.request ? { request: v.evidenceDetail.request } : {}),
+            ...(v.evidenceDetail.response ? { response: v.evidenceDetail.response } : {}),
+            ...(v.evidenceDetail.metadata ?? {}),
+          },
+        } : {}),
+      }],
+      references: (v.referencesDetailed ?? []).map((r) => ({ type: r.type, label: r.label, url: r.url })),
+      ...(v.cve ? { cve: v.cve } : {}),
+      ...(v.cwe ? { cwe: v.cwe } : {}),
+      ...(v.owaspCategory ? { owaspCategory: v.owaspCategory } : {}),
+      ...(v.cvssScore !== undefined ? { cvssScore: v.cvssScore } : {}),
+      ...(v.cvssVector ? { cvssVector: v.cvssVector } : {}),
+      ...(v.port !== undefined ? { port: v.port } : {}),
+      ...(v.protocol ? { protocol: v.protocol } : {}),
+      ...(v.parameter ? { parameter: v.parameter } : {}),
+      ...(v.technicalImpact ? { technicalImpact: v.technicalImpact } : {}),
+      ...(v.businessImpact ? { businessImpact: v.businessImpact } : {}),
+      ...(v.remediation ? { remediation: v.remediation } : {}),
+      verificationStatus: "UNVERIFIED",
+    };
+  });
   return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, suppressedEndpoints, isMock: result.mock };
 }
 
@@ -346,4 +420,99 @@ const SEVERITY_WEIGHT: Record<string, number> = { CRITICAL: 40, HIGH: 25, MEDIUM
 export function fixtureRiskScore(findings: ProcessedFinding[]): number {
   const raw = findings.reduce((sum, f) => sum + (SEVERITY_WEIGHT[f.severity] ?? 0) * f.confidence, 0);
   return Math.min(100, Math.round(raw));
+}
+
+/**
+ * Prompt 7 correlation over processed findings (§18–§22, §34/§35): converts
+ * persisted-shape findings to normalized vuln findings, runs the SDK
+ * correlation engine, and maps the canonical results back — one canonical
+ * finding per underlying issue, every source's evidence row preserved,
+ * duplicates marked (never deleted), risk + confidence computed
+ * deterministically with the same rules the SDK documents.
+ */
+export function correlateProcessedFindings(
+  findings: ProcessedFinding[],
+  opts: { assetCriticality?: string; maxFindings?: number } = {},
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  const normalized: NormalizedVulnFinding[] = findings.map((f) => ({
+    title: f.title, description: f.description,
+    severity: f.severity as NormalizedVulnFinding["severity"],
+    confidence: f.confidence,
+    ...(f.host ? { host: f.host } : {}),
+    ...(f.endpoint ? { endpoint: f.endpoint } : {}),
+    ...(f.parameter ? { parameter: f.parameter } : {}),
+    ...(f.port !== undefined ? { port: f.port } : {}),
+    ...(f.protocol ? { protocol: f.protocol } : {}),
+    ...(f.cve ? { cve: f.cve } : {}),
+    ...(f.cwe ? { cwe: f.cwe } : {}),
+    ...(f.cvssScore !== undefined ? { cvssScore: f.cvssScore } : {}),
+    ...(f.cvssVector ? { cvssVector: f.cvssVector } : {}),
+    ...(f.owaspCategory ? { owaspCategory: f.owaspCategory } : {}),
+    ...(f.technicalImpact ? { technicalImpact: f.technicalImpact } : {}),
+    ...(f.businessImpact ? { businessImpact: f.businessImpact } : {}),
+    evidence: f.evidenceSummary,
+    remediation: f.remediation ?? "",
+    references: f.references.map((r) => r.url),
+    referencesDetailed: f.references.map((r) => ({ ...r, type: r.type as NormalizedVulnFinding["referencesDetailed"][number]["type"] })),
+    sourceTool: f.sourceTool,
+    sourceFingerprint: f.fingerprint,
+    vulnClass: f.vulnClass ?? "GENERIC_VULNERABILITY",
+    sourceConfidence: f.confidence,
+    assetCriticality: (opts.assetCriticality as NormalizedVulnFinding["assetCriticality"]) ?? "UNSPECIFIED",
+    verificationStatus: "UNVERIFIED",
+  }));
+  const { findings: correlated, stats } = sdkCorrelateFindings(normalized, opts);
+  const byFingerprint = new Map(findings.map((f) => [f.fingerprint, f]));
+  const out: ProcessedFinding[] = correlated.map((c) => {
+    const primary = byFingerprint.get(c.finding.sourceFingerprint) ?? findings[0]!;
+    const members = c.sources
+      .map((s) => byFingerprint.get(s.sourceFingerprint))
+      .filter((m): m is ProcessedFinding => m !== undefined);
+    return {
+      ...primary,
+      title: c.finding.title,
+      description: c.finding.description,
+      severity: c.finding.severity,
+      confidence: c.confidenceScore,
+      confidenceBand: c.confidenceBand,
+      verificationStatus: c.verificationStatus,
+      riskScore: c.riskScore,
+      riskBand: c.riskBand,
+      riskExplanation: c.riskExplanation,
+      fingerprint: c.canonicalFingerprint,
+      sources: c.sources.map((s) => s.tool),
+      sourceTool: primary.sourceTool,
+      evidenceRows: members.flatMap((m) => m.evidenceRows),
+      references: c.finding.referencesDetailed.map((r) => ({ type: r.type, label: r.label, url: r.url })),
+      ...(c.finding.cve ? { cve: c.finding.cve } : {}),
+      ...(c.finding.cwe ? { cwe: c.finding.cwe } : {}),
+      ...(c.finding.cvssScore !== undefined ? { cvssScore: c.finding.cvssScore } : {}),
+      ...(c.finding.remediation ? { remediation: c.finding.remediation } : {}),
+      ...(members.map((m) => m.firstSeenAt).filter(Boolean).sort()[0] ? { firstSeenAt: members.map((m) => m.firstSeenAt).filter(Boolean).sort()[0] } : {}),
+      ...(members.map((m) => m.lastSeenAt).filter(Boolean).sort().at(-1) ? { lastSeenAt: members.map((m) => m.lastSeenAt).filter(Boolean).sort().at(-1) } : {}),
+    };
+  });
+  return { findings: out, stats };
+}
+
+/** Scan findings summary (§45) + tool contribution (§46), computed from
+ *  real processed findings only — the GUI renders exactly these numbers. */
+export function scanFindingsSummary(
+  canonical: ProcessedFinding[],
+  stats: { totalInputs: number; duplicatesMerged: number; byTool: Record<string, { total: number; unique: number; corroborated: number }> },
+): Record<string, unknown> {
+  const bySeverity: Record<string, number> = {};
+  for (const f of canonical) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+  return {
+    totalFindings: stats.totalInputs,
+    uniqueFindings: canonical.length,
+    duplicatesMerged: stats.duplicatesMerged,
+    bySeverity,
+    confirmed: canonical.filter((f) => f.verificationStatus === "CONFIRMED").length,
+    likely: canonical.filter((f) => f.verificationStatus === "LIKELY").length,
+    unverified: canonical.filter((f) => (f.verificationStatus ?? "UNVERIFIED") === "UNVERIFIED").length,
+    falsePositives: 0,
+    acceptedRisks: 0,
+    byTool: stats.byTool,
+  };
 }

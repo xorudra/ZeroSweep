@@ -80,4 +80,13 @@ export const api = {
   endpoint: (id: string) => apiFetch(`/endpoints/${id}`),
   endpointParameters: (id: string) => apiFetch(`/endpoints/${id}/parameters`),
   toolHealth: (slug: string) => apiFetch(`/tools/${slug}/health`),
+  // Prompt 7 findings + governance
+  finding: (id: string) => apiFetch(`/findings/${id}`),
+  findingEvidence: (id: string) => apiFetch(`/findings/${id}/evidence`),
+  findingsSummary: () => apiFetch("/findings/summary"),
+  reviewFinding: (id: string, status: string, notes: string) =>
+    apiFetch(`/findings/${id}/review`, { method: "POST", body: JSON.stringify({ status, notes }) }),
+  scanFindings: (scanId: string) => apiFetch(`/scans/${scanId}/findings`),
+  scanFindingsSummary: (scanId: string) => apiFetch(`/scans/${scanId}/findings-summary`),
+  templatePolicy: () => apiFetch("/tools/template-policy"),
 };
