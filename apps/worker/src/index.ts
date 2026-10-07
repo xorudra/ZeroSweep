@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -55,6 +55,12 @@ registerApiAdapters(registry);
 // local layer-2 discovery and packet capture exist only when the
 // worker's env grants them (internal / packet-analysis workers).
 registerNetworkAdapters(registry);
+// Prompt 12: source code security adapters (Semgrep / CodeQL / Bandit /
+// Brakeman / SpotBugs / Gitleaks / TruffleHog / Dependency-Check / Grype)
+// plus the SonarQube connector over the same admin-registered instance
+// discipline. Source tools analyze snapshots read-only with NO_NETWORK;
+// absent binaries report UNAVAILABLE honestly (§2/§13/§14).
+registerCodeAdapters(registry, undefined, prismaScannerDeps());
 const executor = new StageExecutor(registry, store, undefined, {
   workerCapabilities: privilegedCapabilitiesFromEnv(),
 });

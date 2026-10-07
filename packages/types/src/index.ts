@@ -17,6 +17,9 @@ export const ASSESSMENT_PROFILES = [
   // Prompt 10 §8: dedicated network profiles.
   "NETWORK_DISCOVERY", "NETWORK_BASELINE", "NETWORK_COMPREHENSIVE", "NETWORK_INTERNAL",
   "SOURCE_CODE", "CONTAINER", "CLOUD", "MOBILE", "CUSTOM",
+  // Prompt 12 §18: source code security profiles. SOURCE_CODE remains as
+  // the legacy alias and resolves to the SOURCE_BASELINE stage chain.
+  "SOURCE_BASELINE", "SOURCE_COMPREHENSIVE", "SECRETS_ONLY", "DEPENDENCIES_ONLY", "SAST_ONLY",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

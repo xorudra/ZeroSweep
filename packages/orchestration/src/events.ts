@@ -30,6 +30,12 @@ export const SCAN_EVENT_TYPES = [
   "network.service_identified", "network.protected_target_blocked",
   "network.internal_scan_approved", "network.masscan_denied",
   "network.local_discovery_unavailable", "network.scan_completed",
+  // Prompt 12 — source code security events (§96). Counts/ids/verdicts
+  // only; a secret event NEVER carries the secret value (§110).
+  "source.snapshot_created", "source.languages_detected",
+  "source.secret_detected", "source.dependency_vulnerability_detected",
+  "source.dependencies_inventoried", "source.sbom_generated",
+  "source.quality_gate_evaluated", "source.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

@@ -122,7 +122,7 @@ export const ENDPOINT_REFERENCE_RE = /^[A-Z][A-Z0-9_:-]{2,63}$/;
 const endpointReferenceSchema = z.string().regex(ENDPOINT_REFERENCE_RE, "endpointReference must be an opaque reference name (e.g. ZAP_DAEMON_PROD) — URLs, hosts and IPs are never accepted");
 const credentialReferenceSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9_.:-]+$/, "credentialReference is a reference NAME, never a secret value");
 
-export const SCANNER_TOOL_SLUGS = ["owasp-zap", "burp-suite-professional", "caido", "mitmproxy", "greenbone-openvas", "nessus-professional"] as const;
+export const SCANNER_TOOL_SLUGS = ["owasp-zap", "burp-suite-professional", "caido", "mitmproxy", "greenbone-openvas", "nessus-professional", "sonarqube"] as const;
 
 const scannerInstanceConfigSchema = z.object({
   // Prompt 11 §7/§12: logical profile → administrator-approved scanner
@@ -202,3 +202,46 @@ export const scannerImportSchema = z.object({
   scanId: z.string().uuid(),
 }).strict();
 export type ScannerImportInput = z.infer<typeof scannerImportSchema>;
+
+/**
+ * Prompt 12 — source repositories (§97). STRICT schemas: a repository
+ * registration can never carry a secret value, an archive payload with
+ * paths, or tool configuration. credentialReference is a reference NAME
+ * only (same discipline as scanner instances, §9). The snapshot manifest
+ * is repository DATA (file listing + manifest contents) — it is stored
+ * as data, never executed (§15); entry paths are re-validated by the SDK
+ * guards at the service boundary.
+ */
+const sourceFileEntrySchema = z.object({
+  path: z.string().min(1).max(1024),
+  sizeBytes: z.number().int().min(0).max(512 * 1024 * 1024),
+}).strict();
+
+export const createRepositorySchema = z.object({
+  name: z.string().min(1).max(200),
+  sourceKind: z.enum(["GIT_REMOTE", "UPLOADED_ARCHIVE", "LOCAL_SOURCE_SNAPSHOT", "CONNECTED_PROVIDER", "MANUAL_IMPORT"]),
+  remoteUrl: z.string().url().max(2048).optional(),
+  defaultBranch: z.string().min(1).max(200).optional(),
+  provider: z.string().min(1).max(100).optional(),
+  visibility: z.enum(["PRIVATE", "INTERNAL", "PUBLIC"]).default("PRIVATE"),
+  credentialReference: credentialReferenceSchema.optional(),
+  snapshotManifest: z.object({
+    files: z.array(sourceFileEntrySchema).max(20000),
+    manifests: z.record(z.string().max(64 * 1024)).default({}),
+    commitSha: z.string().max(64).optional(),
+    branch: z.string().max(200).optional(),
+  }).strict().optional(),
+}).strict();
+export type CreateRepositoryInput = z.input<typeof createRepositorySchema>;
+
+export const startRepositoryScanSchema = z.object({
+  profile: z.enum(["SOURCE_BASELINE", "SOURCE_COMPREHENSIVE", "SECRETS_ONLY", "DEPENDENCIES_ONLY", "SAST_ONLY"]).default("SOURCE_BASELINE"),
+}).strict();
+export type StartRepositoryScanInput = z.input<typeof startRepositoryScanSchema>;
+
+export const createSourceExclusionSchema = z.object({
+  exclusionType: z.enum(["PATH", "RULE", "FILE_FINGERPRINT", "FINDING_FINGERPRINT", "DEPENDENCY"]),
+  pattern: z.string().min(1).max(1024),
+  reason: z.string().min(3).max(1000),
+}).strict();
+export type CreateSourceExclusionInput = z.input<typeof createSourceExclusionSchema>;

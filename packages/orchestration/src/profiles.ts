@@ -19,6 +19,12 @@ export const STAGE_TYPES = [
   "SAFE_SCHEMA_TESTING", "JWT_ANALYSIS", "GRAPHQL_ANALYSIS", "WEBSOCKET_INVENTORY",
   "API_FINDING_NORMALIZATION",
   "TARGET_EXPANSION", "HOST_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS",
+  // Prompt 12: source code security stages (§19/§96). Acquisition,
+  // language detection, dependency inventory, SBOM generation and the
+  // quality gate are PLATFORM stages (worker store hooks); secret
+  // scanning, SAST and SCA are tool stages.
+  "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "SAST",
+  "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "QUALITY_GATE",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -117,6 +123,26 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
   HOST_DISCOVERY: S("HOST_DISCOVERY", "Host Discovery", "Discover live hosts inside the approved network scope (Nmap; local ARP discovery on internal workers only, §21/§22/§65).", ["HOST_DISCOVERY"], ["TARGET_EXPANSION"], 8, 900, "FAIL_STAGE_CONTINUE", true),
   SERVICE_DETECTION: S("SERVICE_DETECTION", "Service Detection", "Fingerprint services and versions on discovered open ports (Nmap -sV): product, version, CPE when the tool provides it, TLS facts, OS hints with confidence (§29–§35).", ["SERVICE_DETECTION"], ["PORT_DISCOVERY"], 12, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
   SAFE_NETWORK_CHECKS: S("SAFE_NETWORK_CHECKS", "Safe Network Checks", "Governed SAFE NSE script checks over detected services (Prompt 10 §14/§37): scripts are classified and policy-selected in code; intrusive/exploit/brute/dos scripts are never selected. Findings only from confirmed check output.", ["SAFE_NETWORK_CHECKS"], ["SERVICE_DETECTION"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+  // Prompt 12 §19/§96: the source pipeline. Acquisition snapshots the
+  //  repository (hostile input, §2/§5); language detection reads metadata
+  //  only; secret scanning / SAST / SCA are tool stages over the snapshot
+  //  (NO source execution ever, §14); dependency inventory, SBOM and the
+  //  quality gate are platform stages. Source stages are NOT network
+  //  stages — tools run with NO_NETWORK (§13) against the local snapshot.
+  SOURCE_ACQUISITION: S("SOURCE_ACQUISITION", "Source Acquisition", "Acquire the repository into an immutable, content-hashed snapshot (approved git remote with hooks/credentials disabled, validated archive, or registered workspace snapshot) and verify it against the source budget (Prompt 12 §3–§10). Platform stage — acquisition is engine work, never a tool.", [], ["SCOPE_VALIDATION"], 8, 900, "FAIL_SCAN"),
+  LANGUAGE_DETECTION: S("LANGUAGE_DETECTION", "Language Detection", "Detect languages, frameworks and build systems from the snapshot's file listing and manifest metadata (Prompt 12 §15–§17). Metadata only — nothing is built or executed. Platform stage.", [], ["SOURCE_ACQUISITION"], 3, 300, "FAIL_STAGE_CONTINUE"),
+  SECRET_SCANNING: S("SECRET_SCANNING", "Secret Scanning", "Scan the snapshot (and bounded history) for secrets with Gitleaks/TruffleHog (§34/§37). Values are fingerprinted at parse time and NEVER stored or displayed — metadata only (§39–§41). External verification is disabled (§44).", ["SECRET_SCANNING"], ["LANGUAGE_DETECTION"], 12, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+  SAST: {
+    ...S("SAST", "Static Analysis (SAST)", "Governed static analysis over the snapshot (Prompt 12 §20–§33): Semgrep pinned rule packs, CodeQL governed suites (SARIF), Bandit, Brakeman, SpotBugs security findings, SonarQube import (hotspots stay REVIEW_REQUIRED). Build-needing cases degrade as BUILD_REQUIRED — target code is never built (§14/§29).", ["SAST"], ["LANGUAGE_DETECTION"], 20, 3600, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["SAST"]],
+  },
+  DEPENDENCY_INVENTORY: S("DEPENDENCY_INVENTORY", "Dependency Inventory", "Identify software components from manifests and lockfiles (lockfiles first, §45/§56) with PURL identities — packages are NEVER installed (§57). Platform stage.", [], ["LANGUAGE_DETECTION"], 8, 600, "FAIL_STAGE_CONTINUE"),
+  SCA: {
+    ...S("SCA", "Software Composition Analysis", "Match the component inventory against governed vulnerability data (Prompt 12 §49–§58): Dependency-Check + Grype tool reports merge by component+CVE; the Phase 11 local intelligence dataset adds POTENTIAL_EXPOSURE correlations and EPSS/KEV enrichment — an empty dataset honestly yields zero matches.", ["SCA"], ["DEPENDENCY_INVENTORY"], 12, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    capabilityGroups: [["SCA"]],
+  },
+  SBOM_GENERATION: S("SBOM_GENERATION", "SBOM Generation", "Generate the snapshot's software bill of materials (CycloneDX + SPDX, §47/§48) from the component inventory and store it as a checksummed artifact. Platform stage.", [], ["SCA"], 4, 300, "CONTINUE_WITH_PARTIAL_DATA"),
+  QUALITY_GATE: S("QUALITY_GATE", "Security Quality Gate", "Evaluate the configurable security quality gate over the scan summary (Prompt 12 §81/§82): PASSED / WARNING / FAILED is recorded as a scan RESULT — a failed gate never crashes the pipeline. Platform stage.", [], ["RISK_ANALYSIS"], 2, 300, "CONTINUE_WITH_PARTIAL_DATA"),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -168,7 +194,16 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   NETWORK_COMPREHENSIVE: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   NETWORK_INTERNAL: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
   NETWORK_ASSESSMENT: template([...HEAD, "TARGET_EXPANSION", "HOST_DISCOVERY", "PORT_DISCOVERY", "SERVICE_DETECTION", "SAFE_NETWORK_CHECKS", ...TAIL]),
-  SOURCE_CODE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
+  // Prompt 12 §18/§19/§96: source profiles share the acquisition →
+  //  detection → analysis → inventory → SCA → SBOM → normalize →
+  //  correlate → risk → quality gate → report chain. The legacy
+  //  SOURCE_CODE profile resolves to the baseline chain.
+  SOURCE_BASELINE: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "SAST", "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  SOURCE_COMPREHENSIVE: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "SAST", "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  SECRETS_ONLY: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  DEPENDENCIES_ONLY: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  SAST_ONLY: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SAST", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  SOURCE_CODE: template([...HEAD, "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "SECRET_SCANNING", "SAST", "DEPENDENCY_INVENTORY", "SCA", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   CONTAINER: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CLOUD: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
   MOBILE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
@@ -247,10 +282,29 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
         def.adapterAllowlist = ["nmap", "netdiscover", "arp-scan"];
       }
     }
+    // Prompt 12 §18/§19: source profile shaping. BASELINE keeps SAST to
+    // the always-applicable analyzers (Semgrep + per-language linters);
+    // COMPREHENSIVE adds CodeQL, SpotBugs and the SonarQube connector.
+    // Baseline SCA runs Grype; comprehensive adds Dependency-Check.
+    const SOURCE_PROFILES = ["SOURCE_BASELINE", "SOURCE_COMPREHENSIVE", "SECRETS_ONLY", "DEPENDENCIES_ONLY", "SAST_ONLY", "SOURCE_CODE"];
+    if (SOURCE_PROFILES.includes(profile)) {
+      if ((profile === "SOURCE_BASELINE" || profile === "SOURCE_CODE") && def.type === "SAST") {
+        def.adapterAllowlist = ["semgrep", "bandit", "brakeman"];
+      }
+      if ((profile === "SOURCE_BASELINE" || profile === "SOURCE_CODE") && def.type === "SCA") {
+        def.adapterAllowlist = ["grype"];
+      }
+      if (profile === "SAST_ONLY" && def.type === "SAST") {
+        def.adapterAllowlist = ["semgrep", "codeql", "bandit", "brakeman", "spotbugs"];
+      }
+    }
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];
     if (def.type === "RISK_ANALYSIS") def.dependencies = ["CORRELATION"];
-    if (def.type === "REPORT_GENERATION") def.dependencies = ["RISK_ANALYSIS"];
+    // Prompt 12 §96: when a quality gate stage exists it sits between
+    // risk analysis and report generation.
+    if (def.type === "QUALITY_GATE") def.dependencies = ["RISK_ANALYSIS"];
+    if (def.type === "REPORT_GENERATION") def.dependencies = present.has("QUALITY_GATE") ? ["QUALITY_GATE"] : ["RISK_ANALYSIS"];
     if (def.type === "NORMALIZATION") {
       const before = includedBefore("NORMALIZATION").filter((t) => t !== "AUTHORIZATION_CHECK" && t !== "SCOPE_VALIDATION");
       def.dependencies = before.length > 0 ? [before[before.length - 1]!] : ["SCOPE_VALIDATION"];

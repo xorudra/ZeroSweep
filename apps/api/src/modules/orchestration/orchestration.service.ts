@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  API_SLUGS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
+  apiHealthBySlug, codeHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -20,7 +20,7 @@ import { ScanEventsService } from "./scan-events.service";
  *  adapters. Real adapters are selected only when their health probe passes
  *  on this host; otherwise the stage falls back to the labelled simulation
  *  adapter (Prompt 5 §39/§56) — never to a fake "real" run. */
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS];
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS];
 
 export function hostOf(value: string): string {
   try {
@@ -77,9 +77,14 @@ export class OrchestrationService {
       // Netdiscover / arp-scan / tcpdump / tshark) join plan-time
       // selection for the network profiles.
       registerNetworkAdapters(registry);
+      // Prompt 12: source code security adapters (Semgrep / CodeQL /
+      // Bandit / Brakeman / SpotBugs / Gitleaks / TruffleHog /
+      // Dependency-Check / Grype + the SonarQube connector with inert
+      // deps) join plan-time selection for the source profiles.
+      registerCodeAdapters(registry, undefined, INERT_CONNECTOR_DEPS);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()) } };
     }
     return this.registryCache.registry;
   }

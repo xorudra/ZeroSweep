@@ -1,9 +1,10 @@
 import {
-  canonicalizeHostname, canonicalizeUrl, classifyApiKind, classifyEndpointType, correlateFindings as sdkCorrelateFindings,
-  detectCrawlerTrap, detectWildcardGroups,
+  canonicalizeHostname, canonicalizeUrl, classifyApiKind, classifyEndpointType, computeRisk, correlateFindings as sdkCorrelateFindings,
+  correlateSourceFindings, detectCrawlerTrap, detectWildcardGroups,
   endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sensitiveRouteLabel,
+  sourceRiskFactors,
   ScopeMatcher, type CorrelationStats, type DnsRecordSet, type NormalizedFinding,
-  type NormalizedSecurityResult, type NormalizedVulnFinding,
+  type NormalizedSecurityResult, type NormalizedSoftwareComponent, type NormalizedVulnFinding,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 
@@ -164,7 +165,29 @@ export interface ProcessedFinding {
   verificationStatus?: string;
   firstSeenAt?: string;
   lastSeenAt?: string;
+  /** Prompt 12 §59: source-code location + dependency extensions —
+   *  repository-relative paths only, redacted snippets in evidence. */
+  filePath?: string;
+  startLine?: number;
+  endLine?: number;
+  startColumn?: number;
+  endColumn?: number;
+  ruleId?: string;
+  codeFlow?: { label: string; filePath: string; startLine?: number; endLine?: number }[];
+  secret?: import("@dsrclone/security-sdk").NormalizedSecretFinding;
+  componentName?: string;
+  componentVersion?: string;
+  componentPurl?: string;
+  fixedVersion?: string;
+  dependencyScope?: string;
+  reachability?: string;
+  reviewStatus?: string;
+  generatedCode?: boolean;
+  baselineStatus?: string;
 }
+
+/** Prompt 12 §45: component inventory passthrough (PURL identity). */
+export type ProcessedComponent = NormalizedSoftwareComponent;
 
 /** Prompt 8 §25/§26: observed HTTP traffic — metadata, hashes, sizes,
  *  artifact references and REDACTED display copies. Raw bodies never
@@ -245,6 +268,8 @@ export interface ProcessedResult {
   webSockets: ProcessedWebSocket[];
   /** Prompt 10: packet-capture artifact metadata (§43). */
   packetCaptures: ProcessedPacketCapture[];
+  /** Prompt 12: software components inventoried by source scans (§45). */
+  components: ProcessedComponent[];
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -501,7 +526,7 @@ export function processNormalizedResult(
           },
         } : {}),
       }],
-      references: (v.referencesDetailed ?? []).map((r) => ({ type: r.type, label: r.label, url: r.url })),
+      references: (v.referencesDetailed ?? f.references.map((url) => ({ type: "OTHER", label: url, url }))).map((r) => ({ type: r.type, label: r.label, url: r.url })),
       ...(v.cve ? { cve: v.cve } : {}),
       ...(v.cwe ? { cwe: v.cwe } : {}),
       ...(v.owaspCategory ? { owaspCategory: v.owaspCategory } : {}),
@@ -513,6 +538,26 @@ export function processNormalizedResult(
       ...(v.technicalImpact ? { technicalImpact: v.technicalImpact } : {}),
       ...(v.businessImpact ? { businessImpact: v.businessImpact } : {}),
       ...(v.remediation ? { remediation: v.remediation } : {}),
+      // Prompt 12 passthrough (§59): code location, secret metadata
+      // (fingerprints only — values were redacted at parse time),
+      // dependency identity + review state.
+      ...(f.filePath ? { filePath: f.filePath } : {}),
+      ...(f.startLine !== undefined ? { startLine: f.startLine } : {}),
+      ...(f.endLine !== undefined ? { endLine: f.endLine } : {}),
+      ...(f.startColumn !== undefined ? { startColumn: f.startColumn } : {}),
+      ...(f.endColumn !== undefined ? { endColumn: f.endColumn } : {}),
+      ...(f.ruleId ? { ruleId: f.ruleId } : {}),
+      ...(f.codeFlow ? { codeFlow: f.codeFlow } : {}),
+      ...(f.secret ? { secret: f.secret } : {}),
+      ...(f.componentName ? { componentName: f.componentName } : {}),
+      ...(f.componentVersion ? { componentVersion: f.componentVersion } : {}),
+      ...(f.componentPurl ? { componentPurl: f.componentPurl } : {}),
+      ...(f.fixedVersion ? { fixedVersion: f.fixedVersion } : {}),
+      ...(f.dependencyScope ? { dependencyScope: f.dependencyScope } : {}),
+      ...(f.reachability ? { reachability: f.reachability } : {}),
+      ...(f.reviewStatus ? { reviewStatus: f.reviewStatus } : {}),
+      ...(f.generatedCode ? { generatedCode: true } : {}),
+      ...(f.baselineStatus ? { baselineStatus: f.baselineStatus } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -633,7 +678,15 @@ export function processNormalizedResult(
     ...(c.interfaceName ? { interfaceName: c.interfaceName } : {}),
   }));
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, suppressedEndpoints, isMock: result.mock };
+  // --- components (Prompt 12 §45): PURL-keyed passthrough — inventory
+  //     is data from manifests/scanners, deduped by the SDK parsers.
+  const componentByPurl = new Map<string, ProcessedComponent>();
+  for (const c of result.components ?? []) {
+    if (c.purl && !componentByPurl.has(c.purl)) componentByPurl.set(c.purl, c);
+  }
+  const components = [...componentByPurl.values()];
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original
@@ -667,7 +720,145 @@ export function fixtureRiskScore(findings: ProcessedFinding[]): number {
  * duplicates marked (never deleted), risk + confidence computed
  * deterministically with the same rules the SDK documents.
  */
+/** Prompt 12: a processed finding is a SOURCE finding when it carries a
+ *  code location, a component identity, or secret metadata. Source
+ *  findings correlate with the line-stable source engine (§64–§68) —
+ *  never with the host/endpoint vuln engine, whose canonical fingerprint
+ *  would destroy source identity across snapshots. */
+export function isSourceFinding(f: ProcessedFinding): boolean {
+  return f.filePath !== undefined || f.componentPurl !== undefined || f.secret !== undefined;
+}
+
 export function correlateProcessedFindings(
+  findings: ProcessedFinding[],
+  opts: { assetCriticality?: string; maxFindings?: number } = {},
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  const sourceFindings = findings.filter(isSourceFinding);
+  if (sourceFindings.length === 0) return correlateVulnProcessed(findings, opts);
+  const otherFindings = findings.filter((f) => !isSourceFinding(f));
+  const vulnPart = otherFindings.length > 0
+    ? correlateVulnProcessed(otherFindings, opts)
+    : { findings: [] as ProcessedFinding[], stats: { total: 0, unique: 0, duplicatesMerged: 0, corroborated: 0, byTool: {} } as CorrelationStats };
+  const sourcePart = correlateSourceProcessed(sourceFindings);
+  const byTool: CorrelationStats["byTool"] = { ...vulnPart.stats.byTool };
+  for (const [tool, v] of Object.entries(sourcePart.stats.byTool)) {
+    const existing = byTool[tool] ?? { total: 0, unique: 0, corroborated: 0 };
+    byTool[tool] = { total: existing.total + v.total, unique: existing.unique + v.unique, corroborated: existing.corroborated + v.corroborated };
+  }
+  return {
+    findings: [...vulnPart.findings, ...sourcePart.findings],
+    stats: {
+      total: vulnPart.stats.total + sourcePart.stats.total,
+      unique: vulnPart.stats.unique + sourcePart.stats.unique,
+      duplicatesMerged: vulnPart.stats.duplicatesMerged + sourcePart.stats.duplicatesMerged,
+      corroborated: vulnPart.stats.corroborated + sourcePart.stats.corroborated,
+      byTool,
+    },
+  };
+}
+
+/** Source correlation (§64–§68 + §70): fingerprint merges + conservative
+ *  cross-tool SAST merges via the SDK engine; risk from the shared
+ *  deterministic engine plus source-specific factor explanations. */
+function correlateSourceProcessed(
+  findings: ProcessedFinding[],
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  const projections: NormalizedFinding[] = findings.map((f) => ({
+    title: f.title, description: f.description,
+    severity: f.severity as NormalizedFinding["severity"],
+    confidence: f.confidence,
+    ...(f.host ? { host: f.host } : {}),
+    ...(f.endpoint ? { endpoint: f.endpoint } : {}),
+    ...(f.cve ? { cve: f.cve } : {}),
+    ...(f.cwe ? { cwe: f.cwe } : {}),
+    ...(f.cvssScore !== undefined ? { cvssScore: f.cvssScore } : {}),
+    ...(f.cvssVector ? { cvssVector: f.cvssVector } : {}),
+    ...(f.owaspCategory ? { owaspCategory: f.owaspCategory } : {}),
+    evidence: f.evidenceSummary,
+    ...(f.remediation ? { remediation: f.remediation } : {}),
+    references: f.references.map((r) => r.url),
+    sourceTool: f.sourceTool,
+    sourceFingerprint: f.fingerprint,
+    ...(f.filePath ? { filePath: f.filePath } : {}),
+    ...(f.startLine !== undefined ? { startLine: f.startLine } : {}),
+    ...(f.endLine !== undefined ? { endLine: f.endLine } : {}),
+    ...(f.startColumn !== undefined ? { startColumn: f.startColumn } : {}),
+    ...(f.endColumn !== undefined ? { endColumn: f.endColumn } : {}),
+    ...(f.ruleId ? { ruleId: f.ruleId } : {}),
+    ...(f.codeFlow ? { codeFlow: f.codeFlow } : {}),
+    ...(f.secret ? { secret: f.secret } : {}),
+    ...(f.componentName ? { componentName: f.componentName } : {}),
+    ...(f.componentVersion ? { componentVersion: f.componentVersion } : {}),
+    ...(f.componentPurl ? { componentPurl: f.componentPurl } : {}),
+    ...(f.fixedVersion ? { fixedVersion: f.fixedVersion } : {}),
+    ...(f.dependencyScope ? { dependencyScope: f.dependencyScope as NormalizedFinding["dependencyScope"] } : {}),
+    ...(f.reachability ? { reachability: f.reachability as NormalizedFinding["reachability"] } : {}),
+    ...(f.reviewStatus ? { reviewStatus: f.reviewStatus as NormalizedFinding["reviewStatus"] } : {}),
+    ...(f.generatedCode ? { generatedCode: true } : {}),
+    ...(f.baselineStatus ? { baselineStatus: f.baselineStatus as NormalizedFinding["baselineStatus"] } : {}),
+  }));
+  const { findings: correlated, stats: sourceStats } = correlateSourceFindings(projections);
+  const byFingerprint = new Map(findings.map((f) => [f.fingerprint, f]));
+  const out: ProcessedFinding[] = correlated.map((c) => {
+    const members = c.memberFingerprints
+      .map((fp) => byFingerprint.get(fp))
+      .filter((m): m is ProcessedFinding => m !== undefined);
+    const primary = members[0] ?? byFingerprint.get(c.sourceFingerprint) ?? findings[0]!;
+    const risk = computeRisk({
+      severity: c.severity,
+      ...(c.cvssScore !== undefined ? { cvssScore: c.cvssScore } : {}),
+      confidence: c.confidence,
+      verificationStatus: "UNVERIFIED",
+    });
+    return {
+      ...primary,
+      title: c.title,
+      description: c.description,
+      severity: c.severity,
+      confidence: c.confidence,
+      fingerprint: c.sourceFingerprint,
+      sources: c.sources,
+      sourceTool: primary.sourceTool,
+      evidenceRows: members.flatMap((m) => m.evidenceRows),
+      references: c.references.map((url) => ({ type: "OTHER", label: url, url })),
+      ...(c.cve ? { cve: c.cve } : {}),
+      ...(c.cwe ? { cwe: c.cwe } : {}),
+      ...(c.cvssScore !== undefined ? { cvssScore: c.cvssScore } : {}),
+      ...(c.fixedVersion ? { fixedVersion: c.fixedVersion } : {}),
+      ...(c.codeFlow ? { codeFlow: c.codeFlow } : {}),
+      riskScore: risk.score,
+      riskBand: risk.band,
+      riskExplanation: [...risk.explanation, ...sourceRiskFactors(c).map((x) => `${x.factor}: ${x.detail}`)],
+      confidenceBand: c.confidence >= 0.8 ? "HIGH" : c.confidence >= 0.5 ? "MEDIUM" : "LOW",
+      verificationStatus: "UNVERIFIED",
+    };
+  });
+  const byTool: CorrelationStats["byTool"] = {};
+  for (const f of findings) {
+    const entry = byTool[f.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.total += 1;
+    byTool[f.sourceTool] = entry;
+  }
+  for (const c of correlated) {
+    const primary = byFingerprint.get(c.memberFingerprints[0] ?? c.sourceFingerprint);
+    if (primary) {
+      byTool[primary.sourceTool]!.unique += 1;
+      if (c.sources.length > 1) byTool[primary.sourceTool]!.corroborated += 1;
+    }
+  }
+  return {
+    findings: out,
+    stats: {
+      total: sourceStats.input,
+      unique: sourceStats.canonical,
+      duplicatesMerged: sourceStats.duplicatesMerged,
+      corroborated: correlated.filter((c) => c.sources.length > 1).length,
+      byTool,
+    },
+  };
+}
+
+function correlateVulnProcessed(
   findings: ProcessedFinding[],
   opts: { assetCriticality?: string; maxFindings?: number } = {},
 ): { findings: ProcessedFinding[]; stats: CorrelationStats } {

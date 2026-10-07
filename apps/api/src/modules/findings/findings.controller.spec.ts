@@ -42,6 +42,7 @@ function makeController(rows: ReturnType<typeof findingRow>[]) {
     },
     findingEvidence: { findMany: jest.fn(async () => [{ id: "e-1", sourceTool: "testssl", evidenceType: "TEXT", summary: "testssl TLS1: offered (deprecated)", matchedAt: "example.com:443", fingerprint: "fp-t", metadata: { check: "TLS1" } }]) },
     findingReference: { findMany: jest.fn(async () => []) },
+    secretFindingMetadata: { findUnique: jest.fn(async () => null) },
     findingHistory: {
       findMany: jest.fn(async () => history),
       create: jest.fn(async ({ data }: never) => { history.push(data as Record<string, unknown>); return data; }),

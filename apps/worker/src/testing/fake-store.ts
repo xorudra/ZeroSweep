@@ -1,9 +1,15 @@
-import { CidrPolicyService, JwtToolAdapter, MockSecurityAdapter, ToolRegistry, expandCidrTargets } from "@dsrclone/security-sdk";
+import {
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, FIXTURE_MANIFEST_CONTENTS, FIXTURE_SOURCE_FILES,
+  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, buildCycloneDxSbom, classifyBaseline,
+  detectRepository, evaluateQualityGate, expandCidrTargets, parseManifests, summarizeForQualityGate,
+  type SourceFileEntry,
+} from "@dsrclone/security-sdk";
+import { createHash } from "node:crypto";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
 import type { ScopeRules } from "@dsrclone/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
-import { correlateProcessedFindings, processNormalizedResult, type ProcessedResult } from "../executors/result-processor";
+import { correlateProcessedFindings, processNormalizedResult, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -26,7 +32,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -45,6 +51,15 @@ export interface FakeStoreOptions {
     jwtTokens?: string[];
     specifications?: { operations: number }[];
     authContexts?: { role: string }[];
+  };
+  /** Prompt 12: the fixture repository the source stages operate on —
+   *  file listing + manifest contents (defaults to the SDK fixture
+   *  repo), plus the previous snapshot's finding fingerprints for
+   *  baseline classification (§79). */
+  sourceFixtures?: {
+    files?: SourceFileEntry[];
+    manifests?: Record<string, string>;
+    previousFingerprints?: string[];
   };
 }
 
@@ -68,6 +83,13 @@ export class FakeStore implements ScanRunStore {
   graphqlServices: ProcessedResult["graphqlServices"] = [];
   jwtProfiles: ProcessedResult["jwtProfiles"] = [];
   packetCaptures: ProcessedResult["packetCaptures"] = [];
+  components: ProcessedComponent[] = [];
+  /** Prompt 12 source state mirroring the Prisma store's snapshot rows. */
+  sourceSnapshot: { id: string; repositoryId: string; hash: string; files: SourceFileEntry[]; manifests: Record<string, string> } | null = null;
+  sourceLanguages: string[] = [];
+  sbomRecord: { format: string; checksum: string; componentCount: number } | null = null;
+  qualityGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
+  sourceFixtures: NonNullable<FakeStoreOptions["sourceFixtures"]> = {};
   networkChunks: Array<{ chunkId: string; rangeStart: string; rangeEnd: string; hostCount: number; status: string }> = [];
   networkTarget: FakeStoreOptions["networkTarget"];
   apiFixtures: NonNullable<FakeStoreOptions["apiFixtures"]> = {};
@@ -78,14 +100,15 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
+    this.sourceFixtures = opts.sourceFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -145,6 +168,16 @@ export class FakeStore implements ScanRunStore {
       assessmentId: "a-1",
       masscanApproved: this.networkTarget?.masscanApproved,
       captureRef: this.networkTarget?.captureRef,
+      // Prompt 12: the scan's snapshot context (§12) — the fixture
+      // snapshot the acquisition hook materialized (or the default
+      // fixture workspace before it runs).
+      source: this.targetType === "SOURCE_REPOSITORY" ? {
+        repositoryId: "repo-1",
+        snapshotId: this.sourceSnapshot?.id ?? "snap-1",
+        workspacePath: "/fixtures/source-snapshot",
+        languages: this.sourceLanguages,
+        sonarProjectKey: "fixture-repo",
+      } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
@@ -204,7 +237,7 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number }> {
+  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number }> {
     // Assets merge by host (one canonical row, provenance unioned) —
     // mirrors the Prisma store's upsert behaviour.
     for (const a of processed.assets) {
@@ -245,7 +278,59 @@ export class FakeStore implements ScanRunStore {
     this.graphqlServices.push(...processed.graphqlServices);
     this.jwtProfiles.push(...processed.jwtProfiles);
     this.packetCaptures.push(...processed.packetCaptures);
-    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length };
+    // Components merge by PURL (one canonical inventory row per
+    // snapshot) — mirrors the Prisma store's upsert.
+    for (const c of processed.components) {
+      if (!this.components.some((x) => x.purl === c.purl)) this.components.push(c);
+    }
+    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length };
+  }
+
+  /** Prompt 12 platform hooks mirroring the Prisma store (§19). */
+  async acquireSourceSnapshot(): Promise<{ snapshotHash: string; files: number; sourceKind: string } | null> {
+    if (this.targetType !== "SOURCE_REPOSITORY") return null;
+    const files = this.sourceFixtures.files ?? FIXTURE_SOURCE_FILES;
+    const manifests = this.sourceFixtures.manifests ?? FIXTURE_MANIFEST_CONTENTS;
+    const hash = createHash("sha256").update(JSON.stringify(files.map((f) => [f.path, f.sizeBytes]))).digest("hex");
+    this.sourceSnapshot = { id: "snap-1", repositoryId: "repo-1", hash, files, manifests };
+    return { snapshotHash: hash, files: files.length, sourceKind: "LOCAL_SOURCE_SNAPSHOT" };
+  }
+
+  async detectSourceLanguages(): Promise<{ languages: number; primaryLanguage?: string; frameworks: number; buildSystems: number } | null> {
+    if (!this.sourceSnapshot) return null;
+    const det = detectRepository(this.sourceSnapshot.files, this.sourceSnapshot.manifests);
+    this.sourceLanguages = det.languages.map((l) => l.language);
+    return { languages: det.languages.length, primaryLanguage: det.primaryLanguage, frameworks: det.frameworks.length, buildSystems: det.buildSystems.length };
+  }
+
+  async inventorySourceDependencies(): Promise<{ components: number; manifests: number } | null> {
+    if (!this.sourceSnapshot) return null;
+    const parsed = parseManifests(this.sourceSnapshot.manifests);
+    for (const c of parsed) if (!this.components.some((x) => x.purl === c.purl)) this.components.push(c);
+    return { components: parsed.length, manifests: Object.keys(this.sourceSnapshot.manifests).length };
+  }
+
+  async generateSourceSbom(): Promise<{ format: string; checksum: string; components: number } | null> {
+    if (!this.sourceSnapshot) return null;
+    const { sbom } = buildCycloneDxSbom(this.components, {
+      snapshotHash: this.sourceSnapshot.hash, repositoryName: "fixture-repo", timestamp: new Date().toISOString(),
+    });
+    this.sbomRecord = { format: sbom.format, checksum: sbom.checksum, componentCount: sbom.componentCount };
+    return { format: sbom.format, checksum: sbom.checksum, components: sbom.componentCount };
+  }
+
+  async evaluateSourceQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
+    if (canonical.length === 0 && this.findings.length === 0) return null;
+    // Baseline classification (§79) against the previous snapshot.
+    const previous = this.sourceFixtures.previousFingerprints ?? [];
+    if (previous.length > 0) {
+      const { statuses } = classifyBaseline(canonical.map((f) => ({ sourceFingerprint: f.fingerprint })), previous);
+      for (const f of canonical) f.baselineStatus = statuses.get(f.fingerprint);
+    }
+    const evaluation = evaluateQualityGate(summarizeForQualityGate(canonical), DEFAULT_QUALITY_GATE_POLICY);
+    this.qualityGateRecord = { status: evaluation.status, failedRules: evaluation.failedRules, warningRules: evaluation.warningRules };
+    return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
   }
 
   /** Prompt 10 platform hook mirroring the Prisma store: bounded target

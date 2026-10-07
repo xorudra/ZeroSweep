@@ -13,7 +13,7 @@ import type { Capability } from "../adapter/adapter.types";
  * at execution time through a SecretResolver.
  */
 
-export const SCANNER_PRODUCTS = ["ZAP", "BURP", "CAIDO", "MITMPROXY", "GREENBONE", "NESSUS"] as const;
+export const SCANNER_PRODUCTS = ["ZAP", "BURP", "CAIDO", "MITMPROXY", "GREENBONE", "NESSUS", "SONARQUBE"] as const;
 export type ScannerProduct = (typeof SCANNER_PRODUCTS)[number];
 
 /** Capabilities a connector product can EVER support (§4/§10/§13). What a
@@ -34,6 +34,10 @@ export const PRODUCT_CAPABILITIES: Record<ScannerProduct, Capability[]> = {
   // LICENSE_REQUIRED. Same connector ceiling; license state is read from
   // the deployment, never assumed (§11/§85).
   NESSUS: ["VULNERABILITY_SCANNING", "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION"],
+  // Prompt 12 §23: SonarQube — administrator-managed code security
+  // platform reached through the same instance/endpoint/secret-reference
+  // discipline. Result import only; DSRclone never submits builds.
+  SONARQUBE: ["SAST", "CODE_PATTERN_ANALYSIS", "SCAN_RESULT_IMPORT"],
 };
 
 export const PRODUCT_SLUGS: Record<ScannerProduct, string> = {
@@ -43,6 +47,7 @@ export const PRODUCT_SLUGS: Record<ScannerProduct, string> = {
   MITMPROXY: "mitmproxy",
   GREENBONE: "greenbone-openvas",
   NESSUS: "nessus-professional",
+  SONARQUBE: "sonarqube",
 };
 export const SLUG_PRODUCTS: Record<string, ScannerProduct> = {
   "owasp-zap": "ZAP",
@@ -51,6 +56,7 @@ export const SLUG_PRODUCTS: Record<string, ScannerProduct> = {
   mitmproxy: "MITMPROXY",
   "greenbone-openvas": "GREENBONE",
   "nessus-professional": "NESSUS",
+  sonarqube: "SONARQUBE",
 };
 
 /** How the scanner deployment is provided (§9/§55). IMPORT_ONLY instances

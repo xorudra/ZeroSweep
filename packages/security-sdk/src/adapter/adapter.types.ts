@@ -50,6 +50,14 @@ export const CAPABILITIES = [
   // is deliberately NO exploit-execution capability anywhere (§17/§18/§103).
   "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION",
   "VULNERABILITY_REFERENCE_LOOKUP",
+  // Prompt 12: source code security capabilities. There is deliberately
+  // NO source-execution capability (§14) and NO secret-verification-by-
+  // default flow — SECRET_VERIFICATION exists so the policy can name
+  // and DENY it (§37/§44).
+  "CODE_PATTERN_ANALYSIS", "SECURITY_RULE_ANALYSIS", "SECURITY_QUERY_ANALYSIS", "DATAFLOW_ANALYSIS",
+  "PYTHON_SECURITY_ANALYSIS", "FRAMEWORK_SECURITY_ANALYSIS",
+  "SECRET_DETECTION", "SECRET_VERIFICATION",
+  "DEPENDENCY_VULNERABILITY_ANALYSIS", "PACKAGE_VULNERABILITY_ANALYSIS", "SBOM_ANALYSIS",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

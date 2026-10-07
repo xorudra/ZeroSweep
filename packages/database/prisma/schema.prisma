@@ -82,6 +82,13 @@ enum AssessmentProfile {
   CLOUD
   MOBILE
   CUSTOM
+  // Prompt 12 §18: source code security profiles (SOURCE_CODE resolves
+  // to the SOURCE_BASELINE stage chain).
+  SOURCE_BASELINE
+  SOURCE_COMPREHENSIVE
+  SECRETS_ONLY
+  DEPENDENCIES_ONLY
+  SAST_ONLY
 }
 
 enum AssessmentStatus {
@@ -139,6 +146,15 @@ enum ScanStageType {
   HOST_DISCOVERY
   SERVICE_DETECTION
   SAFE_NETWORK_CHECKS
+  // Prompt 12 §19/§96: source code security stages.
+  SOURCE_ACQUISITION
+  LANGUAGE_DETECTION
+  SECRET_SCANNING
+  SAST
+  DEPENDENCY_INVENTORY
+  SCA
+  SBOM_GENERATION
+  QUALITY_GATE
   NORMALIZATION
   CORRELATION
   RISK_ANALYSIS
@@ -378,6 +394,18 @@ enum AuditAction {
   VULNERABILITY_REOPENED
   SCANNER_REPORT_IMPORTED
   INTELLIGENCE_UPDATED
+  // Prompt 12 §110: source code security audit actions. Metadata for
+  // these actions NEVER contains secret values (§101).
+  SOURCE_REPOSITORY_CREATED
+  SOURCE_SCAN_REQUESTED
+  SOURCE_SNAPSHOT_CREATED
+  SAST_COMPLETED
+  SECRET_DETECTED
+  DEPENDENCY_VULNERABILITY_DETECTED
+  SBOM_GENERATED
+  QUALITY_GATE_EVALUATED
+  SOURCE_FINDING_RESOLVED
+  SOURCE_ARTIFACT_ACCESSED
 }
 
 enum NotificationType {
@@ -430,18 +458,19 @@ model Membership {
 }
 
 model Workspace {
-  id               String            @id @default(uuid())
+  id               String             @id @default(uuid())
   organizationId   String
   name             String
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   targets          Target[]
   assessments      Assessment[]
   credentials      Credential[]
   scannerInstances ScannerInstance[]
   sessionProfiles  SessionProfile[]
   scanApprovals    ScanApproval[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  repositories     SourceRepository[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
   deletedAt        DateTime?
 
   @@index([organizationId])
@@ -967,6 +996,24 @@ model Finding {
   riskAcceptanceReason    String?
   riskAcceptedBy          String?
   riskAcceptanceExpiresAt DateTime?
+  // Prompt 12 §59: source-code finding location + dependency extensions.
+  // Paths are repository-relative ONLY (§60); snippets live in evidence
+  // rows (redacted, §62) — never the raw source, never a raw secret.
+  repositoryId            String?
+  snapshotId              String?
+  filePath                String?
+  startLine               Int?
+  endLine                 Int?
+  startColumn             Int?
+  endColumn               Int?
+  ruleId                  String?
+  codeFlow                Json?
+  componentPurl           String?
+  fixedVersion            String?
+  dependencyScope         String?
+  reachability            String?
+  baselineStatus          String? // NEW | EXISTING vs the previous snapshot (§79)
+  secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
   exploitReferences       ExploitReference[]
@@ -1795,4 +1842,205 @@ model DeadLetterJob {
   @@index([queue])
   @@index([scanId])
   @@index([createdAt])
+}
+
+// ------------------------------- Prompt 12: Source Code Security -------------------------------
+
+enum SourceKind {
+  GIT_REPOSITORY
+  UPLOADED_ARCHIVE
+  LOCAL_SOURCE_SNAPSHOT
+}
+
+enum SecretType {
+  API_KEY
+  TOKEN
+  PRIVATE_KEY
+  PASSWORD
+  DATABASE_CREDENTIAL
+  CLOUD_CREDENTIAL
+  CERTIFICATE_SECRET
+  GENERIC_SECRET
+}
+
+enum SecretLifecycleStatus {
+  OPEN
+  ROTATION_REQUIRED
+  ROTATED
+  FALSE_POSITIVE
+  ACCEPTED_RISK
+  RESOLVED
+}
+
+enum SecretVerificationStatus {
+  NOT_VERIFIED
+  VERIFIED_ACTIVE
+  VERIFIED_INACTIVE
+  VERIFICATION_FAILED
+}
+
+enum SbomFormat {
+  CYCLONEDX_JSON
+  SPDX_JSON
+  SPDX_TAG_VALUE
+}
+
+enum QualityGateStatus {
+  PASSED
+  FAILED
+  WARNING
+  NOT_EVALUATED
+}
+
+// A registered source repository (Prompt 12 §3). The repository is a
+// first-class TARGET (linked Target of type SOURCE_REPOSITORY): scans
+// still require the target VERIFIED + assessment APPROVED. Credentials
+// are secret REFERENCES only (§4) — no URL here ever embeds one.
+model SourceRepository {
+  id                  String                @id @default(uuid())
+  organizationId      String
+  workspaceId         String
+  targetId            String?
+  name                String
+  provider            String?
+  remoteUrl           String?
+  defaultBranch       String?
+  visibility          String                @default("PRIVATE")
+  sourceKind          SourceKind
+  credentialReference String?
+  // Registered snapshot manifest for LOCAL_SOURCE_SNAPSHOT / archive
+  // intake: { files: [{path, sizeBytes}], manifests: {path: content} }.
+  // Manifest contents are the repository's own declarations (data).
+  snapshotManifest    Json?
+  createdBy           String
+  workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  snapshots           SourceSnapshot[]
+  exclusions          SourceScanExclusion[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([workspaceId])
+  @@index([targetId])
+}
+
+// An immutable acquired snapshot (§5): content-hashed at acquisition,
+// never modified in place. `files` is the capped file listing (paths +
+// sizes); `manifests` holds manifest/lockfile contents for inventory.
+model SourceSnapshot {
+  id                String                    @id @default(uuid())
+  repositoryId      String
+  scanId            String?
+  commitSha         String?
+  branch            String?
+  snapshotHash      String
+  artifactReference String?
+  sourceKind        SourceKind
+  fileCount         Int                       @default(0)
+  totalSizeBytes    BigInt                    @default(0)
+  files             Json                      @default("[]")
+  manifests         Json                      @default("{}")
+  languages         Json                      @default("[]")
+  frameworks        String[]                  @default([])
+  buildSystems      String[]                  @default([])
+  repository        SourceRepository          @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  components        SoftwareComponent[]
+  sboms             SoftwareBillOfMaterials[]
+  createdAt         DateTime                  @default(now())
+
+  @@index([repositoryId])
+  @@index([scanId])
+  @@index([snapshotHash])
+}
+
+// One inventoried software component (§45) — PURL identity (§46).
+model SoftwareComponent {
+  id              String         @id @default(uuid())
+  snapshotId      String
+  name            String
+  version         String?
+  ecosystem       String
+  purl            String
+  sourceManifest  String
+  scope           String         @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
+  dependencyScope String         @default("RUNTIME")
+  licenses        String[]       @default([])
+  supplier        String?
+  snapshot        SourceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+
+  @@unique([snapshotId, purl])
+  @@index([snapshotId])
+  @@index([ecosystem, name])
+}
+
+// A generated SBOM (§47/§48): document lives in object storage behind
+// artifactReference; the row carries format + checksum + counts.
+model SoftwareBillOfMaterials {
+  id             String         @id @default(uuid())
+  snapshotId     String
+  scanId         String?
+  format         SbomFormat
+  specVersion    String
+  checksum       String
+  artifactRef    String?
+  componentCount Int            @default(0)
+  snapshot       SourceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+
+  @@index([snapshotId])
+  @@index([scanId])
+}
+
+// Secret finding metadata (§40) — the ONLY persisted representation of
+// a detected secret. There is deliberately NO column that could hold
+// the raw value: type + detector + location + one-way fingerprint +
+// redacted preview only (§101).
+model SecretFindingMetadata {
+  id                 String                   @id @default(uuid())
+  findingId          String                   @unique
+  secretType         SecretType
+  detector           String
+  fingerprint        String
+  redactedPreview    String?
+  filePath           String?
+  startLine          Int?
+  endLine            Int?
+  commitSha          String?
+  verificationStatus SecretVerificationStatus @default(NOT_VERIFIED)
+  lifecycleStatus    SecretLifecycleStatus    @default(OPEN)
+  firstSeenAt        DateTime                 @default(now())
+  lastSeenAt         DateTime                 @updatedAt
+  finding            Finding                  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([fingerprint])
+  @@index([lifecycleStatus])
+}
+
+// Governed source exclusion (§85/§86): explicit, reasoned, audited.
+model SourceScanExclusion {
+  id            String           @id @default(uuid())
+  repositoryId  String
+  exclusionType String // PATH | RULE | FILE_FINGERPRINT | FINDING_FINGERPRINT | DEPENDENCY
+  pattern       String
+  reason        String
+  createdBy     String
+  repository    SourceRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt     DateTime         @default(now())
+
+  @@index([repositoryId])
+}
+
+// The quality-gate verdict for a source scan (§81/§82).
+model QualityGateResult {
+  id            String            @id @default(uuid())
+  scanId        String
+  snapshotId    String?
+  status        QualityGateStatus
+  policyVersion String
+  failedRules   Json              @default("[]")
+  warningRules  Json              @default("[]")
+  summary       Json              @default("{}")
+  evaluatedAt   DateTime          @default(now())
+
+  @@index([scanId])
 }

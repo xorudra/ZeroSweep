@@ -115,6 +115,47 @@ export default function Page() {
           ) : null}
         </Card>
 
+        {/* Prompt 12 §92: code finding detail — repository-relative
+            location, rule, dataflow and dependency identity. Secret
+            findings show metadata only: the value is never stored. */}
+        {typeof finding.filePath === "string" || typeof finding.componentPurl === "string" ? (
+          <Card title="Code location — source finding (§92)">
+            <dl className="grid grid-cols-2 gap-4">
+              <Field label="File" value={<span className="break-all font-mono text-xs">{String(finding.filePath ?? "—")}</span>} />
+              <Field label="Lines" value={finding.startLine != null ? `${String(finding.startLine)}${finding.endLine != null && finding.endLine !== finding.startLine ? `–${String(finding.endLine)}` : ""}${finding.startColumn != null ? `, col ${String(finding.startColumn)}` : ""}` : "—"} />
+              <Field label="Rule" value={String(finding.ruleId ?? "—")} />
+              <Field label="Baseline" value={String(finding.baselineStatus ?? "—")} />
+              <Field label="Component" value={finding.componentPurl ? <span className="break-all font-mono text-xs">{String(finding.componentPurl)}</span> : "—"} />
+              <Field label="Fixed version" value={finding.fixedVersion ? String(finding.fixedVersion) : "Not provided by trusted data"} />
+              <Field label="Reachability" value={String(finding.reachability ?? "—")} />
+              <Field label="Review status" value={String(finding.reviewStatus ?? "—")} />
+            </dl>
+            {Array.isArray(finding.codeFlow) && finding.codeFlow.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Dataflow evidence (§63)</p>
+                <ol className="mt-1 list-decimal pl-5 font-mono text-xs text-slate-300">
+                  {(finding.codeFlow as Array<Record<string, unknown>>).map((step, i) => (
+                    <li key={i}>{String(step.label ?? "step")} — {String(step.filePath ?? "")}{step.startLine != null ? `:${String(step.startLine)}` : ""}</li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {finding.secretMetadata && typeof finding.secretMetadata === "object" ? (
+              <div className="mt-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Secret metadata (§40) — value never stored</p>
+                <dl className="mt-1 grid grid-cols-2 gap-4">
+                  <Field label="Type" value={String((finding.secretMetadata as Record<string, unknown>).secretType ?? "—")} />
+                  <Field label="Detector" value={String((finding.secretMetadata as Record<string, unknown>).detector ?? "—")} />
+                  <Field label="Fingerprint" value={<span className="break-all font-mono text-xs">{String((finding.secretMetadata as Record<string, unknown>).fingerprint ?? "—")}</span>} />
+                  <Field label="Redacted preview" value={String((finding.secretMetadata as Record<string, unknown>).redactedPreview ?? "—")} />
+                  <Field label="Verification" value={String((finding.secretMetadata as Record<string, unknown>).verificationStatus ?? "—")} />
+                  <Field label="Lifecycle" value={String((finding.secretMetadata as Record<string, unknown>).lifecycleStatus ?? "—")} />
+                </dl>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+
         <Card title="Corroboration — contributing tools">
           {sources.length === 0 ? (
             <p className="text-sm text-slate-400">No contributing tools recorded.</p>

@@ -2,8 +2,9 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, clampDiscoveryBudget, computeDueAt, computeRiskV2, enrichFinding, expandCidrTargets, DEFAULT_SLA_POLICY, planRetest,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseManifests, planRetest, summarizeForQualityGate, type CvssRecord,
 } from "@dsrclone/security-sdk";
+import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
@@ -81,6 +82,9 @@ export class PrismaWorkerStore implements ScanRunStore {
       targetVerified: target.verified,
       assessmentApproved: graph.assessment.status === "APPROVED",
       scopeValid: scopeParse.success,
+      // Prompt 12 (§12): source context resolved from repository +
+      // snapshot rows — workspace paths never come from client input.
+      source: await this.loadSourceContext(graph.workspaceId, target.id, exec.scanId),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -100,6 +104,24 @@ export class PrismaWorkerStore implements ScanRunStore {
     };
   }
 
+  /** Prompt 12: repository + snapshot resolution shared by the
+   *  execution context and the source platform hooks. */
+  private async loadSourceContext(workspaceId: string, targetId: string, scanId: string): Promise<ExecutionContextRecord["source"]> {
+    const repo = await prisma.sourceRepository.findFirst({ where: { workspaceId, targetId } });
+    if (!repo) return undefined;
+    const snap = (await prisma.sourceSnapshot.findFirst({ where: { repositoryId: repo.id, scanId }, orderBy: { createdAt: "desc" } }))
+      ?? (await prisma.sourceSnapshot.findFirst({ where: { repositoryId: repo.id }, orderBy: { createdAt: "desc" } }));
+    const langs = ((snap?.languages as { language: string }[] | null) ?? []).map((l) => l.language);
+    return {
+      repositoryId: repo.id,
+      ...(snap ? { snapshotId: snap.id } : {}),
+      ...(snap?.artifactReference ? { workspacePath: snap.artifactReference } : {}),
+      ...(snap?.commitSha ? { commitSha: snap.commitSha } : {}),
+      languages: langs,
+      sonarProjectKey: repo.name,
+    };
+  }
+
   /** Prompt 10 §45: latest packet-capture artifact reference for a scan. */
   private async loadCaptureRef(scanId: string): Promise<string | undefined> {
     const capture = await prisma.packetCaptureArtifact.findFirst({
@@ -115,7 +137,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  org-wide ones. Resolved from trusted DB state only; the queue
    *  payload and the client never name an instance or an endpoint. */
   private async loadScannerBinding(toolSlug: string, workspaceId: string, organizationId: string): Promise<{ instanceId?: string } | undefined> {
-    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug) && !(VULN_SCANNER_SLUGS as readonly string[]).includes(toolSlug)) return undefined;
+    if (!(PROXY_SLUGS as readonly string[]).includes(toolSlug) && !(VULN_SCANNER_SLUGS as readonly string[]).includes(toolSlug) && toolSlug !== "sonarqube") return undefined;
     const own = await prisma.scannerInstance.findFirst({
       where: { workspaceId, enabled: true, tool: { slug: toolSlug } },
       orderBy: { createdAt: "asc" },
@@ -202,9 +224,9 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number }> {
+  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
-    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0, packetCaptures: 0 };
+    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0, packetCaptures: 0, components: 0 };
     const assetIdByHost = new Map<string, string>();
     for (const asset of processed.assets) {
       const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: asset.host } });
@@ -368,6 +390,11 @@ export class PrismaWorkerStore implements ScanRunStore {
       }
       forms++;
     }
+    // Prompt 12: the scan's source context (repository + snapshot) for
+    // attaching code locations, secret metadata and components.
+    const sourceCtx = processed.findings.some((f) => f.filePath || f.componentPurl || f.secret) || processed.components.length > 0
+      ? await this.loadSourceContext(scan.workspaceId, scan.assessment.targetId, scanId)
+      : undefined;
     let findings = 0;
     for (const f of processed.findings) {
       // Prompt 7 §16/§17/§29: the full normalized record persists — CVE /
@@ -386,6 +413,34 @@ export class PrismaWorkerStore implements ScanRunStore {
           cvssScore: f.cvssScore, cvssVector: f.cvssVector,
           port: f.port, protocol: f.protocol, parameter: f.parameter,
           technicalImpact: f.technicalImpact, businessImpact: f.businessImpact, remediation: f.remediation,
+          // Prompt 12 (§59/§92): source location + dependency identity.
+          // Secret findings persist ONLY their metadata row (§42) — the
+          // raw value does not exist in any processed shape.
+          repositoryId: f.filePath || f.componentPurl || f.secret ? sourceCtx?.repositoryId : undefined,
+          snapshotId: f.filePath || f.componentPurl || f.secret ? sourceCtx?.snapshotId : undefined,
+          filePath: f.filePath, startLine: f.startLine, endLine: f.endLine,
+          startColumn: f.startColumn, endColumn: f.endColumn,
+          ruleId: f.ruleId, codeFlow: (f.codeFlow ?? undefined) as never,
+          componentPurl: f.componentPurl, fixedVersion: f.fixedVersion,
+          dependencyScope: f.dependencyScope, reachability: f.reachability,
+          baselineStatus: f.baselineStatus,
+          reviewStatus: f.reviewStatus,
+          ...(f.secret ? {
+            secretMetadata: {
+              create: {
+                secretType: f.secret.secretType as never,
+                detector: f.secret.detector,
+                // Location lives on the finding (§59); the metadata row
+                // mirrors file/line for the secret dashboard (§93).
+                filePath: f.filePath,
+                startLine: f.startLine,
+                commitSha: f.secret.commitSha,
+                fingerprint: f.secret.fingerprint,
+                redactedPreview: f.secret.redactedPreview,
+                verificationStatus: f.secret.verificationStatus as never,
+              },
+            },
+          } : {}),
           evidence: {
             create: f.evidenceRows.map((e) => ({
               sourceTool: e.sourceTool, evidenceType: "TEXT", summary: e.summary,
@@ -399,6 +454,25 @@ export class PrismaWorkerStore implements ScanRunStore {
       });
       void created;
       findings++;
+    }
+    // Software components (Prompt 12 §45): upserted per snapshot+PURL so
+    // the inventory is canonical per snapshot across tools and stages.
+    let components = 0;
+    if (sourceCtx?.snapshotId) {
+      for (const c of processed.components) {
+        await prisma.softwareComponent.upsert({
+          where: { snapshotId_purl: { snapshotId: sourceCtx.snapshotId, purl: c.purl } },
+          create: {
+            snapshotId: sourceCtx.snapshotId,
+            name: c.name, version: c.version, ecosystem: c.ecosystem, purl: c.purl,
+            sourceManifest: c.sourceManifest, scope: c.scope,
+            dependencyScope: c.dependencyScope, licenses: c.licenses,
+            ...(c.supplier ? { supplier: c.supplier } : {}),
+          },
+          update: { licenses: c.licenses, dependencyScope: c.dependencyScope },
+        });
+        components++;
+      }
     }
     // HTTP transactions (Prompt 8 §25/§26): metadata, hashes, sizes,
     // artifact references and redacted display copies — raw bodies are
@@ -525,7 +599,7 @@ export class PrismaWorkerStore implements ScanRunStore {
       });
       packetCaptures++;
     }
-    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures };
+    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components };
   }
 
   /** Prompt 10 platform hook (§5/§25/§62): canonicalize the scan's CIDR
@@ -559,6 +633,237 @@ export class PrismaWorkerStore implements ScanRunStore {
       : { mode: "RANGES", hosts: 0, chunks: expansion.chunks.length, totalHosts: expansion.totalHosts };
   }
 
+  // ---------- Prompt 12 source platform hooks (§19/§96) ----------
+
+  /** SOURCE_ACQUISITION (§10/§96): materialize the scan's immutable
+   *  snapshot from the repository's registered content manifest.
+   *  Returns null honestly when the repository carries no registered
+   *  snapshot content (e.g. a git remote whose clone has not been
+   *  provisioned on a source worker) — the runner then fails the stage
+   *  instead of inventing a snapshot. Content is NEVER executed (§15):
+   *  the manifest is data — file listing + manifest file contents. */
+  async acquireSourceSnapshot(scanId: string): Promise<{ snapshotHash: string; files: number; sourceKind: string } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const repo = await prisma.sourceRepository.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    if (!repo) return null;
+    const existing = await prisma.sourceSnapshot.findFirst({ where: { repositoryId: repo.id, scanId } });
+    if (existing) return { snapshotHash: existing.snapshotHash, files: existing.fileCount, sourceKind: repo.sourceKind };
+    const manifest = repo.snapshotManifest as { files?: { path: string; sizeBytes: number }[]; manifests?: Record<string, string>; commitSha?: string; branch?: string } | null;
+    if (!manifest || !Array.isArray(manifest.files)) return null;
+    const snapshotHash = createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
+    const totalSizeBytes = manifest.files.reduce((sum, f) => sum + (f.sizeBytes ?? 0), 0);
+    await prisma.sourceSnapshot.create({
+      data: {
+        repositoryId: repo.id, scanId,
+        snapshotHash, commitSha: manifest.commitSha, branch: manifest.branch,
+        sourceKind: repo.sourceKind,
+        artifactReference: `snapshots/${repo.id}/${snapshotHash}`,
+        fileCount: manifest.files.length, totalSizeBytes: BigInt(totalSizeBytes),
+        files: manifest.files as never,
+        manifests: (manifest.manifests ?? {}) as never,
+      },
+    });
+    return { snapshotHash, files: manifest.files.length, sourceKind: repo.sourceKind };
+  }
+
+  /** LANGUAGE_DETECTION (§27): deterministic classification over the
+   *  snapshot's file listing + manifest contents; metadata only. */
+  async detectSourceLanguages(scanId: string): Promise<{ languages: number; primaryLanguage?: string; frameworks: number; buildSystems: number } | null> {
+    const snap = await prisma.sourceSnapshot.findFirst({ where: { scanId }, orderBy: { createdAt: "desc" } });
+    if (!snap) return null;
+    const detection = detectRepository(
+      (snap.files as never) ?? [],
+      (snap.manifests as Record<string, string> | null) ?? {},
+    );
+    await prisma.sourceSnapshot.update({
+      where: { id: snap.id },
+      data: {
+        languages: detection.languages as never,
+        frameworks: detection.frameworks,
+        buildSystems: detection.buildSystems,
+      },
+    });
+    return { languages: detection.languages.length, primaryLanguage: detection.primaryLanguage, frameworks: detection.frameworks.length, buildSystems: detection.buildSystems.length };
+  }
+
+  /** DEPENDENCY_INVENTORY (§45/§56): parse the snapshot's manifests
+   *  (lockfile-first, no installs) into canonical component rows, then
+   *  match them against the GOVERNED local intelligence dataset
+   *  (Prompt 11). Matches are POTENTIAL_EXPOSURE findings (§73) built
+   *  only from what the dataset holds — an empty dataset yields zero
+   *  matches and zero findings, honestly (§52). */
+  async inventorySourceDependencies(scanId: string): Promise<{ components: number; manifests: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const snap = await prisma.sourceSnapshot.findFirst({ where: { scanId }, orderBy: { createdAt: "desc" } });
+    if (!snap) return null;
+    const manifests = (snap.manifests as Record<string, string> | null) ?? {};
+    const parsed = parseManifests(manifests);
+    for (const c of parsed) {
+      await prisma.softwareComponent.upsert({
+        where: { snapshotId_purl: { snapshotId: snap.id, purl: c.purl } },
+        create: {
+          snapshotId: snap.id,
+          name: c.name, version: c.version, ecosystem: c.ecosystem, purl: c.purl,
+          sourceManifest: c.sourceManifest, scope: c.scope,
+          dependencyScope: c.dependencyScope, licenses: c.licenses,
+          ...(c.supplier ? { supplier: c.supplier } : {}),
+        },
+        update: { licenses: c.licenses, dependencyScope: c.dependencyScope },
+      });
+    }
+    // Governed-dataset matching: load only the CPE/CVE/EPSS/KEV rows
+    // that could match this inventory's component names.
+    if (parsed.length > 0) {
+      const names = [...new Set(parsed.map((c) => c.name.toLowerCase()))];
+      const cpes = await prisma.cpeRecord.findMany({
+        where: { OR: names.map((n) => ({ canonical: { contains: `:${n}:` } })) },
+        take: 500,
+      });
+      if (cpes.length > 0) {
+        const cveIds = [...new Set(cpes.flatMap((c) => c.cveIds))];
+        const [cves, epssRows, kevRows] = await Promise.all([
+          prisma.cveRecord.findMany({ where: { cveId: { in: cveIds } } }),
+          prisma.epssRecord.findMany({ where: { cveId: { in: cveIds } }, orderBy: { date: "desc" } }),
+          prisma.kevRecord.findMany({ where: { cveId: { in: cveIds } } }),
+        ]);
+        const dataset = new InMemoryIntelligenceDataset();
+        for (const c of cves) {
+          const record: Parameters<InMemoryIntelligenceDataset["upsertCve"]>[0] = {
+            cveId: c.cveId, description: c.description, cweIds: c.cweIds,
+            references: (c.references as { label: string; url: string }[] | null) ?? [], source: c.source,
+          };
+          if (c.cvssScore != null) {
+            record.cvss = { version: (c.cvssVersion ?? "3.1") as CvssRecord["version"], baseScore: c.cvssScore, ...(c.cvssVector ? { vector: c.cvssVector } : {}), source: c.source } as typeof record.cvss;
+          }
+          dataset.upsertCve(record);
+        }
+        const seenEpss = new Set<string>();
+        for (const e of epssRows) {
+          if (seenEpss.has(e.cveId)) continue;
+          seenEpss.add(e.cveId);
+          dataset.upsertEpss({ cveId: e.cveId, score: e.score, percentile: e.percentile, date: e.date.toISOString().slice(0, 10), source: e.source });
+        }
+        for (const k of kevRows) {
+          dataset.upsertKev({ cveId: k.cveId, source: k.source, ...(k.vendorProject ? { vendorProject: k.vendorProject } : {}), ...(k.product ? { product: k.product } : {}), ...(k.dateAdded ? { dateAdded: k.dateAdded.toISOString().slice(0, 10) } : {}) });
+        }
+        for (const cpe of cpes) {
+          dataset.upsertCpe({
+            canonical: cpe.canonical, part: cpe.part, vendor: cpe.vendor, product: cpe.product,
+            ...(cpe.version ? { version: cpe.version } : {}), cveIds: cpe.cveIds, source: cpe.source,
+          });
+        }
+        const matches = matchComponentsAgainstIntel(parsed, dataset);
+        const enriched = enrichDependencyFindings(matches, dataset);
+        for (const m of enriched) {
+          const existingFinding = await prisma.finding.findFirst({ where: { scanId, fingerprint: m.sourceFingerprint } });
+          if (existingFinding) continue;
+          await prisma.finding.create({
+            data: {
+              workspaceId: graph.workspaceId, scanId,
+              repositoryId: snap.repositoryId, snapshotId: snap.id,
+              title: m.title, description: m.description,
+              severity: m.severity as never, confidence: m.confidence,
+              fingerprint: m.sourceFingerprint, isMock: false,
+              status: "OPEN", verificationStatus: "UNVERIFIED",
+              sources: [m.sourceTool], vulnClass: "DEPENDENCY_VULNERABILITY",
+              cve: m.cve, cwe: m.cwe, cvssScore: m.cvssScore, cvssVector: m.cvssVector,
+              componentPurl: m.componentPurl, dependencyScope: m.dependencyScope,
+              reachability: "POTENTIAL_EXPOSURE",
+              evidence: { create: { sourceTool: m.sourceTool, evidenceType: "TEXT", summary: m.evidence } },
+              references: { create: m.references.map((url) => ({ type: "OTHER", label: url, url })) },
+              history: { create: { workspaceId: graph.workspaceId, event: "CREATED", metadata: { sourceTool: m.sourceTool, origin: "INTEL_MATCH" } as never } },
+            },
+          });
+        }
+      }
+    }
+    return { components: parsed.length, manifests: Object.keys(manifests).length };
+  }
+
+  /** SBOM_GENERATION (§47): build the CycloneDX document from the
+   *  snapshot's component rows; only its reference + checksum persist. */
+  async generateSourceSbom(scanId: string): Promise<{ format: string; checksum: string; components: number } | null> {
+    const snap = await prisma.sourceSnapshot.findFirst({ where: { scanId }, orderBy: { createdAt: "desc" }, include: { repository: true } });
+    if (!snap) return null;
+    const rows = await prisma.softwareComponent.findMany({ where: { snapshotId: snap.id } });
+    const components = rows.map((r) => ({
+      name: r.name, version: r.version ?? undefined, ecosystem: r.ecosystem as never, purl: r.purl,
+      sourceManifest: r.sourceManifest, scope: r.scope as never,
+      dependencyScope: r.dependencyScope as never, licenses: r.licenses,
+      ...(r.supplier ? { supplier: r.supplier } : {}),
+    }));
+    const { sbom } = buildCycloneDxSbom(components, {
+      snapshotHash: snap.snapshotHash, repositoryName: snap.repository.name, timestamp: new Date().toISOString(),
+    });
+    const sbomData = {
+      snapshotId: snap.id, scanId,
+      format: "CYCLONEDX_JSON" as never, specVersion: sbom.specVersion,
+      checksum: sbom.checksum, artifactRef: `sbom://${snap.id}/${sbom.checksum}`,
+      componentCount: sbom.componentCount,
+    };
+    const existingSbom = await prisma.softwareBillOfMaterials.findFirst({ where: { snapshotId: snap.id, format: "CYCLONEDX_JSON" } });
+    if (existingSbom) {
+      await prisma.softwareBillOfMaterials.update({ where: { id: existingSbom.id }, data: sbomData });
+    } else {
+      await prisma.softwareBillOfMaterials.create({ data: sbomData });
+    }
+    return { format: sbom.format, checksum: sbom.checksum, components: sbom.componentCount };
+  }
+
+  /** QUALITY_GATE (§81/§82): classify findings against the previous
+   *  snapshot (§79), evaluate the workspace gate policy and record the
+   *  verdict. The gate verdict never changes the scan's own status —
+   *  it is reported alongside it (§82). */
+  async evaluateSourceQualityGate(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph) return null;
+    const snap = await prisma.sourceSnapshot.findFirst({ where: { scanId }, orderBy: { createdAt: "desc" } });
+    const rows = await prisma.finding.findMany({ where: { scanId, duplicateOfId: null }, include: { secretMetadata: true } });
+    if (rows.length === 0) return null;
+    if (snap) {
+      const previousRows = await prisma.finding.findMany({
+        where: { repositoryId: snap.repositoryId, snapshotId: { not: snap.id }, fingerprint: { not: null } },
+        select: { fingerprint: true },
+      });
+      const previousFingerprints = previousRows.map((r) => r.fingerprint!).filter(Boolean);
+      if (previousFingerprints.length > 0) {
+        const { statuses } = classifyBaseline(
+          rows.map((r) => ({ sourceFingerprint: r.fingerprint ?? r.id })),
+          previousFingerprints,
+        );
+        for (const r of rows) {
+          const status = statuses.get(r.fingerprint ?? r.id);
+          if (status && status !== r.baselineStatus) {
+            await prisma.finding.update({ where: { id: r.id }, data: { baselineStatus: status } });
+            r.baselineStatus = status;
+          }
+        }
+      }
+    }
+    const evaluation = evaluateQualityGate(
+      summarizeForQualityGate(rows.map((r) => ({
+        severity: r.severity as never, filePath: r.filePath ?? undefined,
+        componentPurl: r.componentPurl ?? undefined,
+        ...(r.secretMetadata ? { secret: { secretType: r.secretMetadata.secretType } as never } : {}),
+        baselineStatus: (r.baselineStatus as never) ?? undefined,
+      }))),
+      DEFAULT_QUALITY_GATE_POLICY,
+    );
+    await prisma.qualityGateResult.create({
+      data: {
+        scanId, snapshotId: snap?.id,
+        status: evaluation.status as never,
+        policyVersion: DEFAULT_QUALITY_GATE_POLICY.version,
+        failedRules: evaluation.failedRules as never,
+        warningRules: evaluation.warningRules as never,
+        summary: evaluation as never,
+      },
+    });
+    return { status: evaluation.status, failedRules: evaluation.failedRules.length, warningRules: evaluation.warningRules.length };
+  }
+
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
   async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
     const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
@@ -575,7 +880,7 @@ export class PrismaWorkerStore implements ScanRunStore {
   async correlateScanFindings(scanId: string): Promise<{ canonical: number; duplicates: number; stats: Record<string, unknown> } | null> {
     const rows = await prisma.finding.findMany({
       where: { scanId },
-      include: { evidence: true, references: true, asset: { select: { criticality: true } } },
+      include: { evidence: true, references: true, asset: { select: { criticality: true } }, secretMetadata: true },
       orderBy: { createdAt: "asc" },
     });
     if (rows.length === 0) return null;
@@ -592,6 +897,28 @@ export class PrismaWorkerStore implements ScanRunStore {
       port: r.port ?? undefined, protocol: r.protocol ?? undefined, parameter: r.parameter ?? undefined,
       technicalImpact: r.technicalImpact ?? undefined, businessImpact: r.businessImpact ?? undefined,
       remediation: r.remediation ?? undefined,
+      // Prompt 12: source fields ride along so source findings route to
+      // the line-stable source correlation engine (§64–§68).
+      filePath: r.filePath ?? undefined, startLine: r.startLine ?? undefined, endLine: r.endLine ?? undefined,
+      startColumn: r.startColumn ?? undefined, endColumn: r.endColumn ?? undefined,
+      ruleId: r.ruleId ?? undefined,
+      codeFlow: (r.codeFlow as ProcessedFinding["codeFlow"]) ?? undefined,
+      componentPurl: r.componentPurl ?? undefined,
+      fixedVersion: r.fixedVersion ?? undefined,
+      dependencyScope: r.dependencyScope ?? undefined,
+      reachability: r.reachability ?? undefined,
+      reviewStatus: r.reviewStatus ?? undefined,
+      baselineStatus: r.baselineStatus ?? undefined,
+      ...(r.secretMetadata ? {
+        secret: {
+          secretType: r.secretMetadata.secretType,
+          detector: r.secretMetadata.detector,
+          commitSha: r.secretMetadata.commitSha ?? undefined,
+          fingerprint: r.secretMetadata.fingerprint,
+          redactedPreview: r.secretMetadata.redactedPreview ?? undefined,
+          verificationStatus: r.secretMetadata.verificationStatus,
+        },
+      } : {}),
     }));
     const criticality = rows.find((r) => r.asset)?.asset?.criticality ?? "UNSPECIFIED";
     const { findings: canonical, stats } = correlateProcessedFindings(processed, { assetCriticality: criticality, maxFindings: 1000 });

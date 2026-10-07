@@ -6,6 +6,6 @@ import { ScanEventsService } from "./scan-events.service";
 @Module({
   controllers: [OrchestrationController],
   providers: [OrchestrationService, ScanEventsService],
-  exports: [ScanEventsService],
+  exports: [ScanEventsService, OrchestrationService],
 })
 export class OrchestrationModule {}

@@ -1,6 +1,6 @@
 import {
-  API_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
-  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, isVulnScannerAdapter, type AuthorizationContext,
+  API_SLUGS, CODE_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS] as const;
 
 /** Slugs whose execution requires the worker to hold the local layer-2
  *  capability (Prompt 10 §65) — meaningless and denied anywhere else. */
@@ -81,6 +81,18 @@ export interface ExecutionContextRecord {
    *  execution may analyze (store-resolved from PacketCaptureArtifact
    *  rows for this scan — never client input). */
   captureRef?: string;
+  /** Prompt 12: the scan's source snapshot context, resolved by the
+   *  STORE from SourceRepository/SourceSnapshot rows — the workspace
+   *  path tools analyze, the repository identity fingerprints use, and
+   *  the languages the detection stage found. Never client input. */
+  source?: {
+    repositoryId?: string;
+    snapshotId?: string;
+    workspacePath?: string;
+    commitSha?: string;
+    languages?: string[];
+    sonarProjectKey?: string;
+  };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -89,7 +101,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number; packetCaptures?: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number; packetCaptures?: number; components?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -174,14 +186,16 @@ export class StageExecutor {
       // store. No instance → NOT_CONFIGURED → TOOL_UNAVAILABLE denial;
       // the DAG degrades the stage instead of inventing scanner output.
       const isVulnScanner = isVulnScannerAdapter(adapter);
-      const isConnector = isScannerConnectorAdapter(adapter) || isVulnScanner;
+      const isSonar = isSonarQubeAdapter(adapter);
+      const isConnector = isScannerConnectorAdapter(adapter) || isVulnScanner || isSonar;
       // Defense in depth (§37/§38): proxy connectors execute ONLY in the
       // passive stage; Prompt 11 vulnerability scanners execute ONLY in
-      // the network profiles' SAFE_VULNERABILITY_SCAN stage (§84) — and
-      // the ACTIVE stage stays approval-gated in a later phase.
-      if (isConnector && ctx.stageId !== "PASSIVE_SECURITY_ANALYSIS" && !(isVulnScanner && ctx.stageId === "SAFE_VULNERABILITY_SCAN")) {
+      // the network profiles' SAFE_VULNERABILITY_SCAN stage (§84);
+      // Prompt 12's SonarQube connector executes ONLY in the SAST stage
+      // (§23) — and the ACTIVE stage stays approval-gated in a later phase.
+      if (isConnector && ctx.stageId !== "PASSIVE_SECURITY_ANALYSIS" && !(isVulnScanner && ctx.stageId === "SAFE_VULNERABILITY_SCAN") && !(isSonar && ctx.stageId === "SAST")) {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
-        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: scanner connectors execute only in their governed stage (proxy: PASSIVE_SECURITY_ANALYSIS; vulnerability scanners: SAFE_VULNERABILITY_SCAN)`);
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: scanner connectors execute only in their governed stage (proxy: PASSIVE_SECURITY_ANALYSIS; vulnerability scanners: SAFE_VULNERABILITY_SCAN; sonarqube: SAST)`);
         return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
       }
       if (isConnector && !ctx.scanner?.instanceId) {
@@ -320,7 +334,7 @@ export class StageExecutor {
             ? (ctx.profile === "NETWORK_COMPREHENSIVE" ? "NETWORK_COMPREHENSIVE" : "NETWORK_BASELINE")
             : (ctx.profile === "NETWORK_COMPREHENSIVE" ? "COMPREHENSIVE" : "BASELINE");
         }
-        await emit("passive_analysis.started", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
+        if (!isSonar) await emit("passive_analysis.started", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
       }
       // Prompt 10 derived configuration — worker-computed from the
       // persisted plan + profile, never client input (§8/§11/§13/§27):
@@ -356,6 +370,25 @@ export class StageExecutor {
         const sel = adapter.scriptSelectionFor(config);
         nseSelection = { snapshot: sel.snapshot, selected: sel.selected };
       }
+      // Prompt 12 derived configuration — worker-computed from the
+      // scan's snapshot (store-resolved), never client input (§12):
+      // snapshot path, repository identity, detected languages, the
+      // governed Semgrep packs for the profile (§22), the bounded
+      // history depth (§83), and the repository's SonarQube project key.
+      // External secret verification is NEVER enabled here (§37/§44).
+      if ((CODE_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        if (declared.has("sourcePath") && ctx.source?.workspacePath) config.sourcePath = ctx.source.workspacePath;
+        if (declared.has("repositoryId") && ctx.source?.repositoryId) config.repositoryId = ctx.source.repositoryId;
+        const detectedLanguages = ctx.source?.languages;
+        if (declared.has("languages") && detectedLanguages && detectedLanguages.length > 0) config.languages = detectedLanguages;
+        if (declared.has("historyDepth")) config.historyDepth = 100;
+        if (declared.has("rulePacks") && ctx.adapterSlug === "semgrep") {
+          const profile = ctx.profile === "SOURCE_CODE" ? "SOURCE_BASELINE" : (ctx.profile ?? "SOURCE_BASELINE");
+          config.rulePacks = resolveSemgrepPacks({ profile, languages: ctx.source?.languages ?? [] }).packs;
+        }
+        if (declared.has("externalVerification")) config.externalVerification = false;
+        if (isSonar && declared.has("sonarProjectKey") && ctx.source?.sonarProjectKey) config.sonarProjectKey = ctx.source.sonarProjectKey;
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -389,7 +422,7 @@ export class StageExecutor {
       const parsed = await adapter.parse(rawOutput ?? "");
       // Raw tool output is preserved as the execution artifact (§31/§35),
       // named for the tool + format — never the normalized form.
-      const ext = plan.expectedOutputFormat === "JSONL" ? "jsonl" : plan.expectedOutputFormat === "JSON" ? "json" : "txt";
+      const ext = plan.expectedOutputFormat === "JSONL" ? "jsonl" : plan.expectedOutputFormat === "JSON" ? "json" : plan.expectedOutputFormat === "SARIF" ? "sarif" : plan.expectedOutputFormat === "XML" ? "xml" : "txt";
       const raw = rawOutput ?? JSON.stringify(parsed);
       const artifact = await this.objectStore.put(
         rawArtifactKey(ctx.scanId, ctx.executionId, `${ctx.adapterSlug}.${ext}`),
@@ -401,8 +434,9 @@ export class StageExecutor {
       const processed = processNormalizedResult(normalized, { scopeRules: ctx.scopeRules, toolExecutionId: ctx.executionId, toolSlug: ctx.adapterSlug, artifactKey: artifact.storageKey });
       const counts = await this.store.persistResult(ctx.scanId, ctx.executionId, processed);
       // Prompt 8 connector lifecycle events (§72): ids + counts only —
-      // never secrets, never traffic (§20).
-      if (isConnector) {
+      // never secrets, never traffic (§20). (SonarQube has no proxy
+      // context lifecycle — its findings flow through finding events.)
+      if (isConnector && !isSonar) {
         await emit("scanner.context_created", { stageId: ctx.stageId, tool: ctx.adapterSlug, instanceId: ctx.scanner?.instanceId ?? null });
         if (normalized.metrics.sessionExpired === 1) {
           await emit("auth_session.expired", { stageId: ctx.stageId, tool: ctx.adapterSlug });
@@ -446,6 +480,16 @@ export class StageExecutor {
         }
       }
       for (const f of processed.findings) await emit("finding.created", { stageId: ctx.stageId, isMock: f.isMock, severity: f.severity });
+      // Prompt 12 §110: source events — counts only. A secret event
+      // carries the TYPE and detector, never the value or its preview.
+      const secretFindings = processed.findings.filter((f) => f.secret);
+      if (secretFindings.length > 0) {
+        await emit("source.secret_detected", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: secretFindings.length, types: [...new Set(secretFindings.map((f) => f.secret!.secretType))].join(",") });
+      }
+      const depFindings = processed.findings.filter((f) => f.componentPurl);
+      if (depFindings.length > 0) {
+        await emit("source.dependency_vulnerability_detected", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: depFindings.length });
+      }
 
       await this.store.updateExecution(ctx.executionId, {
         status: "COMPLETED", completedAt: new Date(), exitCode: 0,
@@ -461,6 +505,7 @@ export class StageExecutor {
           transactions: counts.transactions ?? processed.transactions.length,
           webSockets: counts.webSockets ?? processed.webSockets.length,
           packetCaptures: counts.packetCaptures ?? processed.packetCaptures.length,
+          components: counts.components ?? processed.components.length,
           suppressedEndpoints: processed.suppressedEndpoints,
           ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
           ...(nseSelection ? { nseSnapshot: nseSelection.snapshot, nseScriptsSelected: nseSelection.selected } : {}),

@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 11 complete (Prompts 1–11).** Production monorepo, backend and
+> **Status — Phase 12 complete (Prompts 1–12).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -185,9 +185,40 @@ and the AI health endpoint.
 9. ✅ API security testing & protection assessment (Prompt 9)
 10. ✅ Network VAPT engine (Prompt 10)
 11. ✅ Vulnerability management & intelligence (Prompt 11) 20. Unified reporting & dashboard
-12. API/cloud/container/source-code modules 13. Lab-only modules (AD, wireless, mobile)
+12. ✅ Source code security: SAST, secrets & SCA (Prompt 12)
+13. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
+
+- **2026-10-07 — Prompt 12: Source Code Security Engine.** Repositories
+  became first-class `SOURCE_REPOSITORY` targets whose content is
+  hostile input: SSRF-guarded git intake (reference-name credentials
+  only), traversal/symlink/bomb-safe archive + snapshot manifests, and
+  immutable content-hashed snapshots — analyzed read-only under a
+  `DO_NOT_EXECUTE_SOURCE` policy (no builds, no lifecycle hooks, no git
+  hooks; build-needing analysis reports `BUILD_REQUIRED`). Ten governed
+  adapters: Semgrep (approved pack catalog per profile/language),
+  CodeQL (no-build mode + hardened SARIF import), Bandit, Brakeman,
+  SpotBugs (security findings only), SonarQube (connector; hotspots are
+  REVIEW_REQUIRED, never auto-vulnerabilities), Gitleaks, TruffleHog
+  (external verification pinned OFF), OWASP Dependency-Check (all
+  network features off) and Grype. Secrets are metadata only — type,
+  detector, file/line, one-way fingerprint, redacted preview; the raw
+  value is dropped at parse time and exists in no table, event or API
+  response (proven by fixture tests with fake secrets). SCA is
+  lockfile-first across npm/pnpm/yarn, pip/Pipenv/Poetry, Maven/Gradle,
+  Bundler, Go, Cargo and Composer; CVE matching runs ONLY against the
+  Prompt 11 governed local dataset (empty ⇒ zero matches, honestly),
+  links are POTENTIAL_EXPOSURE, fixed versions only from trusted data.
+  Line-stable fingerprints merge the same flaw across tools and
+  snapshots (NEW/EXISTING/RESOLVED baselines); CycloneDX/SPDX SBOMs are
+  deterministic per snapshot; the quality gate records PASSED/FAILED/
+  WARNING per scan. New `/code-security` GUI + repository detail
+  (snapshot, findings, secret dashboard, dependencies, SBOM),
+  `/repositories` API with the §98 permission set, migration
+  `20261007090000_code_security` (generated, not applied — no Docker on
+  the build VM). Fixture-verified end to end; tool binaries absent
+  report UNAVAILABLE honestly.
 
 - **2026-10-07 — Prompt 11: Vulnerability Management & Intelligence.**
   The management layer over findings: a full lifecycle state machine

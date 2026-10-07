@@ -86,6 +86,11 @@ export const PLATFORM_STAGE_TYPES = new Set([
   // Prompt 10: target expansion is computed by the engine/store hook
   // (bounded chunking, §5/§62) — no adapter executes for it.
   "TARGET_EXPANSION",
+  // Prompt 12: source platform stages — snapshot acquisition, language
+  // detection, dependency inventory, SBOM generation and the quality
+  // gate are engine/store hooks over the snapshot; no adapter executes.
+  "SOURCE_ACQUISITION", "LANGUAGE_DETECTION", "DEPENDENCY_INVENTORY",
+  "SBOM_GENERATION", "QUALITY_GATE",
 ]);
 
 export class InvalidPlanError extends Error {

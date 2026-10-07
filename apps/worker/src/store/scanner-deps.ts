@@ -16,7 +16,7 @@ import {
 
 const SLUG_BY_PRODUCT: Record<ScannerProduct, string> = {
   ZAP: "owasp-zap", BURP: "burp-suite-professional", CAIDO: "caido", MITMPROXY: "mitmproxy",
-  GREENBONE: "greenbone-openvas", NESSUS: "nessus-professional",
+  GREENBONE: "greenbone-openvas", NESSUS: "nessus-professional", SONARQUBE: "sonarqube",
 };
 
 type InstanceRow = {

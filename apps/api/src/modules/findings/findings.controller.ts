@@ -147,13 +147,20 @@ export class FindingsController {
   @Get(":id")
   async get(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     const { finding } = await this.load(user, id);
-    const [evidence, references, history, duplicates] = await Promise.all([
+    const [evidence, references, history, duplicates, secretMetadata] = await Promise.all([
       this.prisma.findingEvidence.findMany({ where: { findingId: id }, orderBy: { createdAt: "asc" } }),
       this.prisma.findingReference.findMany({ where: { findingId: id } }),
       this.prisma.findingHistory.findMany({ where: { findingId: id }, orderBy: { createdAt: "asc" } }),
       this.prisma.finding.findMany({ where: { duplicateOfId: id }, select: { id: true, title: true, severity: true } }),
+      // Prompt 12 §92: secret findings expose METADATA ONLY (type,
+      // detector, fingerprint, redacted preview, statuses) — no raw
+      // value exists in storage to return (§40).
+      this.prisma.secretFindingMetadata.findUnique({
+        where: { findingId: id },
+        select: { secretType: true, detector: true, fingerprint: true, redactedPreview: true, verificationStatus: true, lifecycleStatus: true, commitSha: true },
+      }),
     ]);
-    return { ...finding, evidence, references, history, duplicates };
+    return { ...finding, evidence, references, history, duplicates, ...(secretMetadata ? { secretMetadata } : {}) };
   }
 
   /** Sanitized evidence view (§29/§55): evidence was redacted at ingestion;

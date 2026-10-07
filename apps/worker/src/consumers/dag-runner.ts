@@ -49,6 +49,15 @@ export interface ScanRunStore extends ExecutionStore {
    *  checkpointing. Returns counts only — hosts are never materialized
    *  beyond the bounded cap. */
   expandNetworkTargets?(scanId: string): Promise<{ mode: string; hosts: number; chunks: number; totalHosts: number } | null>;
+  /** Prompt 12 platform-stage hooks (same optional pattern): snapshot
+   *  acquisition, language detection, dependency inventory, SBOM
+   *  generation and the quality gate — engine work over the snapshot,
+   *  counts/verdicts only in events (never secret values, §110). */
+  acquireSourceSnapshot?(scanId: string): Promise<{ snapshotHash: string; files: number; sourceKind: string } | null>;
+  detectSourceLanguages?(scanId: string): Promise<{ languages: number; primaryLanguage?: string; frameworks: number; buildSystems: number } | null>;
+  inventorySourceDependencies?(scanId: string): Promise<{ components: number; manifests: number } | null>;
+  generateSourceSbom?(scanId: string): Promise<{ format: string; checksum: string; components: number } | null>;
+  evaluateSourceQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -218,6 +227,9 @@ export class DagRunner {
     const finalStatus = finalScanStatus(statuses.values());
     await this.store.updateScan(scanId, { status: finalStatus, progress: 100, completedAt: new Date() });
     await emit(finalStatus === "COMPLETED" ? "scan.completed" : "scan.failed", { finalStatus });
+    if (plan.stages.some((s) => s.type === "QUALITY_GATE")) {
+      await emit("source.scan_completed", { finalStatus });
+    }
     return { status: finalStatus };
   }
 
@@ -308,6 +320,38 @@ export class DagRunner {
           await emit("network.targets_expanded", { stageId, mode: result.mode, hosts: result.hosts, chunks: result.chunks, totalHosts: result.totalHosts });
         }
       }
+    }
+    // Prompt 12 platform stages (§19/§96): snapshot acquisition →
+    // language detection → dependency inventory → SBOM → quality gate.
+    // The store hooks do the deterministic work; events carry counts and
+    // verdicts only.
+    if (stageId === "SOURCE_ACQUISITION") {
+      if (!this.store.acquireSourceSnapshot) return "FAILED";
+      const result = await this.store.acquireSourceSnapshot(scanId);
+      if (!result) {
+        // No acquirable snapshot exists for this scan (e.g. a git
+        // repository whose clone has not been provisioned): the scan
+        // cannot proceed honestly — acquisition is a FAIL_SCAN stage.
+        await emit("policy.denied", { stageId, reasonCode: "SOURCE_SNAPSHOT_UNAVAILABLE" });
+        return "FAILED";
+      }
+      await emit("source.snapshot_created", { stageId, snapshotHash: result.snapshotHash, files: result.files, sourceKind: result.sourceKind });
+    }
+    if (stageId === "LANGUAGE_DETECTION" && this.store.detectSourceLanguages) {
+      const result = await this.store.detectSourceLanguages(scanId);
+      if (result) await emit("source.languages_detected", { stageId, languages: result.languages, primaryLanguage: result.primaryLanguage ?? null, frameworks: result.frameworks, buildSystems: result.buildSystems });
+    }
+    if (stageId === "DEPENDENCY_INVENTORY" && this.store.inventorySourceDependencies) {
+      const result = await this.store.inventorySourceDependencies(scanId);
+      if (result) await emit("source.dependencies_inventoried", { stageId, components: result.components, manifests: result.manifests });
+    }
+    if (stageId === "SBOM_GENERATION" && this.store.generateSourceSbom) {
+      const result = await this.store.generateSourceSbom(scanId);
+      if (result) await emit("source.sbom_generated", { stageId, format: result.format, checksum: result.checksum, components: result.components });
+    }
+    if (stageId === "QUALITY_GATE" && this.store.evaluateSourceQualityGate) {
+      const result = await this.store.evaluateSourceQualityGate(scanId);
+      if (result) await emit("source.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
     }
     return "COMPLETED";
   }
