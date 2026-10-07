@@ -29,8 +29,13 @@ describe("WordlistManager (§10–§13)", () => {
   });
 
   it("falls downward only — a list is never bigger than the profile asked (§12)", () => {
-    // API_ROUTES has no SMALL-serving list: refusal beats a silent upgrade.
-    expect(() => mgr.forProfile("API_ROUTES", "SMALL")).toThrow(WordlistError);
+    // Prompt 9 §14 added the governed API_ROUTES_SMALL list, so the API
+    // category now serves SMALL exactly; the downward-only rule is
+    // proven on a category with no serving list at all: refusal beats a
+    // silent upgrade.
+    expect(mgr.forProfile("API_ROUTES", "SMALL").id).toBe("api-routes-small");
+    const noSmall = new WordlistManager(BUNDLED_WORDLISTS.filter((w) => w.id === "api-routes"));
+    expect(() => noSmall.forProfile("API_ROUTES", "SMALL")).toThrow(WordlistError);
     // With only the SMALL directories list registered, a STANDARD request
     // falls DOWN to it rather than inventing a bigger list.
     const smallOnly = new WordlistManager(BUNDLED_WORDLISTS.filter((w) => w.id === "common-directories-small"));

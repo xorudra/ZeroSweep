@@ -29,6 +29,14 @@ export const CAPABILITIES = [
   "PROXY", "PASSIVE_ANALYSIS", "CONTEXT_MANAGEMENT", "ENDPOINT_IMPORT",
   "ISSUE_IMPORT", "SITE_MAP_IMPORT", "TRAFFIC_ANALYSIS", "REQUEST_COLLECTION",
   "ACTIVE_WEB_SCANNING",
+  // Prompt 9: API security engine capabilities. JWT capabilities are
+  // INSPECTION-ONLY by design — no cracking/signature-attack capability
+  // exists anywhere in this list (§22/§79). GraphQL capabilities cover
+  // schema analysis; mutation execution is not a capability (§30).
+  "ROUTE_DISCOVERY", "SCHEMA_BASED_API_TESTING", "API_VALIDATION",
+  "JWT_INSPECTION", "JWT_CONFIGURATION_ANALYSIS",
+  "GRAPHQL_ANALYSIS", "GRAPHQL_SCHEMA_ANALYSIS",
+  "HTTP_TRAFFIC_CAPTURE", "WEBSOCKET_DISCOVERY", "SPEC_IMPORT",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

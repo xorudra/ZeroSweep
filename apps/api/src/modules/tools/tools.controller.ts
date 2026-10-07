@@ -1,14 +1,18 @@
 import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
-  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
+  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createApiAdapters, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
 } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 
-/** Prompt 8: interactive proxy scanner products (health is instance-driven). */
-const PROXY_TOOL_SLUGS: string[] = ["owasp-zap", "burp-suite-professional", "caido"];
+/** Prompt 8: interactive proxy scanner products (health is instance-driven).
+ *  Prompt 9 adds mitmproxy to the same instance-driven family. */
+const PROXY_TOOL_SLUGS: string[] = ["owasp-zap", "burp-suite-professional", "caido", "mitmproxy"];
+
+/** Prompt 9: platform importers are code, not binaries — always HEALTHY. */
+const IMPORTER_TOOL_SLUGS: string[] = ["postman", "insomnia"];
 
 const updateToolSchema = z.object({ enabled: z.boolean().optional() });
 
@@ -31,7 +35,7 @@ export class ToolsController {
   /** Recon adapters probed live for health (§39). Built once; the probe is
    *  a PATH lookup + `--version` on THIS host — the worker host probes again
    *  at execution time, and plan-time/execution-time health always wins. */
-  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters()];
+  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters(), ...createApiAdapters()];
 
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
@@ -134,6 +138,17 @@ export class ToolsController {
         version: first.version, licenseState: first.licenseState,
         detail: first.lastHealthDetail ?? "Health as of the last administrator health check",
         source: "scanner instance registry (administrator health checks; workers re-probe at execution time)",
+      };
+    }
+    // Prompt 9: the Postman/Insomnia importers are platform code (no
+    // binary, no instance) — health is HEALTHY by construction, exactly
+    // like the jwt_tool inspection adapter reports through the probe
+    // below.
+    if (IMPORTER_TOOL_SLUGS.includes(tool.slug)) {
+      return {
+        slug: tool.slug, healthStatus: "HEALTHY", installed: true,
+        detail: "Platform importer — specification/collection imports are parsed in-process under the §66/§74 guards",
+        source: "platform importer registry",
       };
     }
     // Prompt 5 §39: for adapters implemented in code, report LIVE health —

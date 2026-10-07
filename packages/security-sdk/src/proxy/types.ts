@@ -13,7 +13,7 @@ import type { Capability } from "../adapter/adapter.types";
  * at execution time through a SecretResolver.
  */
 
-export const SCANNER_PRODUCTS = ["ZAP", "BURP", "CAIDO"] as const;
+export const SCANNER_PRODUCTS = ["ZAP", "BURP", "CAIDO", "MITMPROXY"] as const;
 export type ScannerProduct = (typeof SCANNER_PRODUCTS)[number];
 
 /** Capabilities a connector product can EVER support (§4/§10/§13). What a
@@ -23,17 +23,23 @@ export const PRODUCT_CAPABILITIES: Record<ScannerProduct, Capability[]> = {
   ZAP: ["PROXY", "PASSIVE_ANALYSIS", "CONTEXT_MANAGEMENT", "ENDPOINT_IMPORT", "ISSUE_IMPORT", "WEB_CRAWLING", "ENDPOINT_DISCOVERY", "VULNERABILITY_SCANNING", "ACTIVE_WEB_SCANNING"],
   BURP: ["PROXY", "PASSIVE_ANALYSIS", "SITE_MAP_IMPORT", "ISSUE_IMPORT", "WEB_CRAWLING", "ACTIVE_WEB_SCANNING"],
   CAIDO: ["PROXY", "TRAFFIC_ANALYSIS", "ENDPOINT_DISCOVERY", "REQUEST_COLLECTION", "ISSUE_IMPORT"],
+  // Prompt 9 §33: mitmproxy contributes API TRAFFIC INTELLIGENCE —
+  // flow capture, API endpoint discovery and WebSocket inventory. It
+  // produces observations and inventory, not vulnerability findings.
+  MITMPROXY: ["PROXY", "HTTP_TRAFFIC_CAPTURE", "API_DISCOVERY", "WEBSOCKET_DISCOVERY", "ENDPOINT_IMPORT", "REQUEST_COLLECTION"],
 };
 
 export const PRODUCT_SLUGS: Record<ScannerProduct, string> = {
   ZAP: "owasp-zap",
   BURP: "burp-suite-professional",
   CAIDO: "caido",
+  MITMPROXY: "mitmproxy",
 };
 export const SLUG_PRODUCTS: Record<string, ScannerProduct> = {
   "owasp-zap": "ZAP",
   "burp-suite-professional": "BURP",
   caido: "CAIDO",
+  mitmproxy: "MITMPROXY",
 };
 
 /** How the scanner deployment is provided (§9/§55). IMPORT_ONLY instances

@@ -14,7 +14,7 @@ import { HttpScannerTransport, type ConnectorDeps } from "./connector";
  * transport is the SSRF-guarded HTTP transport. With no instances
  * registered, every connector health-reports NOT_CONFIGURED (§66).
  */
-export const PROXY_SLUGS = ["owasp-zap", "burp-suite-professional", "caido"] as const;
+export const PROXY_SLUGS = ["owasp-zap", "burp-suite-professional", "caido", "mitmproxy"] as const;
 export type ProxySlug = (typeof PROXY_SLUGS)[number];
 
 export function defaultConnectorDeps(): ConnectorDeps {

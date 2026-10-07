@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -39,6 +39,10 @@ registerVulnAdapters(registry);
 // admin-registered ScannerInstance rows. With none registered they report
 // NOT_CONFIGURED and the passive stage is honestly skipped (§66).
 registerProxyAdapters(registry, prismaScannerDeps());
+// Prompt 9: API security adapters (Kiterunner / Schemathesis / InQL /
+// GraphQLmap + the jwt_tool inspection adapter). Binaries absent from
+// the worker host report UNAVAILABLE and are never executed (§2).
+registerApiAdapters(registry);
 const executor = new StageExecutor(registry, store);
 const runner = new DagRunner(store, executor);
 const workerId = makeWorkerId();

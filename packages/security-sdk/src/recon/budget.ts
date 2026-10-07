@@ -20,6 +20,16 @@ export interface DiscoveryBudget {
   maxParameterRequests: number;
   maxVhostRequests: number;
   maxWordlistEntries: number;
+  /** API security engine ceilings (Prompt 9 §61). */
+  maxApiRequests: number;
+  maxApiRoutes: number;
+  maxSchemaOperations: number;
+  maxGraphqlOperations: number;
+  maxWebSocketEndpoints: number;
+  /** Maximum imported specification size in BYTES (§7/§66). */
+  maxSpecSize: number;
+  maxTransactions: number;
+  maxJwtTokensAnalyzed: number;
 }
 
 /** Conservative defaults for one recon run. Content discovery is
@@ -40,6 +50,15 @@ export const DEFAULT_DISCOVERY_BUDGET: DiscoveryBudget = {
   maxParameterRequests: 2_000,
   maxVhostRequests: 1_000,
   maxWordlistEntries: 10_000,
+  // Prompt 9 §61: API testing stays bounded and read-leaning by default.
+  maxApiRequests: 5_000,
+  maxApiRoutes: 2_000,
+  maxSchemaOperations: 500,
+  maxGraphqlOperations: 200,
+  maxWebSocketEndpoints: 100,
+  maxSpecSize: 5 * 1024 * 1024,
+  maxTransactions: 5_000,
+  maxJwtTokensAnalyzed: 50,
 };
 
 /** Administrator hard ceilings — no profile may exceed these. */
@@ -58,6 +77,14 @@ export const ADMIN_DISCOVERY_CAPS: DiscoveryBudget = {
   maxParameterRequests: 20_000,
   maxVhostRequests: 10_000,
   maxWordlistEntries: 100_000,
+  maxApiRequests: 50_000,
+  maxApiRoutes: 20_000,
+  maxSchemaOperations: 5_000,
+  maxGraphqlOperations: 2_000,
+  maxWebSocketEndpoints: 1_000,
+  maxSpecSize: 25 * 1024 * 1024,
+  maxTransactions: 50_000,
+  maxJwtTokensAnalyzed: 500,
 };
 
 const KEYS = Object.keys(DEFAULT_DISCOVERY_BUDGET) as (keyof DiscoveryBudget)[];
@@ -77,7 +104,8 @@ export function clampDiscoveryBudget(requested: Partial<DiscoveryBudget> = {}): 
 }
 
 export type BudgetKind = "subdomains" | "resolvedHosts" | "httpTargets" | "historicalUrls" | "crawlUrls" | "requests"
-  | "contentRequests" | "directories" | "files" | "parameterRequests" | "vhostRequests";
+  | "contentRequests" | "directories" | "files" | "parameterRequests" | "vhostRequests"
+  | "apiRequests" | "apiRoutes" | "schemaOperations" | "graphqlOperations" | "jwtTokens";
 
 const KIND_TO_KEY: Record<BudgetKind, keyof DiscoveryBudget> = {
   subdomains: "maxSubdomains",
@@ -91,6 +119,11 @@ const KIND_TO_KEY: Record<BudgetKind, keyof DiscoveryBudget> = {
   files: "maxFiles",
   parameterRequests: "maxParameterRequests",
   vhostRequests: "maxVhostRequests",
+  apiRequests: "maxApiRequests",
+  apiRoutes: "maxApiRoutes",
+  schemaOperations: "maxSchemaOperations",
+  graphqlOperations: "maxGraphqlOperations",
+  jwtTokens: "maxJwtTokensAnalyzed",
 };
 
 /** Mutable per-scan counter the pipeline consults before accepting more
@@ -99,6 +132,7 @@ export class BudgetTracker {
   private readonly counts: Record<BudgetKind, number> = {
     subdomains: 0, resolvedHosts: 0, httpTargets: 0, historicalUrls: 0, crawlUrls: 0, requests: 0,
     contentRequests: 0, directories: 0, files: 0, parameterRequests: 0, vhostRequests: 0,
+    apiRequests: 0, apiRoutes: 0, schemaOperations: 0, graphqlOperations: 0, jwtTokens: 0,
   };
   private readonly startedAt: number;
 

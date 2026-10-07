@@ -489,3 +489,90 @@ export class HarImporter {
     return out;
   }
 }
+
+// ------------------------------- mitmproxy flows (Prompt 9 §33) -------------------------------
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+interface MitmHeader { name: string; value: string }
+function mitmHeaders(raw: unknown): MitmHeader[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MitmHeader[] = [];
+  for (const pair of raw) {
+    if (Array.isArray(pair) && typeof pair[0] === "string") out.push({ name: pair[0], value: typeof pair[1] === "string" ? pair[1] : "" });
+    else if (isRecord(pair) && typeof pair.name === "string") out.push({ name: pair.name, value: typeof pair.value === "string" ? pair.value : "" });
+  }
+  return out;
+}
+function headerValue(headers: MitmHeader[], name: string): string | undefined {
+  return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
+}
+
+/**
+ * mitmproxy flow dump / mitmweb /flows parser (Prompt 9 §33/§34):
+ * traffic becomes normalized transactions (redacted display copies +
+ * hashes — raw bytes never persist), API endpoint inventory and
+ * WebSocket inventory including whether the handshake carried
+ * authentication material (presence only, §32). mitmproxy produces
+ * OBSERVATIONS and inventory — never vulnerability findings.
+ */
+export class MitmproxyFlowParser {
+  parse(raw: unknown, source: string): ParsedProxy {
+    const out = emptyParsedProxy();
+    const flows = Array.isArray(raw) ? raw : isRecord(raw) && Array.isArray((raw as Record<string, unknown>).flows) ? ((raw as Record<string, unknown>).flows as unknown[]) : null;
+    if (!flows) {
+      out.warnings.push("mitmproxy payload did not contain a flow list — nothing imported");
+      return out;
+    }
+    let dropped = 0;
+    for (const flow of flows.slice(0, MAX_IMPORT_RECORDS)) {
+      if (!isRecord(flow) || !isRecord(flow.request)) { dropped++; continue; }
+      const req = flow.request;
+      const method = typeof req.method === "string" ? req.method.toUpperCase() : "GET";
+      const scheme = typeof req.scheme === "string" ? req.scheme : "https";
+      const host = typeof req.host === "string" ? req.host : "";
+      const port = typeof req.port === "number" ? req.port : undefined;
+      const path = typeof req.path === "string" ? req.path : "/";
+      if (!host) { dropped++; continue; }
+      const defaultPort = scheme === "https" || scheme === "wss" ? 443 : 80;
+      const portPart = port !== undefined && port !== defaultPort ? `:${port}` : "";
+      const url = `${scheme}://${host}${portPart}${path}`;
+      const reqHeaders = mitmHeaders(req.headers);
+      const res = isRecord(flow.response) ? flow.response : undefined;
+      const resHeaders = res ? mitmHeaders(res.headers) : [];
+      const statusCode = res && typeof res.status_code === "number" ? res.status_code : undefined;
+      const isWebSocket = scheme === "ws" || scheme === "wss"
+        || (headerValue(reqHeaders, "upgrade") ?? "").toLowerCase() === "websocket"
+        || flow.websocket !== undefined;
+      if (isWebSocket) {
+        // §32: inventory only — messages are never inspected for attacks.
+        out.webSockets.push({
+          url: url.replace(/^http/, "ws"),
+          ...(headerValue(reqHeaders, "origin") ? { origin: headerValue(reqHeaders, "origin") } : {}),
+          ...(headerValue(reqHeaders, "sec-websocket-protocol") ? { subprotocol: headerValue(reqHeaders, "sec-websocket-protocol") } : {}),
+          source,
+          authPresent: !!(headerValue(reqHeaders, "authorization") || headerValue(reqHeaders, "cookie")),
+        });
+        continue;
+      }
+      const reqRaw = `${method} ${path} HTTP/1.1\n${reqHeaders.map((h) => `${h.name}: ${h.value}`).join("\n")}\n\n${typeof req.content === "string" ? req.content : ""}`;
+      const resRaw = res ? `HTTP/1.1 ${statusCode ?? ""}\n${resHeaders.map((h) => `${h.name}: ${h.value}`).join("\n")}\n\n${typeof res.content === "string" ? res.content : ""}` : undefined;
+      const tx = toTransaction({ method, url, statusCode, requestRaw: reqRaw, responseRaw: resRaw, source });
+      if (tx) out.transactions.push(tx);
+      const ep = endpointFromUrl(url, source, method, statusCode);
+      if (ep) {
+        if (classifyApiKind(ep.url, headerValue(resHeaders, "content-type")) !== "WEB") ep.endpointType = "API";
+        out.endpoints.push(ep);
+      }
+    }
+    if (dropped > 0) out.warnings.push(`mitmproxy import dropped ${dropped} malformed flow record(s)`);
+    out.records = out.transactions.length + out.webSockets.length;
+    out.metrics = {
+      transactions: out.transactions.length, endpoints: out.endpoints.length, webSockets: out.webSockets.length,
+      apiEndpoints: out.endpoints.filter((e) => e.endpointType === "API").length,
+    };
+    return out;
+  }
+}

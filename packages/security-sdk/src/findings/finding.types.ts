@@ -154,6 +154,97 @@ export interface NormalizedWebSocket {
   origin?: string;
   subprotocol?: string;
   source: string;
+  /** Whether the observed handshake carried authentication material
+   *  (Prompt 9 §32) — presence only; the material itself is never stored. */
+  authPresent?: boolean;
+}
+
+/** An API service (Prompt 9 §3): the inventory anchor for an API surface —
+ *  endpoints, operations, parameters, schemas and authentication hang off
+ *  services in the API inventory graph (§37). */
+export interface NormalizedApiService {
+  /** Canonical base URL of the API (origin + base path). */
+  baseUrl: string;
+  host: string;
+  apiType: "REST" | "GRAPHQL" | "WEBSOCKET" | "UNKNOWN";
+  version?: string;
+  /** Dominant authentication type observed/declared: NONE | BASIC |
+   *  BEARER | API_KEY | COOKIE | OAUTH2 | CUSTOM_HEADER (§19). */
+  authenticationType?: string;
+  /** The ApiSpecification record this service was extracted from, when
+   *  the producing layer knows it (§37 graph link). */
+  specificationId?: string;
+  /** Adapter/importer slug that reported this service (provenance, §5). */
+  source: string;
+  scopeStatus?: "IN_SCOPE" | "OUT_OF_SCOPE";
+}
+
+/** An imported API specification document (Prompt 9 §6): metadata +
+ *  checksum + object-storage reference only — raw documents belong in
+ *  object storage, never in ordinary database fields. */
+export interface NormalizedApiSpecification {
+  kind: "OPENAPI" | "SWAGGER" | "POSTMAN_COLLECTION" | "INSOMNIA_EXPORT" | "GRAPHQL_SCHEMA";
+  version?: string;
+  source: string;
+  /** sha256 of the raw document bytes. */
+  checksum: string;
+  artifactRef?: string;
+  /** URL the document was discovered at, when discovered (§9). */
+  location?: string;
+  parsedStatus: "PARSED" | "FAILED" | "REJECTED";
+  operationCount?: number;
+}
+
+/** A reusable request/response schema (Prompt 9 §36): structure only —
+ *  property NAMES, types, formats and required markers. Example VALUES
+ *  and real data never enter schema records. */
+export interface NormalizedApiSchema {
+  /** Stable name within its service (e.g. an OpenAPI component name or a
+   *  generated `POST /users requestBody` label). */
+  name: string;
+  schemaType: string;
+  requiredFields: string[];
+  /** property name → JSON-schema type/format summary (structure only). */
+  properties: Record<string, string>;
+  source: string;
+}
+
+/** A GraphQL service inventory record (Prompt 9 §26/§29). Introspection
+ *  availability is inventory metadata — never, by itself, a finding. */
+export interface NormalizedGraphqlService {
+  endpointUrl: string;
+  host: string;
+  schemaAvailable: boolean;
+  queries: number;
+  mutations: number;
+  subscriptions: number;
+  types: number;
+  authenticationRequired?: boolean;
+  source: string;
+  scopeStatus?: "IN_SCOPE" | "OUT_OF_SCOPE";
+}
+
+/** A JWT inspection record (Prompt 9 §23–§25/§65): fingerprint + header +
+ *  REDACTED claim metadata only. The raw token is never part of this
+ *  record, never persisted and never logged. */
+export interface NormalizedJwtProfile {
+  /** sha256 fingerprint of the raw token (one-way; §25). */
+  fingerprint: string;
+  algorithm: string;
+  tokenType?: string;
+  keyId?: string;
+  issuer?: string;
+  audience?: string[];
+  expiresAt?: string;
+  notBefore?: string;
+  issuedAt?: string;
+  lifetimeSeconds?: number;
+  /** Claim NAMES with safe values only — sensitive claim values are
+   *  replaced by REDACTED markers during inspection (§24/§25). */
+  claimsSummary: Record<string, unknown>;
+  source: string;
+  host?: string;
+  endpoint?: string;
 }
 
 export interface NormalizedSecurityResult {
@@ -170,6 +261,14 @@ export interface NormalizedSecurityResult {
   transactions?: NormalizedHttpTransaction[];
   /** WebSocket endpoints observed by proxy connectors (Prompt 8 §49). */
   webSockets?: NormalizedWebSocket[];
+  /** API service inventory (Prompt 9 §3/§37). */
+  apiServices?: NormalizedApiService[];
+  /** GraphQL service inventory (Prompt 9 §26). */
+  graphqlServices?: NormalizedGraphqlService[];
+  /** JWT inspection metadata — fingerprints + redacted claims only (§65). */
+  jwtProfiles?: NormalizedJwtProfile[];
+  /** Imported/discovered specification metadata (Prompt 9 §6). */
+  apiSpecifications?: NormalizedApiSpecification[];
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

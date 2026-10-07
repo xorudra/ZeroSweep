@@ -1,9 +1,9 @@
-import { MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { JwtToolAdapter, MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
 import type { ScopeRules } from "@dsrclone/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
-import { correlateProcessedFindings, type ProcessedResult } from "../executors/result-processor";
+import { correlateProcessedFindings, processNormalizedResult, type ProcessedResult } from "../executors/result-processor";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -26,10 +26,22 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL";
   /** Prompt 8: scanner bindings per connector slug, mirroring the Prisma
    *  store's workspace resolution. Absent slug = NOT_CONFIGURED. */
   scannerBySlug?: Record<string, { instanceId: string; sessionProfileId?: string }>;
+  /** Prompt 9: the guarded-import + auth-context state the API stages
+   *  read, mirroring the Prisma store's import records: specification
+   *  locations for Schemathesis, imported operations for its policy
+   *  filter, obviously-fake JWTs for the inspection hook, imported
+   *  specification counts and registered auth contexts. */
+  apiFixtures?: {
+    specUrls?: string[];
+    operations?: string[];
+    jwtTokens?: string[];
+    specifications?: { operations: number }[];
+    authContexts?: { role: string }[];
+  };
 }
 
 export class FakeStore implements ScanRunStore {
@@ -48,6 +60,10 @@ export class FakeStore implements ScanRunStore {
   forms: ProcessedResult["forms"] = [];
   transactions: ProcessedResult["transactions"] = [];
   webSockets: ProcessedResult["webSockets"] = [];
+  apiServices: ProcessedResult["apiServices"] = [];
+  graphqlServices: ProcessedResult["graphqlServices"] = [];
+  jwtProfiles: ProcessedResult["jwtProfiles"] = [];
+  apiFixtures: NonNullable<FakeStoreOptions["apiFixtures"]> = {};
   scannerBySlug: Record<string, { instanceId: string; sessionProfileId?: string }> = {};
   deadLetters: unknown[] = [];
   reportPending = false;
@@ -55,13 +71,14 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
+    this.apiFixtures = opts.apiFixtures ?? {};
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
       scanId: "scan-1", assessmentId: "a-1", targetId: "t-1", workspaceId: "ws-1", organizationId: "org-1",
@@ -128,6 +145,12 @@ export class FakeStore implements ScanRunStore {
         services: [...new Set(this.services
           .filter((s) => s.scheme === "https" || [443, 8443].includes(s.port) || ["https", "ssl", "tls"].includes(s.name))
           .map((s) => `${s.host}:${s.port}`))],
+        // Prompt 9: imported specification locations + operations from
+        // the guarded import records (fixtures here, import store in
+        // production) — the executor derives schemathesis config from
+        // these, never from clients.
+        specUrls: this.apiFixtures.specUrls ?? [],
+        operations: this.apiFixtures.operations ?? [],
       },
     };
   }
@@ -162,7 +185,7 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number }> {
+  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number }> {
     this.assets.push(...processed.assets);
     this.findings.push(...processed.findings);
     this.endpoints.push(...processed.endpoints);
@@ -172,7 +195,46 @@ export class FakeStore implements ScanRunStore {
     this.forms.push(...processed.forms);
     this.transactions.push(...processed.transactions);
     this.webSockets.push(...processed.webSockets);
-    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length };
+    this.apiServices.push(...processed.apiServices);
+    this.graphqlServices.push(...processed.graphqlServices);
+    this.jwtProfiles.push(...processed.jwtProfiles);
+    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length };
+  }
+
+  /** Prompt 9 platform hooks mirroring the Prisma store's behaviour. */
+  async consolidateApiServices(): Promise<{ services: number; endpoints: number } | null> {
+    if (this.apiServices.length === 0 && this.endpoints.length === 0) return null;
+    return { services: this.apiServices.length, endpoints: this.endpoints.length };
+  }
+
+  async summarizeApiSpecifications(): Promise<{ specifications: number; operations: number } | null> {
+    const specs = this.apiFixtures.specifications ?? [];
+    if (specs.length === 0) return null;
+    return { specifications: specs.length, operations: specs.reduce((n, s) => n + s.operations, 0) };
+  }
+
+  async mapApiAuthentication(): Promise<{ contexts: number; servicesWithAuth: number } | null> {
+    const contexts = this.apiFixtures.authContexts ?? [];
+    const servicesWithAuth = this.apiServices.filter((s) => s.authenticationType && s.authenticationType !== "NONE").length;
+    if (contexts.length === 0 && servicesWithAuth === 0) return null;
+    return { contexts: contexts.length, servicesWithAuth };
+  }
+
+  async analyzeJwtProfiles(): Promise<{ tokens: number; findings: number } | null> {
+    const tokens = this.apiFixtures.jwtTokens ?? [];
+    if (tokens.length === 0) return null;
+    const adapter = new JwtToolAdapter();
+    const parsed = adapter.inspectTokens({ tokens, host: "example.com" });
+    const normalized = await adapter.normalize(parsed);
+    const processed = processNormalizedResult(normalized, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-jwt", toolSlug: "jwt-tool" });
+    this.jwtProfiles.push(...processed.jwtProfiles);
+    this.findings.push(...processed.findings);
+    return { tokens: processed.jwtProfiles.length, findings: processed.findings.length };
+  }
+
+  async inventoryWebSockets(): Promise<{ webSockets: number; authenticated: number } | null> {
+    if (this.webSockets.length === 0) return null;
+    return { webSockets: this.webSockets.length, authenticated: this.webSockets.filter((w) => w.authPresent).length };
   }
   async recordDeadLetter(entry: unknown): Promise<void> { this.deadLetters.push(entry); }
 }

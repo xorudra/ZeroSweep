@@ -59,10 +59,14 @@ describe("Prompt 6 stages in profile templates (§48/§49)", () => {
     expect(norm.dependencies).toEqual(["PARAMETER_DISCOVERY"]);
   });
 
-  it("API_ASSESSMENT gets the same web-surface chain (§49)", () => {
+  it("API_ASSESSMENT follows the Prompt 9 API pipeline, not the web chain", () => {
+    // Prompt 9 §39 supersedes the Prompt 6 placeholder: API_ASSESSMENT is
+    // the dedicated API pipeline now (full assertions in plan-api.spec.ts).
     const types = resolveTemplate("API_ASSESSMENT").map((d) => d.type);
-    expect(types).toContain("CONTENT_DISCOVERY");
-    expect(types).toContain("WEB_SURFACE_NORMALIZATION");
+    expect(types).toContain("API_DISCOVERY");
+    expect(types).toContain("SAFE_SCHEMA_TESTING");
+    expect(types).not.toContain("CONTENT_DISCOVERY");
+    expect(types).not.toContain("WEB_SURFACE_NORMALIZATION");
   });
 
   it("PASSIVE_RECON stays passive — no active content discovery", () => {

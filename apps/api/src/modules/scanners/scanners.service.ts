@@ -221,7 +221,10 @@ export class ScannersService {
       secrets: new EnvSecretResolver(),
       transport: new HttpScannerTransport(),
     });
-    const connector = record.product === "ZAP" ? connectors.zap : record.product === "BURP" ? connectors.burp : connectors.caido;
+    const connector = record.product === "ZAP" ? connectors.zap
+      : record.product === "BURP" ? connectors.burp
+      : record.product === "MITMPROXY" ? connectors.mitmproxy
+      : connectors.caido;
     const health = await connector.healthCheck(record.id);
     const updated = await this.prisma.scannerInstance.update({
       where: { id },

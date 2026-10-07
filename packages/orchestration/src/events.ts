@@ -20,6 +20,10 @@ export const SCAN_EVENT_TYPES = [
   "scanner.context_created", "scanner.context_destroyed",
   "passive_analysis.started", "passive_analysis.completed", "passive_analysis.skipped",
   "auth_session.expired", "active_scan.denied",
+  // Prompt 9 — API security engine events (§78). Counts/ids/verdicts only.
+  "api.service_discovered", "api.spec_imported", "api.operation_blocked",
+  "jwt.analyzed", "graphql.schema_imported", "api.test_completed",
+  "api.auth_mapped", "websocket.inventoried",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

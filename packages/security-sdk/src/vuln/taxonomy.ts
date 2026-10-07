@@ -147,6 +147,63 @@ export const VULN_CLASS_TAXONOMY: Record<string, VulnClassInfo> = {
     remediation: "Review the scanner evidence, confirm applicability, and apply the vendor guidance linked in the references.",
     technicalImpact: "See the scanner-provided description and evidence for the assessed impact.",
   },
+  // Prompt 9: API security classes. The OWASP category for these comes
+  // from the OWASP API Security Top 10 2023 mapping (api/taxonomy.ts),
+  // applied by API-engine producers — the web taxonomy intentionally
+  // leaves owaspCategory undefined here so the two versions never mix.
+  JWT_ALGORITHM_CONFIGURATION: {
+    title: "JWT Algorithm Configuration Issue",
+    cwe: "CWE-327",
+    remediation: "Pin the expected signing algorithm server-side (asymmetric RS256/ES256 for public clients), reject 'none' and unexpected algorithms, and never let the token choose the verification algorithm or key type.",
+    technicalImpact: "If the API accepts attacker-chosen algorithms (e.g. 'none' or symmetric verification of an asymmetric key), forged tokens may be accepted as genuine.",
+  },
+  JWT_MISSING_EXPIRY: {
+    title: "JWT Without Expiry",
+    cwe: "CWE-613",
+    remediation: "Issue tokens with a bounded 'exp' claim and enforce expiry server-side; pair with refresh-token rotation for longer sessions.",
+    technicalImpact: "A token that never expires remains usable indefinitely if leaked, with no natural revocation point.",
+  },
+  JWT_EXCESSIVE_LIFETIME: {
+    title: "JWT With Excessively Long Lifetime",
+    cwe: "CWE-613",
+    remediation: "Shorten access-token lifetimes to the minimum the application needs and use refresh tokens for session continuity.",
+    technicalImpact: "Long-lived bearer tokens widen the window in which a stolen token can be replayed.",
+  },
+  JWT_SENSITIVE_CLAIMS: {
+    title: "Sensitive Information in JWT Claims",
+    cwe: "CWE-359",
+    remediation: "Keep secrets, credentials, and unnecessary personal data out of token claims — tokens are routinely logged, stored client-side, and readable by anyone holding them.",
+    technicalImpact: "JWT payloads are only base64url-encoded, not encrypted: anyone with the token can read every claim.",
+  },
+  JWT_ISSUER_AUDIENCE_MISMATCH: {
+    title: "JWT Issuer/Audience Inconsistency",
+    cwe: "CWE-441",
+    remediation: "Configure and enforce expected 'iss' and 'aud' values server-side so tokens minted for one service are not accepted by another.",
+    technicalImpact: "Tokens accepted across issuers or audiences enable token confusion between services and environments.",
+  },
+  EXPOSED_API_DOCUMENTATION: {
+    title: "Exposed API Documentation",
+    cwe: "CWE-200",
+    remediation: "Restrict interactive API documentation (Swagger UI / OpenAPI documents) to authenticated or internal audiences in production, or accept the exposure explicitly as a documented risk decision.",
+    technicalImpact: "Public API documentation hands attackers a complete, machine-readable map of endpoints, parameters and schemas.",
+  },
+  EXPOSED_DEBUG_ENDPOINT: {
+    title: "Exposed Debug / Management Endpoint",
+    cwe: "CWE-489",
+    remediation: "Disable debug/management endpoints in production or protect them with strong authentication and network restrictions.",
+    technicalImpact: "Debug and management endpoints can disclose internals or permit administrative actions beyond the intended API surface.",
+  },
+  API_RESPONSE_CONFORMANCE: {
+    title: "API Response Does Not Conform to Its Schema",
+    remediation: "Align the implementation with the published schema (status codes, content types, response bodies) — clients and security controls make decisions based on the documented contract.",
+    technicalImpact: "Contract drift hides behaviour from reviewers and clients; undocumented responses may carry data the schema never approved.",
+  },
+  API_SERVER_ERROR: {
+    title: "API Returns Server Errors for Valid Requests",
+    cwe: "CWE-703",
+    remediation: "Fix the server-side fault for the affected operation and add regression coverage; ensure error responses do not leak stack traces or internals.",
+    technicalImpact: "Server errors on valid input indicate unhandled code paths; verbose errors can disclose implementation details useful to attackers.",
+  },
 };
 
 /** Vulnerability-class "families": classes close enough that two findings
@@ -162,6 +219,13 @@ export const VULN_CLASS_FAMILIES: Record<string, string> = {
   COOKIE_NO_SECURE: "COOKIE",
   COOKIE_NO_SAMESITE: "COOKIE",
   MISSING_SECURITY_HEADERS: "HEADERS",
+  JWT_ALGORITHM_CONFIGURATION: "JWT",
+  JWT_MISSING_EXPIRY: "JWT",
+  JWT_EXCESSIVE_LIFETIME: "JWT",
+  JWT_SENSITIVE_CLAIMS: "JWT",
+  JWT_ISSUER_AUDIENCE_MISMATCH: "JWT",
+  EXPOSED_API_DOCUMENTATION: "EXPOSURE",
+  EXPOSED_DEBUG_ENDPOINT: "EXPOSURE",
 };
 
 export function vulnClassFamily(vulnClass: string): string {

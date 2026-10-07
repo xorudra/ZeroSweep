@@ -275,6 +275,9 @@ importers:
       '@dsrclone/validation':
         specifier: workspace:*
         version: link:../validation
+      js-yaml:
+        specifier: 4.3.2
+        version: 4.3.2
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

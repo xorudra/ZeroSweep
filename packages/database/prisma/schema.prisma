@@ -118,6 +118,15 @@ enum ScanStageType {
   SAFE_VULNERABILITY_SCAN
   PASSIVE_SECURITY_ANALYSIS
   ACTIVE_SECURITY_ANALYSIS
+  API_DISCOVERY
+  SPEC_IMPORT
+  ROUTE_DISCOVERY
+  AUTH_MAPPING
+  SAFE_SCHEMA_TESTING
+  JWT_ANALYSIS
+  GRAPHQL_ANALYSIS
+  WEBSOCKET_INVENTORY
+  API_FINDING_NORMALIZATION
   NORMALIZATION
   CORRELATION
   RISK_ANALYSIS
@@ -307,6 +316,16 @@ enum AuditAction {
   SCANNER_INSTANCE_REGISTERED
   SCANNER_INSTANCE_UPDATED
   SCANNER_IMPORT_COMPLETED
+  // Prompt 9 §77: API security engine audit actions. Metadata for these
+  // actions never contains tokens, credentials or payload values (§65).
+  API_SPEC_IMPORTED
+  API_DISCOVERY_STARTED
+  API_DISCOVERY_COMPLETED
+  API_OPERATION_BLOCKED
+  JWT_ANALYZED
+  GRAPHQL_SCHEMA_IMPORTED
+  STATE_CHANGING_OPERATION_DENIED
+  API_TEST_COMPLETED
 }
 
 enum NotificationType {
@@ -508,6 +527,17 @@ model Endpoint {
   endpointType     String              @default("UNKNOWN")
   classification   String?
   sources          String[]            @default([])
+  // Prompt 9 §35/§37: API operation identity — the spec operationId, the
+  // path TEMPLATE (with {param} placeholders, never concrete object ids),
+  // declared content types, the reusable schema records this operation
+  // uses (§36), and its DECLARED authentication requirement (§19).
+  operationId      String?
+  path             String?
+  contentTypes     String[]            @default([])
+  requestSchemaId  String?
+  responseSchemaId String?
+  authRequired     Boolean?
+  authSchemes      String[]            @default([])
   parameters       EndpointParameter[]
   forms            EndpointForm[]
   asset            Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -1066,11 +1096,195 @@ model WebSocketEndpoint {
   subprotocol String?
   source      String
   scopeStatus String   @default("IN_SCOPE")
+  // Prompt 9 §32: whether the observed handshake carried authentication
+  // material — PRESENCE only; the material itself is never stored.
+  authPresent Boolean?
   scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 
   @@unique([scanId, url])
   @@index([scanId])
+}
+
+// ------------------------------- API security (Prompt 9) -------------------------------
+// The API inventory graph (§37): services → specifications → operations
+// (Endpoint rows) → parameters/schemas → auth contexts → findings. Raw
+// specification documents live in object storage (artifactRef +
+// checksum); only parsed metadata is stored here (§6). No credential
+// VALUES exist anywhere in these models — references only (§18/§21).
+
+model ApiService {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  assetId            String
+  baseUrl            String
+  host               String
+  // REST | GRAPHQL | WEBSOCKET | UNKNOWN (§3)
+  apiType            String   @default("UNKNOWN")
+  version            String?
+  // NONE | BASIC | BEARER | API_KEY | COOKIE | OAUTH2 | CUSTOM_HEADER (§19)
+  authenticationType String?
+  specificationId    String?
+  source             String
+  scopeStatus        String   @default("IN_SCOPE")
+  firstSeen          DateTime @default(now())
+  lastSeen           DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([assetId, baseUrl])
+  @@index([workspaceId])
+  @@index([assetId])
+}
+
+model ApiSpecification {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  targetId       String?
+  assetId        String?
+  apiServiceId   String?
+  // OPENAPI | SWAGGER | POSTMAN_COLLECTION | INSOMNIA_EXPORT | GRAPHQL_SCHEMA
+  kind           String
+  version        String?
+  source         String
+  // sha256 of the raw document + its object-storage reference (§6).
+  checksum       String
+  artifactRef    String?
+  location       String?
+  // PENDING | PARSED | FAILED | REJECTED
+  parsedStatus   String   @default("PENDING")
+  operationCount Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([targetId])
+  @@index([assetId])
+}
+
+model ApiSchema {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  apiServiceId   String?
+  name           String
+  schemaType     String
+  requiredFields String[] @default([])
+  // property name → type/format summary. STRUCTURE ONLY (§36): example
+  // values and real data never enter schema records.
+  properties     Json     @default("{}")
+  source         String
+  artifactRef    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([apiServiceId])
+}
+
+model GraphqlService {
+  id                     String   @id @default(uuid())
+  workspaceId            String
+  assetId                String?
+  endpointUrl            String
+  schemaAvailable        Boolean  @default(false)
+  queries                Int      @default(0)
+  mutations              Int      @default(0)
+  subscriptions          Int      @default(0)
+  types                  Int      @default(0)
+  authenticationRequired Boolean?
+  source                 String
+  scopeStatus            String   @default("IN_SCOPE")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([workspaceId, endpointUrl])
+  @@index([workspaceId])
+}
+
+model JwtProfile {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  scanId          String?
+  targetId        String?
+  // sha256 fingerprint of the token (§25). The RAW TOKEN IS NEVER STORED.
+  fingerprint     String
+  algorithm       String
+  tokenType       String?
+  keyId           String?
+  issuer          String?
+  audience        String[]  @default([])
+  expiresAt       DateTime?
+  notBefore       DateTime?
+  issuedAt        DateTime?
+  lifetimeSeconds Int?
+  // Claim names with safe values only — sensitive claim values were
+  // replaced by REDACTED markers during inspection (§24/§25).
+  claimsSummary   Json      @default("{}")
+  source          String
+  host            String?
+  endpoint        String?
+  createdAt       DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([scanId])
+  @@index([fingerprint])
+}
+
+// An authentication context for API testing (§20/§21): a ROLE bound to
+// Phase 8 profile records by id + a credential REFERENCE. No values.
+model ApiAuthContext {
+  id                      String   @id @default(uuid())
+  workspaceId             String
+  apiServiceId            String?
+  // ANONYMOUS | USER_A | USER_B | ADMIN_TEST
+  role                    String
+  authenticationProfileId String?
+  sessionProfileId        String?
+  credentialReference     String?
+  createdBy               String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([apiServiceId])
+}
+
+// Authorization test case ARCHITECTURE (§42): a design record for a
+// future, separately-approved test. approvalStatus starts NOT_APPROVED
+// and NOTHING executes these records in this phase — no cross-account
+// object access, no enumeration of other users' objects.
+model AuthorizationTestCase {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  endpointId         String?
+  // Object identifier TEMPLATE (e.g. {userId}) — never a real user's id.
+  objectIdentifier   String?
+  identityAContextId String?
+  identityBContextId String?
+  expectedAccess     String?
+  observedAccess     String?
+  // NOT_APPROVED | APPROVED | REJECTED
+  approvalStatus     String   @default("NOT_APPROVED")
+  createdBy          String
+  createdAt          DateTime @default(now())
+
+  @@index([workspaceId])
+}
+
+// Safe test-data profile (§18): values an authorized admin provides for
+// future schema testing. The platform never invents production-like
+// data and never defaults to real customer data.
+model TestDataProfile {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  values      Json     @default("{}")
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
 }
 
 // A human approval for an intrusive capability (§41–§43): bound to a scope

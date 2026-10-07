@@ -68,6 +68,13 @@ export const NUCLEI_TEMPLATE_CATALOG: NucleiTemplateMeta[] = [
   T({ id: "ssrf-oast-probe", name: "SSRF Out-of-Band Probe", severity: "HIGH", classification: "INTRUSIVE", vulnClass: "GENERIC_VULNERABILITY", tags: ["ssrf", "oast"], source: "http/vulnerabilities" }),
   T({ id: "default-login-check", name: "Default Credential Check", severity: "CRITICAL", classification: "DISABLED", vulnClass: "GENERIC_VULNERABILITY", tags: ["default-login", "credential"], source: "http/default-logins" }),
   T({ id: "fuzzing-parameter-dos", name: "Parameter Fuzzing (Load)", severity: "MEDIUM", classification: "DISABLED", vulnClass: "GENERIC_VULNERABILITY", tags: ["fuzz", "dos"], source: "http/fuzzing" }),
+  // Prompt 9 §38: API-safe Nuclei checks — passive exposure/observation
+  // templates only. CORS + missing-authentication checks stay
+  // REVIEW_REQUIRED (they interpret responses, so the comprehensive
+  // approval gate keeps applying); nothing here performs injection,
+  // authorization bypass or state-changing API exploitation (§38/§79).
+  T({ id: "exposed-openapi-spec", name: "Exposed OpenAPI Specification", severity: "INFORMATIONAL", classification: "SAFE", vulnClass: "EXPOSED_API_DOCUMENTATION", tags: ["api", "exposure", "docs"], source: "http/exposures" }),
+  T({ id: "api-debug-endpoint-exposure", name: "Exposed API Debug Endpoint", severity: "MEDIUM", classification: "SAFE", vulnClass: "EXPOSED_DEBUG_ENDPOINT", tags: ["api", "exposure", "debug"], source: "http/exposures" }),
 ];
 
 const DISABLED_TAG = ["dos", "fuzz", "credential", "default-login", "bruteforce", "rce"];

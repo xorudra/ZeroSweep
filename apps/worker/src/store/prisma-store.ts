@@ -1,7 +1,9 @@
 import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
-import { PROXY_SLUGS, computeRisk } from "@dsrclone/security-sdk";
+import {
+  EnvSecretResolver, JwtToolAdapter, PROXY_SLUGS, clampDiscoveryBudget, computeRisk,
+} from "@dsrclone/security-sdk";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
@@ -112,7 +114,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  in-scope asset hostnames and endpoint URLs discovered so far. Capped so
    *  a huge inventory can't blow up an adapter invocation; out-of-scope
    *  assets are NEVER handed to downstream tools. */
-  private async loadStageInputs(targetId: string): Promise<{ hosts: string[]; urls: string[]; technologies: string[]; services: string[] }> {
+  private async loadStageInputs(targetId: string): Promise<{ hosts: string[]; urls: string[]; technologies: string[]; services: string[]; specUrls: string[]; operations: string[] }> {
     const assets = await prisma.asset.findMany({
       where: { targetId, scopeStatus: "IN_SCOPE" },
       select: { id: true, host: true },
@@ -145,7 +147,31 @@ export class PrismaWorkerStore implements ScanRunStore {
       take: 200,
     });
     const services = [...new Set(tlsServices.map((s) => `${s.asset.host}:${s.port}`))];
-    return { hosts: assets.map((a) => a.host), urls: endpoints.map((e) => e.url), technologies: technologies.map((t) => t.name), services };
+    // Prompt 9 (§15): specification locations + imported operations for
+    // the schema-testing stage, from the guarded import records of THIS
+    // target. Locations are the discovered document URLs; content
+    // imports contribute their object-storage reference. Operations are
+    // encoded "METHOD path operationId?" for the adapter's policy
+    // filter — derived from persisted endpoint inventory only.
+    const specifications = await prisma.apiSpecification.findMany({
+      where: { targetId, kind: { in: ["OPENAPI", "SWAGGER"] }, parsedStatus: "PARSED" },
+      select: { location: true, artifactRef: true },
+      take: 20,
+      orderBy: { createdAt: "asc" },
+    });
+    const specUrls = specifications.map((s) => s.location ?? s.artifactRef).filter((v): v is string => !!v);
+    const operationRows = assets.length === 0 ? [] : await prisma.endpoint.findMany({
+      where: { assetId: { in: assets.map((a) => a.id) }, scopeStatus: "IN_SCOPE" },
+      select: { url: true, method: true, path: true, operationId: true },
+      take: 2000,
+      orderBy: { createdAt: "asc" },
+    });
+    const operations = operationRows.map((e) => {
+      let path = e.path ?? undefined;
+      if (!path) { try { path = new URL(e.url).pathname; } catch { path = e.url; } }
+      return `${e.method} ${path}${e.operationId ? ` ${e.operationId}` : ""}`;
+    });
+    return { hosts: assets.map((a) => a.host), urls: endpoints.map((e) => e.url), technologies: technologies.map((t) => t.name), services, specUrls, operations };
   }
 
   async updateExecution(id: string, patch: Record<string, unknown>): Promise<void> {
@@ -158,9 +184,9 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number }> {
+  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
-    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0 };
+    if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0 };
     const assetIdByHost = new Map<string, string>();
     for (const asset of processed.assets) {
       const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: asset.host } });
@@ -222,7 +248,14 @@ export class PrismaWorkerStore implements ScanRunStore {
     const endpointIdByUrl = new Map<string, string>();
     for (const ep of processed.endpoints) {
       const host = hostOf(ep.url);
-      const assetId = assetIdByHost.get(host);
+      // Fallback (Prompt 9): endpoints from stages whose own result
+      // carried no assets (route discovery, traffic import) attach to
+      // the asset row earlier stages already recorded for this target.
+      let assetId = assetIdByHost.get(host);
+      if (!assetId) {
+        const existingAsset = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host } });
+        if (existingAsset) { assetId = existingAsset.id; assetIdByHost.set(host, assetId); }
+      }
       if (!assetId) continue;
       const existingEp = await prisma.endpoint.findFirst({ where: { assetId, url: ep.url } });
       if (existingEp) {
@@ -343,12 +376,86 @@ export class PrismaWorkerStore implements ScanRunStore {
     for (const ws of processed.webSockets) {
       await prisma.webSocketEndpoint.upsert({
         where: { scanId_url: { scanId, url: ws.url } },
-        create: { scanId, workspaceId: scan.workspaceId, url: ws.url, origin: ws.origin, subprotocol: ws.subprotocol, source: ws.source, scopeStatus: ws.scopeStatus },
-        update: { origin: ws.origin, subprotocol: ws.subprotocol, source: ws.source, scopeStatus: ws.scopeStatus },
+        create: { scanId, workspaceId: scan.workspaceId, url: ws.url, origin: ws.origin, subprotocol: ws.subprotocol, source: ws.source, scopeStatus: ws.scopeStatus, authPresent: ws.authPresent },
+        update: { origin: ws.origin, subprotocol: ws.subprotocol, source: ws.source, scopeStatus: ws.scopeStatus, authPresent: ws.authPresent ?? undefined },
       });
       webSockets++;
     }
-    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets };
+    // API services (Prompt 9 §3/§37): upserted per asset+baseUrl. The
+    // owning asset is resolved from this result, from earlier stages'
+    // rows, or created as a recorded (never promoted) asset — an
+    // out-of-scope API base is stored with its verdict, exactly like a
+    // discovered asset (§5).
+    let apiServices = 0;
+    const resolveAssetId = async (host: string, scopeStatus: string): Promise<string | undefined> => {
+      const known = assetIdByHost.get(host);
+      if (known) return known;
+      const existing = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host } });
+      if (existing) { assetIdByHost.set(host, existing.id); return existing.id; }
+      const created = await prisma.asset.create({
+        data: { workspaceId: scan.workspaceId, targetId: scan.assessment.targetId, host, type: "HOST", scopeStatus, sources: [], discoveredByScanId: scanId },
+      });
+      assetIdByHost.set(host, created.id);
+      return created.id;
+    };
+    for (const svc of processed.apiServices) {
+      const assetId = await resolveAssetId(svc.host, svc.scopeStatus);
+      if (!assetId) continue;
+      await prisma.apiService.upsert({
+        where: { assetId_baseUrl: { assetId, baseUrl: svc.baseUrl } },
+        create: {
+          workspaceId: scan.workspaceId, assetId, baseUrl: svc.baseUrl, host: svc.host, apiType: svc.apiType,
+          version: svc.version, authenticationType: svc.authenticationType, specificationId: svc.specificationId,
+          source: svc.source, scopeStatus: svc.scopeStatus,
+        },
+        update: {
+          apiType: svc.apiType, version: svc.version, authenticationType: svc.authenticationType,
+          specificationId: svc.specificationId, source: svc.source, scopeStatus: svc.scopeStatus, lastSeen: new Date(),
+        },
+      });
+      apiServices++;
+    }
+    // GraphQL services (§26): upserted per workspace+endpoint.
+    let graphqlServices = 0;
+    for (const g of processed.graphqlServices) {
+      const assetId = await resolveAssetId(g.host, g.scopeStatus);
+      await prisma.graphqlService.upsert({
+        where: { workspaceId_endpointUrl: { workspaceId: scan.workspaceId, endpointUrl: g.endpointUrl } },
+        create: {
+          workspaceId: scan.workspaceId, assetId, endpointUrl: g.endpointUrl, schemaAvailable: g.schemaAvailable,
+          queries: g.queries, mutations: g.mutations, subscriptions: g.subscriptions, types: g.types,
+          authenticationRequired: g.authenticationRequired, source: g.source, scopeStatus: g.scopeStatus,
+        },
+        update: {
+          assetId, schemaAvailable: g.schemaAvailable, queries: g.queries, mutations: g.mutations,
+          subscriptions: g.subscriptions, types: g.types, authenticationRequired: g.authenticationRequired,
+          source: g.source, scopeStatus: g.scopeStatus,
+        },
+      });
+      graphqlServices++;
+    }
+    // JWT profiles (§25): metadata only — fingerprint, header and
+    // redacted claims. Deduped per scan+fingerprint; the raw token does
+    // not exist in any processed shape, so nothing secret can land here.
+    let jwtProfiles = 0;
+    for (const p of processed.jwtProfiles) {
+      const existing = await prisma.jwtProfile.findFirst({ where: { scanId, fingerprint: p.fingerprint } });
+      if (existing) continue;
+      await prisma.jwtProfile.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId, targetId: scan.assessment.targetId,
+          fingerprint: p.fingerprint, algorithm: p.algorithm, tokenType: p.tokenType, keyId: p.keyId,
+          issuer: p.issuer, audience: p.audience ?? [], source: p.source, host: p.host, endpoint: p.endpoint,
+          lifetimeSeconds: p.lifetimeSeconds,
+          claimsSummary: p.claimsSummary as never,
+          ...(p.expiresAt ? { expiresAt: new Date(p.expiresAt) } : {}),
+          ...(p.notBefore ? { notBefore: new Date(p.notBefore) } : {}),
+          ...(p.issuedAt ? { issuedAt: new Date(p.issuedAt) } : {}),
+        },
+      });
+      jwtProfiles++;
+    }
+    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles };
   }
 
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
@@ -439,6 +546,136 @@ export class PrismaWorkerStore implements ScanRunStore {
       updated++;
     }
     return { updated };
+  }
+
+  // ---------- Prompt 9 platform-stage hooks ----------
+
+  /** API_DISCOVERY hook (§5): counts of the consolidated API inventory
+   *  for this scan's target. */
+  async consolidateApiServices(scanId: string): Promise<{ services: number; endpoints: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph) return null;
+    const assets = await prisma.asset.findMany({ where: { targetId: graph.assessment.targetId }, select: { id: true } });
+    if (assets.length === 0) return null;
+    const ids = assets.map((a) => a.id);
+    const [services, endpoints] = await Promise.all([
+      prisma.apiService.count({ where: { assetId: { in: ids } } }),
+      prisma.endpoint.count({ where: { assetId: { in: ids } } }),
+    ]);
+    if (services === 0 && endpoints === 0) return null;
+    return { services, endpoints };
+  }
+
+  /** SPEC_IMPORT hook (§6): what the guarded import store holds for
+   *  this target. */
+  async summarizeApiSpecifications(scanId: string): Promise<{ specifications: number; operations: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph) return null;
+    const specs = await prisma.apiSpecification.findMany({
+      where: { targetId: graph.assessment.targetId },
+      select: { operationCount: true },
+    });
+    if (specs.length === 0) return null;
+    return { specifications: specs.length, operations: specs.reduce((n, s) => n + (s.operationCount ?? 0), 0) };
+  }
+
+  /** AUTH_MAPPING hook (§19–§21): registered contexts + services with a
+   *  declared authentication type. References only — no secret is
+   *  resolved or used here. */
+  async mapApiAuthentication(scanId: string): Promise<{ contexts: number; servicesWithAuth: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph) return null;
+    const assets = await prisma.asset.findMany({ where: { targetId: graph.assessment.targetId }, select: { id: true } });
+    const [contexts, servicesWithAuth] = await Promise.all([
+      prisma.apiAuthContext.count({ where: { workspaceId: graph.workspaceId } }),
+      assets.length === 0 ? Promise.resolve(0) : prisma.apiService.count({
+        where: { assetId: { in: assets.map((a) => a.id) }, authenticationType: { notIn: ["NONE"] }, NOT: { authenticationType: null } },
+      }),
+    ]);
+    if (contexts === 0 && servicesWithAuth === 0) return null;
+    return { contexts, servicesWithAuth };
+  }
+
+  /** JWT_ANALYSIS hook (§22–§25): resolve the workspace's registered
+   *  credential REFERENCES (API auth contexts + session profiles) inside
+   *  this trusted boundary; values that parse as JWTs are inspected.
+   *  Only fingerprints + redacted metadata persist — the token itself is
+   *  dropped when this function returns. Findings flow into the scan's
+   *  finding set ahead of NORMALIZATION/CORRELATION. */
+  async analyzeJwtProfiles(scanId: string): Promise<{ tokens: number; findings: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph) return null;
+    const budget = clampDiscoveryBudget();
+    const [contexts, sessions] = await Promise.all([
+      prisma.apiAuthContext.findMany({ where: { workspaceId: graph.workspaceId }, select: { credentialReference: true } }),
+      prisma.sessionProfile.findMany({ where: { workspaceId: graph.workspaceId }, select: { credentialReference: true } }),
+    ]);
+    const references = [...new Set([...contexts, ...sessions].map((r) => r.credentialReference).filter((v): v is string => !!v))];
+    if (references.length === 0) return null;
+    const resolver = new EnvSecretResolver();
+    const tokens: string[] = [];
+    for (const reference of references) {
+      if (tokens.length >= budget.maxJwtTokensAnalyzed) break;
+      const value = await resolver.resolve(reference).catch(() => undefined);
+      // A resolved value is a candidate ONLY when it is JWT-shaped; any
+      // other secret (passwords, API keys) is never inspected or stored.
+      if (value && value.split(".").length === 3) tokens.push(value);
+    }
+    if (tokens.length === 0) return null;
+    const adapter = new JwtToolAdapter();
+    const parsed = adapter.inspectTokens({ tokens, host: hostOf(graph.assessment.target.value) });
+    const normalized = await adapter.normalize(parsed);
+    // Persist profiles (deduped per scan+fingerprint).
+    for (const p of normalized.jwtProfiles ?? []) {
+      const existing = await prisma.jwtProfile.findFirst({ where: { scanId, fingerprint: p.fingerprint } });
+      if (existing) continue;
+      await prisma.jwtProfile.create({
+        data: {
+          workspaceId: graph.workspaceId, scanId, targetId: graph.assessment.targetId,
+          fingerprint: p.fingerprint, algorithm: p.algorithm, tokenType: p.tokenType, keyId: p.keyId,
+          issuer: p.issuer, audience: p.audience ?? [], source: p.source, host: p.host, endpoint: p.endpoint,
+          lifetimeSeconds: p.lifetimeSeconds, claimsSummary: p.claimsSummary as never,
+          ...(p.expiresAt ? { expiresAt: new Date(p.expiresAt) } : {}),
+          ...(p.notBefore ? { notBefore: new Date(p.notBefore) } : {}),
+          ...(p.issuedAt ? { issuedAt: new Date(p.issuedAt) } : {}),
+        },
+      });
+    }
+    // Persist findings through the same normalized shape the tool
+    // stages produce (fingerprint + evidence + history), ahead of the
+    // NORMALIZATION stage. toolExecutionId stays null: platform stage.
+    let findings = 0;
+    for (const f of normalized.findings) {
+      const v = f as typeof f & { vulnClass?: string; evidenceDetail?: { checkId?: string; metadata?: Record<string, string> } };
+      const asset = f.host ? await prisma.asset.findFirst({ where: { targetId: graph.assessment.targetId, host: f.host } }) : null;
+      await prisma.finding.create({
+        data: {
+          workspaceId: graph.workspaceId, scanId, assetId: asset?.id,
+          title: f.title, description: f.description, severity: f.severity as never, confidence: f.confidence,
+          host: f.host, endpoint: f.endpoint, fingerprint: f.sourceFingerprint, isMock: false,
+          toolExecutionId: null, status: "OPEN", verificationStatus: "UNVERIFIED",
+          vulnClass: v.vulnClass, sources: [f.sourceTool], cwe: f.cwe, owaspCategory: f.owaspCategory,
+          remediation: f.remediation,
+          evidence: {
+            create: [{
+              sourceTool: f.sourceTool, evidenceType: "TEXT", summary: f.evidence ?? "",
+              fingerprint: f.sourceFingerprint, metadata: (v.evidenceDetail?.metadata ?? undefined) as never,
+            }],
+          },
+          history: { create: { workspaceId: graph.workspaceId, event: "CREATED", metadata: { sourceTool: f.sourceTool, stage: "JWT_ANALYSIS" } as never } },
+        },
+      });
+      findings++;
+    }
+    return { tokens: (normalized.jwtProfiles ?? []).length, findings };
+  }
+
+  /** WEBSOCKET_INVENTORY hook (§31/§32): counts from this scan's
+   *  persisted WebSocket inventory. */
+  async inventoryWebSockets(scanId: string): Promise<{ webSockets: number; authenticated: number } | null> {
+    const rows = await prisma.webSocketEndpoint.findMany({ where: { scanId }, select: { authPresent: true } });
+    if (rows.length === 0) return null;
+    return { webSockets: rows.length, authenticated: rows.filter((r) => r.authPresent).length };
   }
 
   async recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void> {

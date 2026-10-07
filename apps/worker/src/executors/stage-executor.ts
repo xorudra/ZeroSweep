@@ -1,5 +1,5 @@
 import {
-  NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  API_SLUGS, NucleiAdapter, PROXY_SLUGS, RECON_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
   approvedReviewIdsForProfile, evaluateToolPolicy, isScannerConnectorAdapter, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS] as const;
 
 export interface ExecutionContextRecord {
   executionId: string;
@@ -51,7 +51,13 @@ export interface ExecutionContextRecord {
    *  asset hostnames and endpoint URLs, loaded from persisted state by the
    *  store — never from queue payloads. Adapters receive only the fields
    *  their declared input schema accepts. */
-  stageInputs?: { hosts: string[]; urls: string[]; technologies?: string[]; services?: string[] };
+  stageInputs?: {
+    hosts: string[]; urls: string[]; technologies?: string[]; services?: string[];
+    /** Prompt 9: imported specification locations + imported operations
+     *  (encoded "METHOD path operationId?"), loaded by the store from the
+     *  guarded import records — never from queue payloads (§15). */
+    specUrls?: string[]; operations?: string[];
+  };
   /** The scan's assessment profile (from the persisted plan) — drives
    *  Prompt 6 wordlist profile selection: WEB_BASELINE → SMALL, anything
    *  broader → STANDARD. COMPREHENSIVE is never selected automatically. */
@@ -71,7 +77,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -224,7 +230,20 @@ export class StageExecutor {
       // COMPREHENSIVE automatically), and wfuzz's template follows the
       // stage (parameter stage → PARAMETER template, else CONTENT).
       if (declared.has("wordlistProfile")) {
-        config.wordlistProfile = ctx.profile === "WEB_BASELINE" ? "SMALL" : "STANDARD";
+        // Prompt 9 §14/§39: the API baseline also stays SMALL — bigger
+        // route lists are never auto-selected for baseline profiles.
+        config.wordlistProfile = ctx.profile === "WEB_BASELINE" || ctx.profile === "API_ASSESSMENT" ? "SMALL" : "STANDARD";
+      }
+      // Prompt 9 derived configuration — worker-computed from the
+      // guarded import store, never client input (§15): the schema
+      // location Schemathesis tests against and the imported operations
+      // its policy filter partitions. allowStateChanging is NEVER set
+      // here: the baseline cannot execute state-changing operations.
+      if (declared.has("schemaUrl") && (ctx.stageInputs?.specUrls?.length ?? 0) > 0) {
+        config.schemaUrl = ctx.stageInputs!.specUrls![0];
+      }
+      if (declared.has("operations") && (ctx.stageInputs?.operations?.length ?? 0) > 0) {
+        config.operations = ctx.stageInputs!.operations;
       }
       if (declared.has("template")) {
         config.template = ctx.stageId === "PARAMETER_DISCOVERY" ? "PARAMETER" : "CONTENT";
@@ -312,6 +331,20 @@ export class StageExecutor {
         else await emit("asset.out_of_scope", { stageId: ctx.stageId, host: a.host, tool: ctx.adapterSlug });
       }
       if (processed.endpoints.length > 0) await emit("endpoint.discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.endpoints.length });
+      // Prompt 9 §78: API inventory/test events — counts and verdicts
+      // only, never payloads, tokens or traffic.
+      if (processed.apiServices.length > 0) {
+        await emit("api.service_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.apiServices.length });
+      }
+      if (processed.graphqlServices.length > 0) {
+        await emit("graphql.schema_imported", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.graphqlServices.length });
+      }
+      if (processed.jwtProfiles.length > 0) {
+        await emit("jwt.analyzed", { stageId: ctx.stageId, tool: ctx.adapterSlug, tokens: processed.jwtProfiles.length });
+      }
+      if (typeof normalized.metrics.blockedOperations === "number" && normalized.metrics.blockedOperations > 0) {
+        await emit("api.operation_blocked", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: normalized.metrics.blockedOperations });
+      }
       for (const f of processed.findings) await emit("finding.created", { stageId: ctx.stageId, isMock: f.isMock, severity: f.severity });
 
       await this.store.updateExecution(ctx.executionId, {

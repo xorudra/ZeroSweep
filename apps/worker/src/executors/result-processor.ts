@@ -169,7 +169,39 @@ export interface ProcessedWebSocket {
   subprotocol?: string;
   source: string;
   scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+  /** Prompt 9 §32: authentication material presence on the handshake. */
+  authPresent?: boolean;
 }
+
+/** Prompt 9 §3/§37: API service inventory with a scope verdict. */
+export interface ProcessedApiService {
+  baseUrl: string;
+  host: string;
+  apiType: string;
+  version?: string;
+  authenticationType?: string;
+  specificationId?: string;
+  source: string;
+  scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+}
+
+/** Prompt 9 §26: GraphQL service inventory with a scope verdict. */
+export interface ProcessedGraphqlService {
+  endpointUrl: string;
+  host: string;
+  schemaAvailable: boolean;
+  queries: number;
+  mutations: number;
+  subscriptions: number;
+  types: number;
+  authenticationRequired?: boolean;
+  source: string;
+  scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+}
+
+/** Prompt 9 §25: JWT inspection metadata — fingerprint + redacted claims
+ *  only; a raw token can never reach this shape. */
+export type ProcessedJwtProfile = import("@dsrclone/security-sdk").NormalizedJwtProfile;
 
 export interface ProcessedResult {
   assets: ProcessedAsset[];
@@ -177,6 +209,10 @@ export interface ProcessedResult {
   services: ProcessedService[];
   technologies: ProcessedTechnology[];
   findings: ProcessedFinding[];
+  /** Prompt 9: API + GraphQL inventory and JWT inspection metadata. */
+  apiServices: ProcessedApiService[];
+  graphqlServices: ProcessedGraphqlService[];
+  jwtProfiles: ProcessedJwtProfile[];
   /** Prompt 8: proxy-observed traffic + WebSocket inventory. */
   transactions: ProcessedTransaction[];
   webSockets: ProcessedWebSocket[];
@@ -484,10 +520,57 @@ export function processNormalizedResult(
       ...(ws.subprotocol ? { subprotocol: ws.subprotocol } : {}),
       source: ws.source,
       scopeStatus: matcher.isUrlAllowed(canonical) ? "IN_SCOPE" : "OUT_OF_SCOPE",
+      ...(ws.authPresent !== undefined ? { authPresent: ws.authPresent } : {}),
     });
   }
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, suppressedEndpoints, isMock: result.mock };
+  // --- API services (Prompt 9 §3/§5): canonical base URLs + scope
+  //     verdicts; an out-of-scope API base is recorded, never promoted.
+  const apiServiceByKey = new Map<string, ProcessedApiService>();
+  for (const svc of result.apiServices ?? []) {
+    const base = svc.baseUrl.replace(/\/+$/, "");
+    if (!base || apiServiceByKey.has(base)) continue;
+    let host = svc.host;
+    try { host = new URL(base).hostname.toLowerCase(); } catch { /* keep parser-provided host */ }
+    apiServiceByKey.set(base, {
+      baseUrl: base, host,
+      apiType: svc.apiType,
+      ...(svc.version ? { version: svc.version } : {}),
+      ...(svc.authenticationType ? { authenticationType: svc.authenticationType } : {}),
+      ...(svc.specificationId ? { specificationId: svc.specificationId } : {}),
+      source: svc.source,
+      scopeStatus: matcher.isUrlAllowed(base) ? "IN_SCOPE" : "OUT_OF_SCOPE",
+    });
+  }
+  const apiServices = [...apiServiceByKey.values()];
+
+  // --- GraphQL services (Prompt 9 §26): inventory with scope verdicts.
+  const graphqlByKey = new Map<string, ProcessedGraphqlService>();
+  for (const g of result.graphqlServices ?? []) {
+    if (!g.endpointUrl || graphqlByKey.has(g.endpointUrl)) continue;
+    let host = g.host;
+    try { host = new URL(g.endpointUrl).hostname.toLowerCase(); } catch { /* keep parser-provided host */ }
+    graphqlByKey.set(g.endpointUrl, {
+      endpointUrl: g.endpointUrl, host,
+      schemaAvailable: g.schemaAvailable,
+      queries: g.queries, mutations: g.mutations, subscriptions: g.subscriptions, types: g.types,
+      ...(g.authenticationRequired !== undefined ? { authenticationRequired: g.authenticationRequired } : {}),
+      source: g.source,
+      scopeStatus: matcher.isUrlAllowed(g.endpointUrl) ? "IN_SCOPE" : "OUT_OF_SCOPE",
+    });
+  }
+  const graphqlServices = [...graphqlByKey.values()];
+
+  // --- JWT profiles (Prompt 9 §25): fingerprint-keyed passthrough. The
+  //     records are metadata-only BY CONSTRUCTION (the inspector never
+  //     emits the raw token), so nothing is redacted or dropped here.
+  const jwtByFingerprint = new Map<string, ProcessedJwtProfile>();
+  for (const p of result.jwtProfiles ?? []) {
+    if (p.fingerprint && !jwtByFingerprint.has(p.fingerprint)) jwtByFingerprint.set(p.fingerprint, p);
+  }
+  const jwtProfiles = [...jwtByFingerprint.values()];
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original

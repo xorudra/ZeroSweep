@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 8 complete (Prompts 1–8).** Production monorepo, backend and
+> **Status — Phase 9 complete (Prompts 1–9).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -24,7 +24,18 @@ without verified scope and approval.
 > evidence redaction, and approval-gated active scanning (intrusive,
 > disabled by default). Burp and Caido are commercial/external products by
 > design: their connectors report NOT_CONFIGURED until an instance is
-> registered in-product, which is a product state, not an error. Everything
+> registered in-product, which is a product state, not an error. And now
+> the **API security layer**: guarded OpenAPI/Swagger, Postman, Insomnia
+> and GraphQL schema imports (hostile-input limits, secrets dropped to
+> reference names, inventory only — never findings), an API operation
+> policy that classifies every operation SAFE / STATE_CHANGING /
+> DESTRUCTIVE_UNKNOWN / REVIEW_REQUIRED and keeps state-changing work
+> out of automation entirely, Kiterunner route discovery, Schemathesis
+> safe schema testing, InQL/GraphQLmap GraphQL inventory, decode-only
+> JWT inspection (fingerprints + redacted claims; tokens never stored;
+> cracking forbidden), mitmproxy traffic import, and the full
+> API_ASSESSMENT pipeline flowing into the same normalization →
+> correlation → risk tail. Everything
 > runs only inside approved scans against verified, in-scope targets.
 > Adapters whose binaries are absent report UNAVAILABLE honestly and
 > pipelines degrade — nothing fakes a real run. The AI service has no LLM
@@ -152,11 +163,48 @@ and the AI health endpoint.
 6. ✅ Web attack-surface, content, route & parameter discovery engine (Prompt 6)
 7. ✅ Safe vulnerability detection, TLS analysis, normalization, correlation & risk engine (Prompt 7)
 8. ✅ OWASP ZAP, Burp Suite & Caido integration layer (Prompt 8)
-9. API security testing 10. Network VAPT 11. Reporting engine
+9. ✅ API security testing & protection assessment (Prompt 9)
+10. Network VAPT 11. Reporting engine
 12. API/cloud/container/source-code modules 13. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 9: API Security Testing & Protection Assessment.**
+  Guarded specification imports (OpenAPI/Swagger JSON+YAML, Postman
+  collections + environments, Insomnia exports, GraphQL introspection)
+  under hostile-input limits — 10 MiB caps, strict parsing, YAML
+  unknown-tag rejection, external `$ref`s recorded as warnings and
+  never fetched; secrets in collections/environments are dropped to
+  reference NAMES during parsing. Imports yield INVENTORY ONLY (zero
+  findings): ApiService / ApiSpecification / ApiSchema / GraphqlService
+  records plus endpoint rows whose `{id}` path templates survive
+  intact. An API operation policy classifies every operation SAFE /
+  STATE_CHANGING / DESTRUCTIVE_UNKNOWN / REVIEW_REQUIRED (tighten-only
+  admin overrides); Schemathesis runs only its safe check subset with
+  non-SAFE operations excluded by name, methods pinned to
+  GET,HEAD,OPTIONS, and the worker never enabling state-changing
+  execution — blocked operations are counted and emitted as events.
+  New adapters on the standard lifecycle: Kiterunner (governed
+  API_ROUTES wordlists), Schemathesis (JUnit via the XXE-safe parser),
+  InQL + GraphQLmap (introspection inventory — an observation, never a
+  finding; mutations never executed), jwt_tool as a platform inspector
+  (decode-only: fingerprint + redacted claims; no cracking, tokens
+  never stored/logged/audited), and mitmproxy joining the connector
+  family for flow/WebSocket traffic import (issues honestly empty —
+  it has no scanner feed). The API_ASSESSMENT profile gains nine
+  stages (API_DISCOVERY, SPEC_IMPORT, ROUTE_DISCOVERY, AUTH_MAPPING,
+  SAFE_SCHEMA_TESTING, JWT_ANALYSIS, GRAPHQL_ANALYSIS,
+  WEBSOCKET_INVENTORY, API_FINDING_NORMALIZATION) and flows into the
+  Phase 7 normalization → correlation → risk tail; Nuclei gains two
+  governed SAFE API templates. Authorization test cases exist as
+  NOT_APPROVED design records (identity A/B contexts, object-id
+  templates) — nothing executes them in this phase. GUI: API Security
+  dashboard, per-service and per-endpoint views, GraphQL and JWT
+  profile pages. Verified entirely against recorded fixtures with
+  obviously-fake JWTs — no check ran against any real target; absent
+  binaries report UNAVAILABLE and mitmproxy NOT_CONFIGURED. See
+  `docs/architecture/api-security-engine.md`,
+  `docs/security/api-operation-policy.md` and `docs/tools/api/`.
 - **2026-10-07 — Prompt 8: OWASP ZAP, Burp Suite & Caido Integration.** A
   dedicated `InteractiveScannerConnector` abstraction beside the CLI
   adapters (connect, per-assessment contexts, scope configuration,

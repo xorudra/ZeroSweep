@@ -36,6 +36,14 @@ export interface ScanRunStore extends ExecutionStore {
   summarizeFindings?(scanId: string): Promise<Record<string, unknown> | null>;
   correlateScanFindings?(scanId: string): Promise<{ canonical: number; duplicates: number; stats: Record<string, unknown> } | null>;
   recalculateFindingRisk?(scanId: string): Promise<{ updated: number } | null>;
+  /** Prompt 9 platform-stage hooks (same optional pattern): each returns
+   *  a counts-only summary the runner emits as the stage's API event, or
+   *  null when there is nothing to report. */
+  consolidateApiServices?(scanId: string): Promise<{ services: number; endpoints: number } | null>;
+  summarizeApiSpecifications?(scanId: string): Promise<{ specifications: number; operations: number } | null>;
+  mapApiAuthentication?(scanId: string): Promise<{ contexts: number; servicesWithAuth: number } | null>;
+  analyzeJwtProfiles?(scanId: string): Promise<{ tokens: number; findings: number } | null>;
+  inventoryWebSockets?(scanId: string): Promise<{ webSockets: number; authenticated: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -253,6 +261,35 @@ export class DagRunner {
     if (stageId === "RISK_ANALYSIS" && this.store.recalculateFindingRisk) {
       const result = await this.store.recalculateFindingRisk(scanId);
       if (result) await emit("risk.calculated", { stageId, updated: result.updated });
+    }
+    // Prompt 9 platform stages (§39/§43): deterministic inventory work
+    // over persisted state — imported specifications, captured traffic
+    // metadata, registered auth contexts and JWT inspection. None of
+    // them generates traffic or executes an operation.
+    if (stageId === "API_DISCOVERY" && this.store.consolidateApiServices) {
+      const result = await this.store.consolidateApiServices(scanId);
+      if (result) await emit("api.service_discovered", { stageId, services: result.services, endpoints: result.endpoints });
+    }
+    if (stageId === "SPEC_IMPORT" && this.store.summarizeApiSpecifications) {
+      const result = await this.store.summarizeApiSpecifications(scanId);
+      if (result) await emit("api.spec_imported", { stageId, specifications: result.specifications, operations: result.operations });
+    }
+    if (stageId === "AUTH_MAPPING" && this.store.mapApiAuthentication) {
+      const result = await this.store.mapApiAuthentication(scanId);
+      if (result) await emit("api.auth_mapped", { stageId, contexts: result.contexts, servicesWithAuth: result.servicesWithAuth });
+    }
+    if (stageId === "JWT_ANALYSIS" && this.store.analyzeJwtProfiles) {
+      const result = await this.store.analyzeJwtProfiles(scanId);
+      if (result) await emit("jwt.analyzed", { stageId, tokens: result.tokens, findings: result.findings });
+    }
+    if (stageId === "WEBSOCKET_INVENTORY" && this.store.inventoryWebSockets) {
+      const result = await this.store.inventoryWebSockets(scanId);
+      if (result) await emit("websocket.inventoried", { stageId, webSockets: result.webSockets, authenticated: result.authenticated });
+    }
+    if (stageId === "API_FINDING_NORMALIZATION" && this.store.summarizeFindings) {
+      const summary = await this.store.summarizeFindings(scanId);
+      const total = typeof summary?.totalFindings === "number" ? summary.totalFindings : 0;
+      await emit("api.test_completed", { stageId, totalFindings: total });
     }
     return "COMPLETED";
   }

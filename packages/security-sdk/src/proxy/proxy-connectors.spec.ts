@@ -36,13 +36,13 @@ function fixtureDeps(instances = FIXTURE_INSTANCES): ConnectorDeps {
 describe("connector health honesty (§53/§66)", () => {
   it("reports NOT_CONFIGURED for every product when no instance is registered", async () => {
     const connectors = createProxyConnectors(fixtureDeps([]));
-    for (const c of [connectors.zap, connectors.burp, connectors.caido]) {
+    for (const c of [connectors.zap, connectors.burp, connectors.caido, connectors.mitmproxy]) {
       const health = await c.healthCheck();
       expect(health.status).toBe("NOT_CONFIGURED");
       expect(await c.checkAvailability()).toBe(false);
     }
     expect(proxyHealthBySlug([])).toEqual({
-      "owasp-zap": "NOT_CONFIGURED", "burp-suite-professional": "NOT_CONFIGURED", caido: "NOT_CONFIGURED",
+      "owasp-zap": "NOT_CONFIGURED", "burp-suite-professional": "NOT_CONFIGURED", caido: "NOT_CONFIGURED", mitmproxy: "NOT_CONFIGURED",
     });
   });
 

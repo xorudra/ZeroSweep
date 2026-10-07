@@ -78,6 +78,11 @@ export interface BuildScanPlanInput {
 export const PLATFORM_STAGE_TYPES = new Set([
   "AUTHORIZATION_CHECK", "SCOPE_VALIDATION", "NORMALIZATION",
   "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION", "WEB_SURFACE_NORMALIZATION",
+  // Prompt 9: platform-executed API stages (discovery consolidation,
+  // import summary, auth mapping, JWT inspection, WebSocket inventory,
+  // API finding normalization) — the worker runs them as engine hooks.
+  "API_DISCOVERY", "SPEC_IMPORT", "AUTH_MAPPING", "JWT_ANALYSIS",
+  "WEBSOCKET_INVENTORY", "API_FINDING_NORMALIZATION",
 ]);
 
 export class InvalidPlanError extends Error {

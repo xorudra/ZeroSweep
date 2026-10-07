@@ -23,6 +23,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { OrchestrationModule } from "./modules/orchestration/orchestration.module";
 import { AssetsModule } from "./modules/assets/assets.module";
 import { ScannersModule } from "./modules/scanners/scanners.module";
+import { ApiSecurityModule } from "./modules/api-security/api-security.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ScannersModule } from "./modules/scanners/scanners.module";
     OrganizationsModule, WorkspacesModule, TargetsModule, ScopesModule, AssessmentsModule,
     ScansModule, FindingsModule, ReportsModule, ToolsModule, IntegrationsModule,
     CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule, ScannersModule,
+    ApiSecurityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

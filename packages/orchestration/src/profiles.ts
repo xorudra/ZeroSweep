@@ -15,6 +15,9 @@ export const STAGE_TYPES = [
   "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY",
   "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN",
   "PASSIVE_SECURITY_ANALYSIS", "ACTIVE_SECURITY_ANALYSIS",
+  "API_DISCOVERY", "SPEC_IMPORT", "ROUTE_DISCOVERY", "AUTH_MAPPING",
+  "SAFE_SCHEMA_TESTING", "JWT_ANALYSIS", "GRAPHQL_ANALYSIS", "WEBSOCKET_INVENTORY",
+  "API_FINDING_NORMALIZATION",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -89,6 +92,23 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     ...S("ACTIVE_SECURITY_ANALYSIS", "Active Security Analysis", "Governed ACTIVE scanning through scanner connectors (Prompt 8 §38). INTRUSIVE: disabled by default, present in NO profile template, and executable only behind target verification + approved scope + approved assessment + explicit active-testing enablement + RBAC + admin policy + a live, unexpired, scope-matching ScanApproval + a non-zero active budget (§8/§12/§40–§44).", ["ACTIVE_WEB_SCANNING"], ["PASSIVE_SECURITY_ANALYSIS"], 0, 1800, "FAIL_STAGE_CONTINUE", true),
     simulationFallback: false,
   },
+  // Prompt 9 §39/§43: the API security pipeline. Discovery/import/auth/
+  //  JWT/WebSocket stages are PLATFORM stages (engine components over
+  //  captured traffic + imported inventory); route discovery, safe schema
+  //  testing and GraphQL analysis are tool stages whose adapters remain
+  //  policy-bound (no state-changing execution, §16/§17/§30).
+  API_DISCOVERY: S("API_DISCOVERY", "API Discovery", "Consolidate the API surface from imported specifications, proxy traffic (ZAP/Burp/Caido/mitmproxy) and discovered endpoints into API service inventory (Prompt 9 §5). Platform stage — no tool executes; discovered assets never expand scope.", ["API_DISCOVERY"], ["SCOPE_VALIDATION"], 8, 300, "FAIL_STAGE_CONTINUE"),
+  SPEC_IMPORT: S("SPEC_IMPORT", "Specification Import", "Summarize specifications imported for this target through the guarded import path (OpenAPI/Swagger/Postman/Insomnia/GraphQL — size/format/reference guards, §6/§7). Platform stage: the stage reports what the import store holds; it fetches nothing.", ["SPEC_IMPORT"], ["API_DISCOVERY"], 5, 300, "FAIL_STAGE_CONTINUE"),
+  ROUTE_DISCOVERY: S("ROUTE_DISCOVERY", "API Route Discovery", "Discover unlinked API routes with governed route wordlists (Kiterunner, §13/§14): registered lists only, conservative rates, budgets enforced. Discovered routes are inventory, never findings.", ["ROUTE_DISCOVERY"], ["SPEC_IMPORT"], 12, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
+  AUTH_MAPPING: S("AUTH_MAPPING", "Authentication Mapping", "Map declared authentication schemes and registered API auth contexts (secret REFERENCES only) onto the API inventory (Prompt 9 §19–§21). Platform stage — no credentials are used and no session is established.", [], ["ROUTE_DISCOVERY"], 5, 300, "FAIL_STAGE_CONTINUE"),
+  SAFE_SCHEMA_TESTING: {
+    ...S("SAFE_SCHEMA_TESTING", "Safe Schema Testing", "Schema-based API testing (Schemathesis, §15/§62): imported OpenAPI operations filtered through the API operation policy — safe methods and safe conformance checks only; state-changing, DELETE, upload, financial and auth-abuse operations are excluded before execution and counted (API_OPERATION_BLOCKED).", ["SCHEMA_BASED_API_TESTING"], ["AUTH_MAPPING"], 15, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["SCHEMA_BASED_API_TESTING"], ["API_VALIDATION"]],
+  },
+  JWT_ANALYSIS: S("JWT_ANALYSIS", "JWT Analysis", "Inspect JWTs from authorized test contexts and captured traffic metadata: fingerprint + redacted claims + algorithm/expiry/sensitive-claim policy checks (Prompt 9 §22–§25). Inspection only — no cracking, no tampering; raw tokens are never stored. Platform stage.", ["JWT_INSPECTION"], ["SAFE_SCHEMA_TESTING"], 5, 300, "FAIL_STAGE_CONTINUE"),
+  GRAPHQL_ANALYSIS: S("GRAPHQL_ANALYSIS", "GraphQL Analysis", "GraphQL endpoint confirmation + introspection schema inventory (InQL/GraphQLmap, §26–§29). Mutations are never executed; introspection availability is inventory, not a finding.", ["GRAPHQL_ANALYSIS"], ["JWT_ANALYSIS"], 8, 900, "CONTINUE_WITH_PARTIAL_DATA", true),
+  WEBSOCKET_INVENTORY: S("WEBSOCKET_INVENTORY", "WebSocket Inventory", "Consolidate observed WebSocket endpoints (proxy traffic) with authentication-presence metadata (Prompt 9 §31/§32). Inventory only — no message injection or fuzzing exists. Platform stage.", ["WEBSOCKET_DISCOVERY"], ["GRAPHQL_ANALYSIS"], 3, 300, "FAIL_STAGE_CONTINUE"),
+  API_FINDING_NORMALIZATION: S("API_FINDING_NORMALIZATION", "API Finding Normalization", "Fold safe-schema-testing findings, JWT inspection results and API-safe scanner checks into the normalized finding model with provenance (Prompt 9 §43). Platform stage — the shared NORMALIZATION/CORRELATION/RISK tail then applies unchanged.", [], ["PASSIVE_SECURITY_ANALYSIS"], 3, 300, "FAIL_STAGE_CONTINUE"),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -119,7 +139,13 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   PASSIVE_RECON: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "ENDPOINT_DISCOVERY", ...TAIL]),
   WEB_BASELINE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", ...TAIL]),
   WEB_COMPREHENSIVE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", ...TAIL]),
-  API_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "CONTENT_DISCOVERY", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "WEB_SURFACE_NORMALIZATION", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", ...TAIL]),
+  // Prompt 9 §39 API_BASELINE: the dedicated API pipeline (validation →
+  //  discovery → spec import → routes → auth mapping → safe schema
+  //  testing → JWT → GraphQL → WebSocket inventory → API-safe scan →
+  //  passive analysis → API normalization → shared tail). API_COMPREHENSIVE
+  //  (§40) stays architecture-only in this phase: its state-changing
+  //  capabilities require per-assessment admin approval machinery.
+  API_ASSESSMENT: template([...HEAD, "API_DISCOVERY", "SPEC_IMPORT", "ROUTE_DISCOVERY", "AUTH_MAPPING", "SAFE_SCHEMA_TESTING", "JWT_ANALYSIS", "GRAPHQL_ANALYSIS", "WEBSOCKET_INVENTORY", "SAFE_VULNERABILITY_SCAN", "PASSIVE_SECURITY_ANALYSIS", "API_FINDING_NORMALIZATION", ...TAIL]),
   NETWORK_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "PORT_DISCOVERY", ...TAIL]),
   SOURCE_CODE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CONTAINER: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
@@ -166,6 +192,12 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
     // set via the worker's profile-derived approvals).
     if (profile === "WEB_BASELINE" && def.type === "SAFE_VULNERABILITY_SCAN") {
       def.adapterAllowlist = ["nuclei", "testssl", "sslyze"];
+    }
+    // Prompt 9 §38: the API profile's vulnerability stage runs Nuclei's
+    // API-safe check set only — Nikto (HTML-web oriented) and the TLS
+    // assessors are not API tools.
+    if (profile === "API_ASSESSMENT" && def.type === "SAFE_VULNERABILITY_SCAN") {
+      def.adapterAllowlist = ["nuclei"];
     }
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];

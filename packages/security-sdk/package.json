@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@dsrclone/types": "workspace:*",
-    "@dsrclone/validation": "workspace:*"
+    "@dsrclone/validation": "workspace:*",
+    "js-yaml": "4.3.2"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

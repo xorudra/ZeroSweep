@@ -8,7 +8,7 @@ import type { ScopeRules } from "@dsrclone/validation";
 import { TIMEOUT_FIELD, URLS_FIELD } from "../recon/recon-adapter.base";
 import type { ParsedProxy } from "./parsers-proxy";
 import type { ParsedObservation } from "../vuln/parsers-vuln";
-import { BurpIssueParser, CaidoIssueParser, ZapIssueParser, emptyParsedProxy, toTransaction } from "./parsers-proxy";
+import { BurpIssueParser, CaidoIssueParser, MitmproxyFlowParser, ZapIssueParser, emptyParsedProxy, toTransaction } from "./parsers-proxy";
 import {
   BaseScannerConnector, assessSession, filterLogoutUrls,
   type ConnectorDeps,
@@ -654,16 +654,94 @@ export function caidoMetadata(): ToolMetadata {
   });
 }
 
-export function createProxyConnectors(deps: ConnectorDeps): { zap: ZapConnector; burp: BurpConnector; caido: CaidoConnector } {
-  return { zap: new ZapConnector(deps), burp: new BurpConnector(deps), caido: new CaidoConnector(deps) };
+// ------------------------------- mitmproxy (Prompt 9 §33) -------------------------------
+
+/**
+ * mitmproxy connector (§33): an import/traffic-intelligence connector
+ * over an administrator-run mitmweb instance. It reads the flow list
+ * through the SSRF-guarded transport, normalizes flows into
+ * transactions/API endpoints/WebSocket inventory, and returns NO issues
+ * — mitmproxy is an observation source, not a vulnerability scanner.
+ * The platform never proxies customer traffic itself in this phase and
+ * never replays captured flows (§34: sensitive values are redacted at
+ * parse; authorization material is visible as presence only).
+ */
+export class MitmproxyConnector extends ProductConnector {
+  readonly product = "MITMPROXY" as const;
+  constructor(deps: ConnectorDeps) { super(deps); }
+  private readonly parser = new MitmproxyFlowParser();
+  private importParsed: ParsedProxy = emptyParsedProxy();
+
+  protected async probe(instance: ScannerInstanceRecord, _baseUrl: string, _approvedInternal?: boolean) {
+    const res = await this.call(instance, { method: "GET", path: "/flows" }, "Authorization");
+    if (res.status !== 200) throw new Error(`mitmweb flow probe returned HTTP ${res.status}`);
+    const flows = JSON.parse(res.body) as unknown;
+    if (!Array.isArray(flows)) throw new Error("mitmweb /flows returned an unexpected payload");
+    // mitmweb does not expose a version on the flow API — reachability
+    // is reported DEGRADED (version unconfirmed) by the base health
+    // logic, never upgraded on assumption (same posture as Caido, §13).
+    return { latencyMs: res.latencyMs };
+  }
+
+  async importEndpoints(contextId: string): Promise<{ endpoints: NormalizedEndpoint[]; transactions: NormalizedHttpTransaction[]; webSockets: NormalizedWebSocket[] }> {
+    const context = this.contextById(contextId);
+    const instance = await this.instanceFor(context);
+    const res = await this.call(instance, { method: "GET", path: "/flows" }, "Authorization");
+    if (res.status !== 200) throw new Error(`mitmweb /flows returned HTTP ${res.status}`);
+    const parsed = this.parser.parse(JSON.parse(res.body) as unknown, this.slug);
+    this.importParsed = parsed;
+    return { endpoints: parsed.endpoints, transactions: parsed.transactions, webSockets: parsed.webSockets };
+  }
+
+  async startPassiveAnalysis(_contextId: string): Promise<void> {
+    // mitmproxy observes traffic as it flows (§33); analysis here is the
+    // import itself. The connector generates no traffic of its own.
+  }
+
+  async getProgress(contextId: string): Promise<{ phase: string; percent: number; detail?: string }> {
+    this.contextById(contextId);
+    return { phase: "TRAFFIC_ANALYSIS", percent: 100 };
+  }
+
+  async getIssues(_contextId: string): Promise<NormalizedVulnFinding[]> {
+    // §33: traffic intelligence only — mitmproxy observations never
+    // become vulnerability findings.
+    return [];
+  }
+
+  protected override drainExportExtras() {
+    const p = this.importParsed;
+    this.importParsed = emptyParsedProxy();
+    return { endpoints: [], transactions: [], webSockets: [], observations: p.observations, warnings: p.warnings };
+  }
+
+  async exportArtifacts(contextId: string): Promise<{ artifactKind: string; reference: string }[]> {
+    this.contextById(contextId);
+    return [{ artifactKind: "MITMPROXY_FLOWS", reference: `scanner-context:${contextId}/flows` }];
+  }
+}
+
+export function mitmproxyMetadata(): ToolMetadata {
+  return connectorMeta({
+    id: "mitmproxy", slug: "mitmproxy", name: "mitmproxy",
+    description: "Open-source interactive proxy — API traffic capture, endpoint discovery from observed flows, and WebSocket inventory (Prompt 9 §33). Traffic intelligence only: no vulnerability findings are derived from mitmproxy.",
+    homepage: "https://mitmproxy.org",
+    executionMode: "EXTERNAL_API", licenseType: "OPEN_SOURCE", riskLevel: "MODERATE", requiresApproval: false,
+    capabilities: [...PRODUCT_CAPABILITIES.MITMPROXY],
+  });
+}
+
+export function createProxyConnectors(deps: ConnectorDeps): { zap: ZapConnector; burp: BurpConnector; caido: CaidoConnector; mitmproxy: MitmproxyConnector } {
+  return { zap: new ZapConnector(deps), burp: new BurpConnector(deps), caido: new CaidoConnector(deps), mitmproxy: new MitmproxyConnector(deps) };
 }
 
 export function createProxyAdapters(deps: ConnectorDeps): ScannerConnectorAdapter[] {
-  const { zap, burp, caido } = createProxyConnectors(deps);
+  const { zap, burp, caido, mitmproxy } = createProxyConnectors(deps);
   return [
     wrapConnector(zap, zapMetadata()),
     wrapConnector(burp, burpMetadata()),
     wrapConnector(caido, caidoMetadata()),
+    wrapConnector(mitmproxy, mitmproxyMetadata()),
   ];
 }
 

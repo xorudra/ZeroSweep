@@ -124,6 +124,13 @@ const API_ROUTES = [
   "api/health", "api/status", "api/docs", "api/openapi.json", "api/swagger.json",
   "graphql", "rest", "v1", "v2", "oauth/token", "oauth/authorize",
 ];
+/** Prompt 9 §14: the SMALL API route set — the API baseline profile's
+ *  ceiling. Deliberately tiny: baseline route discovery confirms the
+ *  common API entry points; it never brute-forces a large route space. */
+const API_ROUTES_SMALL = [
+  "api", "api/v1", "api/users", "api/auth", "api/health", "api/status",
+  "api/docs", "api/openapi.json", "graphql", "v1",
+];
 const PARAMETER_NAMES = [
   "id", "page", "lang", "search", "q", "query", "category", "sort", "order", "limit",
   "offset", "filter", "type", "name", "email", "user", "username", "file", "path",
@@ -144,6 +151,7 @@ export const BUNDLED_WORDLISTS: WordlistRecord[] = [
   bundled("common-directories-comprehensive", "Common directories (comprehensive)", "Comprehensive directory vocabulary — larger assessments only, never auto-selected (§12).", "COMMON_DIRECTORIES", ["COMPREHENSIVE"], [...DIRECTORIES_SMALL, ...DIRECTORIES_STANDARD_EXTRA, ...DIRECTORIES_COMPREHENSIVE_EXTRA]),
   bundled("common-files", "Common files", "Well-known public files worth inventorying (robots.txt, sitemaps, manifests — §22).", "COMMON_FILES", ["SMALL", "STANDARD", "COMPREHENSIVE"], COMMON_FILES),
   bundled("api-routes", "API routes", "Common API route vocabulary (§13: added when an API surface is detected).", "API_ROUTES", ["STANDARD", "COMPREHENSIVE"], API_ROUTES),
+  bundled("api-routes-small", "API routes (small)", "Small API route vocabulary for the API baseline profile (Prompt 9 §14: API_ROUTES_SMALL).", "API_ROUTES", ["SMALL"], API_ROUTES_SMALL),
   bundled("parameter-names", "Parameter names", "Common parameter names for controlled parameter discovery (§29).", "PARAMETER_NAMES", ["SMALL", "STANDARD", "COMPREHENSIVE"], PARAMETER_NAMES),
   bundled("wordpress-routes", "WordPress routes", "WordPress-oriented route vocabulary (§13 technology hint).", "TECHNOLOGY_SPECIFIC", ["STANDARD", "COMPREHENSIVE"], WORDPRESS_ROUTES, "wordpress"),
 ];
