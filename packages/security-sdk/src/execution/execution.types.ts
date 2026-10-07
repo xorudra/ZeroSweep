@@ -26,6 +26,9 @@ export interface ExecutionPlan {
   imageDigest?: string;
   executable?: string;
   arguments: string[];
+  /** Data-only standard input (e.g. the authorized host list for dnsx /
+   *  waybackurls). Carries validated target values, never commands. */
+  stdin?: string;
   environmentReferences: string[]; // secret REFERENCES, never values
   timeoutSeconds: number;
   cpuLimit: string;

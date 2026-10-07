@@ -1,6 +1,8 @@
 import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
-import { CAPABILITIES, RISK_LEVELS, TOOL_CATEGORIES } from "@dsrclone/security-sdk";
+import {
+  CAPABILITIES, RISK_LEVELS, TOOL_CATEGORIES, createReconAdapters, type SecurityToolAdapter,
+} from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { Roles } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
@@ -23,6 +25,11 @@ const listQuerySchema = z.object({
  */
 @Controller("tools")
 export class ToolsController {
+  /** Recon adapters probed live for health (§39). Built once; the probe is
+   *  a PATH lookup + `--version` on THIS host — the worker host probes again
+   *  at execution time, and plan-time/execution-time health always wins. */
+  private readonly reconAdapters: SecurityToolAdapter[] = createReconAdapters();
+
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
   /**
@@ -66,6 +73,19 @@ export class ToolsController {
   async health(@Param("id") id: string) {
     const tool = await this.prisma.tool.findFirst({ where: { OR: [{ id }, { slug: id }] }, select: { slug: true, healthStatus: true, installed: true } });
     if (!tool) throw new NotFoundException("Tool not found");
+    // Prompt 5 §39: for adapters implemented in code, report LIVE health —
+    // real version when the binary is present, honest UNAVAILABLE when not.
+    const adapter = this.reconAdapters.find((a) => a.metadata.slug === tool.slug);
+    if (adapter) {
+      const live = await adapter.healthCheck();
+      return {
+        slug: tool.slug,
+        healthStatus: live.status,
+        installed: live.status === "HEALTHY",
+        detail: live.detail,
+        source: "live control-plane probe (worker hosts probe again at execution time)",
+      };
+    }
     return tool;
   }
 

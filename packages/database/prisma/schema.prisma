@@ -403,24 +403,33 @@ model Scope {
 
 // ------------------------------- Discovered surface -------------------------------
 model Asset {
-  id           String       @id @default(uuid())
-  workspaceId  String
-  targetId     String
-  host         String
-  ip           String?
-  type         String       @default("HOST")
+  id                 String       @id @default(uuid())
+  workspaceId        String
+  targetId           String
+  host               String
+  ip                 String?
+  type               String       @default("HOST")
   // Discovered-asset scope verdict (Prompt 4 §33): IN_SCOPE | OUT_OF_SCOPE |
   // PENDING_REVIEW. Out-of-scope assets never become scan targets on their own.
-  scopeStatus  String       @default("IN_SCOPE")
-  target       Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  services     Service[]
-  endpoints    Endpoint[]
-  technologies Technology[]
-  findings     Finding[]
-  firstSeen    DateTime     @default(now())
-  lastSeen     DateTime     @updatedAt
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  scopeStatus        String       @default("IN_SCOPE")
+  // Provenance (Prompt 5 §18): adapter slugs that discovered this asset —
+  // one asset, many sources, never duplicate rows per tool.
+  sources            String[]     @default([])
+  // Live HTTP status when httpx probed this host (Prompt 5 §32); metadata,
+  // never a finding by itself.
+  httpStatus         Int?
+  // Scan that most recently discovered/refresh this asset — powers the
+  // per-scan recon summary (Prompt 5 §46) without inventing a join table.
+  discoveredByScanId String?
+  target             Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  services           Service[]
+  endpoints          Endpoint[]
+  technologies       Technology[]
+  findings           Finding[]
+  firstSeen          DateTime     @default(now())
+  lastSeen           DateTime     @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@index([workspaceId])
   @@index([targetId, host])
@@ -443,27 +452,37 @@ model Service {
 }
 
 model Endpoint {
-  id         String   @id @default(uuid())
-  assetId    String
-  url        String
-  method     String   @default("GET")
-  statusCode Int?
-  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(uuid())
+  assetId        String
+  url            String
+  method         String   @default("GET")
+  statusCode     Int?
+  // Prompt 5 §21/§33: parameter NAMES only (values are redacted before
+  // persistence), the discovering adapter, and this endpoint's own scope
+  // verdict — third-party historical URLs are stored OUT_OF_SCOPE.
+  parameterNames String[] @default([])
+  source         String?
+  scopeStatus    String   @default("IN_SCOPE")
+  asset          Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([assetId])
 }
 
 model Technology {
-  id        String   @id @default(uuid())
-  assetId   String
-  name      String
-  version   String?
-  category  String?
-  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  assetId    String
+  name       String
+  version    String?
+  category   String?
+  // Prompt 5 §31: which adapter detected it and with what confidence (0..1).
+  // Detection alone never implies a vulnerability.
+  source     String?
+  confidence Float?
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([assetId])
 }

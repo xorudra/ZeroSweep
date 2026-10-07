@@ -1,5 +1,5 @@
 import {
-  ScopeMatcher, ToolRegistry, evaluateToolPolicy, type AuthorizationContext,
+  RECON_SLUGS, ScopeMatcher, ToolRegistry, evaluateToolPolicy, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
 import {
@@ -15,10 +15,14 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * §14), re-evaluates authorization + scope + policy immediately before
  * execution (§11–§12), runs the adapter lifecycle, stores the raw artifact in
  * object storage, parses, normalizes, and persists through the store.
- * In this phase ONLY mock/local-echo adapters are executable (§65).
+ * Executable adapters: the Phase 4 mock/local-echo pair plus the Prompt 5
+ * recon adapters (subfinder … katana). Recon adapters run ONLY through
+ * their validated plans and only when their binary is actually present —
+ * otherwise policy denies with TOOL_UNAVAILABLE and orchestration degrades
+ * the capability instead of crashing (Prompt 5 §55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo"] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS] as const;
 
 export interface ExecutionContextRecord {
   executionId: string;
@@ -41,6 +45,11 @@ export interface ExecutionContextRecord {
   assessmentApproved: boolean;
   scopeValid: boolean;
   networkCapable: boolean;
+  /** Discovery inputs produced by earlier stages (Prompt 5 §26): in-scope
+   *  asset hostnames and endpoint URLs, loaded from persisted state by the
+   *  store — never from queue payloads. Adapters receive only the fields
+   *  their declared input schema accepts. */
+  stageInputs?: { hosts: string[]; urls: string[] };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -49,7 +58,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -64,6 +73,7 @@ export interface StageJobData {
 
 export type StageExecutionOutcome =
   | { status: "COMPLETED"; assets: number; findings: number }
+  | { status: "PARTIAL_DATA" } // synthesized by the DAG runner when some adapters of a stage completed (§55)
   | { status: "ALREADY_COMPLETED" }
   | { status: "DENIED"; reasonCode: string }
   | { status: "CANCELLED" }
@@ -117,8 +127,11 @@ export class StageExecutor {
         await this.failExecution(ctx, "POLICY", `Adapter ${ctx.adapterSlug} is not executable in this phase`);
         return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
       }
+      // Real health (§2/§55): a recon adapter whose binary is absent is
+      // denied by policy as TOOL_UNAVAILABLE — never executed, never faked.
+      const toolHealthy = await adapter.checkAvailability().catch(() => false);
       const policy = evaluateToolPolicy({
-        tool: adapter.metadata, toolEnabled: true, adapterEnabled: true, toolHealthy: true,
+        tool: adapter.metadata, toolEnabled: true, adapterEnabled: true, toolHealthy,
         targetType: ctx.targetType, targetHost: ctx.targetHost, auth: ctx.auth,
         scopeRules: ctx.scopeRules, availableCredentialRefs: [], currentConcurrency: 0, maxConcurrency: 4,
       });
@@ -142,12 +155,25 @@ export class StageExecutor {
 
       const target = { type: ctx.targetType as never, value: ctx.targetValue, host: ctx.targetHost };
       await adapter.validateTarget(target);
-      const config: Record<string, unknown> = ctx.simulation?.fixture ? { fixture: "orchestration-e2e" } : {};
+      // Adapter config is assembled ONLY from fields the adapter declares
+      // (§11): the simulation fixture (mock) and the discovery inputs this
+      // stage inherits from earlier stages (Prompt 5 §26).
+      const declared = new Set((adapter.metadata.inputSchema ?? []).map((f) => f.name));
+      const config: Record<string, unknown> = {};
+      // Adapters WITH a declared schema get only declared fields (a recon
+      // adapter must never see the simulation knob); schema-less legacy
+      // adapters (mock) keep the Phase 4 fixture behaviour.
+      if (ctx.simulation?.fixture && (declared.size === 0 || declared.has("fixture"))) config.fixture = "orchestration-e2e";
+      if (ctx.stageInputs) {
+        if (declared.has("hosts") && ctx.stageInputs.hosts.length > 0) config.hosts = ctx.stageInputs.hosts;
+        if (declared.has("urls") && ctx.stageInputs.urls.length > 0) config.urls = ctx.stageInputs.urls;
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
         ? Math.min(50, ctx.timeoutSeconds * 1000)
         : ctx.timeoutSeconds * 1000;
+      let rawOutput: string | undefined;
       await this.runWithTimeoutAndCancellation(ctx, async () => {
         if (ctx.simulation?.failWith === "TOOL_ERROR") throw new Error("deterministic mock tool failure");
         if (ctx.simulation?.failWith === "TIMEOUT") await sleep(1_000); // overruns the clamped test timeout (§58)
@@ -161,7 +187,8 @@ export class StageExecutor {
             if (await this.store.isCancelled(ctx.scanId)) return;
           }
         }
-        await adapter.execute(plan);
+        const execResult = await adapter.execute(plan);
+        rawOutput = execResult.rawOutput;
       }, timeoutMs);
 
       if (await this.store.isCancelled(ctx.scanId)) {
@@ -171,20 +198,39 @@ export class StageExecutor {
       }
 
       await this.transition(ctx, "PARSING");
-      const parsed = await adapter.parse("");
-      const raw = JSON.stringify(parsed);
-      const artifact = await this.objectStore.put(rawArtifactKey(ctx.scanId, ctx.executionId), raw, "application/json");
+      const parsed = await adapter.parse(rawOutput ?? "");
+      // Raw tool output is preserved as the execution artifact (§31/§35),
+      // named for the tool + format — never the normalized form.
+      const ext = plan.expectedOutputFormat === "JSONL" ? "jsonl" : plan.expectedOutputFormat === "JSON" ? "json" : "txt";
+      const raw = rawOutput ?? JSON.stringify(parsed);
+      const artifact = await this.objectStore.put(
+        rawArtifactKey(ctx.scanId, ctx.executionId, `${ctx.adapterSlug}.${ext}`),
+        raw,
+        plan.expectedOutputFormat === "TEXT" ? "text/plain" : "application/json",
+      );
       await this.transition(ctx, "NORMALIZING");
       const normalized = await adapter.normalize(parsed);
-      const processed = processNormalizedResult(normalized, { scopeRules: ctx.scopeRules, toolExecutionId: ctx.executionId });
+      const processed = processNormalizedResult(normalized, { scopeRules: ctx.scopeRules, toolExecutionId: ctx.executionId, toolSlug: ctx.adapterSlug });
       const counts = await this.store.persistResult(ctx.scanId, ctx.executionId, processed);
-      for (const a of processed.assets) await emit("asset.discovered", { stageId: ctx.stageId, host: a.host, scopeStatus: a.scopeStatus });
+      // §59: aggregated recon events, never one record per discovered URL.
+      for (const a of processed.assets) {
+        if (a.scopeStatus === "IN_SCOPE") await emit("asset.discovered", { stageId: ctx.stageId, host: a.host, tool: ctx.adapterSlug });
+        else await emit("asset.out_of_scope", { stageId: ctx.stageId, host: a.host, tool: ctx.adapterSlug });
+      }
+      if (processed.endpoints.length > 0) await emit("endpoint.discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.endpoints.length });
       for (const f of processed.findings) await emit("finding.created", { stageId: ctx.stageId, isMock: f.isMock, severity: f.severity });
 
       await this.store.updateExecution(ctx.executionId, {
         status: "COMPLETED", completedAt: new Date(), exitCode: 0,
         outputLocation: artifact.storageKey,
-        metrics: { checksum: artifact.checksum, size: artifact.size, assets: counts.assets, findings: counts.findings },
+        metrics: {
+          checksum: artifact.checksum, size: artifact.size,
+          assets: counts.assets, findings: counts.findings,
+          endpoints: counts.endpoints ?? processed.endpoints.length,
+          services: counts.services ?? processed.services.length,
+          technologies: counts.technologies ?? processed.technologies.length,
+          ...normalized.metrics,
+        },
       });
       await emit("tool.completed", { stageId: ctx.stageId, tool: ctx.adapterSlug, assets: counts.assets, findings: counts.findings });
       return { status: "COMPLETED", assets: counts.assets, findings: counts.findings };
@@ -203,6 +249,15 @@ export class StageExecutor {
       });
       return { status: "FAILED", category };
     }
+  }
+
+  /** Availability probe used by the DAG runner to degrade gracefully when
+   *  one adapter of a multi-adapter stage is unavailable (§56). */
+  async isExecutable(slug: string): Promise<boolean> {
+    if (!EXECUTABLE_SLUGS.includes(slug as (typeof EXECUTABLE_SLUGS)[number])) return false;
+    const adapter = this.registry.resolve(slug);
+    if (!adapter) return false;
+    return adapter.checkAvailability().catch(() => false);
   }
 
   private async transition(ctx: ExecutionContextRecord, to: string): Promise<void> {

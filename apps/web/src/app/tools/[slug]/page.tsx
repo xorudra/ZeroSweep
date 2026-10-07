@@ -47,15 +47,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 /** Adapter detail (Prompt 3 §44). Configuration VALUES and secrets are never
  *  shown — credential requirements appear as reference names only. */
+interface LiveHealth { slug: string; healthStatus: string; installed: boolean; detail?: string; source?: string }
+
 export default function Page() {
   const params = useParams<{ slug: string }>();
   const [state, setState] = useState<{ kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; tool: ToolDetail }>({ kind: "loading" });
+  const [liveHealth, setLiveHealth] = useState<LiveHealth | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     apiFetch<ToolDetail>(`/tools/${params.slug}`)
       .then((tool) => { if (!cancelled) setState({ kind: "ready", tool }); })
       .catch((e: unknown) => { if (!cancelled) setState({ kind: "error", message: e instanceof ApiError ? e.message : "Could not reach the API." }); });
+    // Live adapter health (Prompt 5 §39): real version when the binary is
+    // present on the API host, honest UNAVAILABLE when it is not.
+    apiFetch<LiveHealth>(`/tools/${params.slug}/health`)
+      .then((h) => { if (!cancelled && h.source) setLiveHealth(h); })
+      .catch(() => undefined);
     return () => { cancelled = true; };
   }, [params.slug]);
 
@@ -77,7 +85,15 @@ export default function Page() {
           <Field label="Risk level"><Badge>{t.riskLevel}</Badge></Field>
           <Field label="Approval requirement">{t.requiresApproval ? "Explicit approval required" : "Standard policy gates apply"}</Field>
           <Field label="Execution mode">{a?.executionMode ?? "—"}</Field>
-          <Field label="Health">{t.healthStatus}</Field>
+          <Field label="Health">
+            {liveHealth ? (
+              <>
+                {liveHealth.healthStatus}
+                {liveHealth.detail ? <span className="block text-xs text-slate-400">{liveHealth.detail}</span> : null}
+                <span className="block text-xs text-slate-500">{liveHealth.source}</span>
+              </>
+            ) : t.healthStatus}
+          </Field>
           <Field label="License model">{t.licenseType}{t.licenseType === "ADMIN_PROVIDED" ? " — supplied by the administrator; DSRclone does not redistribute it" : ""}</Field>
           <Field label="Configuration status">{a?.enabled ? "Adapter enabled" : "Catalog entry — adapter not yet implemented (metadata only)"}</Field>
           <Field label="Supported target types">{(a?.supportedTargets ?? []).join(", ") || "—"}</Field>

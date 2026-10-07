@@ -40,6 +40,9 @@ export class DagRunner {
   constructor(
     private readonly store: ScanRunStore,
     private readonly executor: StageExecutor,
+    /** Availability probe (defaults to the executor's): lets a multi-adapter
+     *  stage skip an unavailable adapter instead of failing (§56). */
+    private readonly isAdapterAvailable: (slug: string) => Promise<boolean> = (slug) => executor.isExecutable(slug),
   ) {}
 
   /** Default dispatcher: run the stage job inline (single-worker/dev). The
@@ -118,13 +121,43 @@ export class DagRunner {
           continue;
         }
 
-        const adapter = planned.selectedAdapters[0]!;
-        const execution = await this.store.ensureExecution(scanId, node.id, adapter.slug, 1);
-        const outcome = await dispatch({ kind: "STAGE_EXECUTION", scanId, stageId: node.id, toolExecutionId: execution.id, attempt: 1 });
+        // Prompt 5 §16: a stage may select SEVERAL adapters (e.g. four
+        // subdomain sources in PASSIVE_RECON). All of them run; an
+        // unavailable one is skipped when siblings can still deliver
+        // (§56 — capability degraded, orchestration never crashes), and the
+        // stage outcome aggregates: all complete → COMPLETED, some →
+        // PARTIAL (§55), none → the failure-strategy path below.
+        let candidates = planned.selectedAdapters;
+        if (candidates.length > 1) {
+          const availability = await Promise.all(candidates.map(async (a) => ({ slug: a.slug, ok: await this.isAdapterAvailable(a.slug).catch(() => false) })));
+          const available = availability.filter((a) => a.ok);
+          for (const skipped of availability.filter((a) => !a.ok)) {
+            await emit("tool.failed", { stageId: node.id, tool: skipped.slug, reasonCode: "TOOL_UNAVAILABLE", degraded: true });
+          }
+          if (available.length > 0) candidates = candidates.filter((a) => available.some((x) => x.slug === a.slug));
+        }
+        const executions = await Promise.all(candidates.map(async (a) => ({
+          slug: a.slug,
+          exec: await this.store.ensureExecution(scanId, node.id, a.slug, 1),
+        })));
+        const outcomes = await Promise.all(executions.map(({ exec }) =>
+          dispatch({ kind: "STAGE_EXECUTION", scanId, stageId: node.id, toolExecutionId: exec.id, attempt: 1 })));
+        const outcome: StageExecutionOutcome = outcomes.length === 1
+          ? outcomes[0]!
+          : outcomes.some((o) => o.status === "CANCELLED")
+            ? { status: "CANCELLED" }
+            : outcomes.every((o) => o.status === "COMPLETED" || o.status === "ALREADY_COMPLETED")
+              ? { status: "COMPLETED", assets: 0, findings: 0 }
+              : outcomes.some((o) => o.status === "COMPLETED" || o.status === "ALREADY_COMPLETED")
+                ? { status: "PARTIAL_DATA" }
+                : outcomes[0]!;
 
         if (outcome.status === "COMPLETED" || outcome.status === "ALREADY_COMPLETED") {
           await this.store.updateStage(scanId, node.id, { status: "COMPLETED", progress: 100, completedAt: new Date() });
           await emit("stage.completed", { stageId: node.id });
+        } else if (outcome.status === "PARTIAL_DATA") {
+          await this.store.updateStage(scanId, node.id, { status: "PARTIAL", progress: 100, completedAt: new Date() });
+          await emit("stage.failed", { stageId: node.id, continued: true, partialAdapters: true });
         } else if (outcome.status === "CANCELLED") {
           await this.store.updateStage(scanId, node.id, { status: "CANCELLED", completedAt: new Date() });
           await this.cancelRemaining(scanId, plan, await this.store.stageStatuses(scanId));

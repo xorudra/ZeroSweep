@@ -10,16 +10,19 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 4 complete (Prompts 1–4).** Production monorepo, backend and
+> **Status — Phase 5 complete (Prompts 1–5).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 126-tool metadata
-> catalog, and now the **scan orchestration engine**: profile → ScanPlan →
-> stage DAG → BullMQ queues → workers that re-check authorization/scope/policy
-> before running an adapter, with live progress (durable events + SSE), pause/
-> resume/cancel, and a Live Scan GUI. **No real security scanners are integrated
-> or executed yet** (no Nmap/Nuclei/ZAP/etc.) — pipelines execute ONLY the
-> network-free Mock and Local Echo simulation adapters, every mock result is
-> permanently labelled `isMock`, and the AI service has no LLM connected yet.
-> Real adapters arrive in later phases, one at a time.
+> catalog, the scan orchestration engine — and now the **first real adapters**:
+> ten reconnaissance tools (Subfinder, Amass, Assetfinder, Findomain, dnsx,
+> httpx, WhatWeb, gau, Waybackurls, Katana) implemented on the SDK lifecycle
+> with dedicated parsers, scope verdicts on every discovery, discovery
+> budgets, wildcard-DNS detection, sensitive-value redaction, and an
+> asset/service/technology/endpoint inventory with GUI + API. Adapters whose
+> binaries are absent report UNAVAILABLE honestly and pipelines degrade to
+> the labelled simulation adapter — nothing fakes a real run. **No
+> vulnerability scanners are integrated yet** (no Nmap/Nuclei/ZAP/etc.);
+> recon produces inventory only, never findings, and the AI service has no
+> LLM connected yet.
 
 ## Architecture
 
@@ -139,12 +142,25 @@ and the AI health endpoint.
 1. ✅ Architecture (Prompt 1) 2. ✅ Monorepo + backend + database foundation (Prompt 2)
 3. ✅ Universal Tool Adapter SDK, registry & safe execution framework (Prompt 3)
 4. ✅ Production scan orchestration engine, DAG pipeline, queue workers & live progress (Prompt 4)
-5. First safe adapters (passive/recon/web
-baseline) 6. Normalization, deduplication, risk engine 7. Reporting engine
+5. ✅ First real adapters: reconnaissance, asset discovery & web surface mapping (Prompt 5)
+6. Normalization, deduplication, risk engine 7. Reporting engine
 8. API/cloud/container/source-code modules 9. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 5: Real Reconnaissance Adapters.** Ten production
+  adapters in the security-sdk (Subfinder, Amass, Assetfinder, Findomain,
+  dnsx, httpx, WhatWeb, gau, Waybackurls, Katana) with argument-array-only
+  execution plans, dedicated parsers, and honest health (real `--version`
+  when a binary exists, UNAVAILABLE when it does not). Pipeline: multi-adapter
+  stages, per-adapter executions, stage inputs chained from persisted
+  in-scope inventory, scope verdicts on every discovered asset/URL, wildcard
+  DNS probe, discovery budgets, sensitive-parameter redaction, raw artifacts
+  per tool in object storage. Inventory APIs (`/assets`, `/assets/:id`,
+  `/endpoints`, `/scans/:id/recon-summary`, …) and GUI (Assets, asset detail,
+  Endpoints, Live Scan recon summary, live tool health). Everything verified
+  against recorded fixture outputs — no tool was run against any real target.
+  See `docs/architecture/recon-pipeline.md` and `docs/tools/recon/`.
 - **2026-10-07 — Prompt 4: Scan Orchestration Engine.** New
   `@dsrclone/orchestration` package (stage/execution state machines, profile
   templates, DAG builder+validator, tool selection, authorization/scope

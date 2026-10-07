@@ -7,7 +7,11 @@ const prisma = new PrismaClient();
  * will integrate through adapters in later phases. No commands are stored,
  * no tool is executed by seeding, and catalog adapters are seeded DISABLED:
  * an adapter row here means "known to the registry", not "implemented".
- * Only the Mock adapter (below) is real in this phase.
+ * Prompt 5 update: the ten recon adapters (subfinder, amass, assetfinder,
+ * findomain, dnsx, httpx, whatweb, gau, waybackurls, katana) are now REAL
+ * code adapters in @dsrclone/security-sdk; their rows are seeded ENABLED
+ * below. Tool health is probed at runtime — a missing binary reports
+ * UNAVAILABLE honestly; seeding never installs or executes anything.
  *
  * Multi-category tools keep ONE identity (e.g. Naabu = RECON, Trivy =
  * CONTAINER, Wireshark = NETWORK, Ghidra = BINARY, mitmproxy = API).
@@ -34,7 +38,7 @@ const TOOLS: CatalogTool[] = [
   { slug: "feroxbuster", name: "Feroxbuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Recursive content discovery scanner." },
   { slug: "gobuster", name: "Gobuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "SUBDOMAIN_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "DOMAIN"], requiresCredentials: [], description: "Directory, DNS and vhost busting tool." },
   { slug: "wfuzz", name: "Wfuzz", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web application fuzzer." },
-  { slug: "katana", name: "Katana", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "URL_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast web crawler for endpoint discovery." },
+  { slug: "katana", name: "Katana", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "URL_DISCOVERY", "ENDPOINT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast web crawler for endpoint discovery." },
   { slug: "arjun", name: "Arjun", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "HTTP parameter discovery suite." },
   { slug: "dalfox", name: "Dalfox", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Focused XSS scanner and parameter analysis." },
   { slug: "xsstrike", name: "XSStrike", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Advanced XSS detection suite." },
@@ -45,17 +49,17 @@ const TOOLS: CatalogTool[] = [
   { slug: "wpscan", name: "WPScan", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "TECHNOLOGY_DETECTION"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "WordPress security scanner." },
   { slug: "testssl", name: "testssl.sh", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["TLS_ANALYSIS"], supportedTargets: ["DOMAIN", "WEB_APPLICATION"], requiresCredentials: [], description: "TLS/SSL configuration checker." },
   { slug: "sslyze", name: "SSLyze", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["TLS_ANALYSIS"], supportedTargets: ["DOMAIN", "WEB_APPLICATION"], requiresCredentials: [], description: "Fast TLS configuration analyzer." },
-  { slug: "amass", name: "Amass", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY", "DNS_RESOLUTION"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Attack surface mapping and asset discovery via OSINT." },
-  { slug: "subfinder", name: "Subfinder", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Passive subdomain enumeration." },
+  { slug: "amass", name: "Amass", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY", "DNS_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Attack surface mapping and asset discovery via OSINT." },
+  { slug: "subfinder", name: "Subfinder", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Passive subdomain enumeration." },
   { slug: "assetfinder", name: "Assetfinder", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Domain asset discovery for related hosts." },
   { slug: "findomain", name: "Findomain", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fast cross-platform subdomain enumerator." },
-  { slug: "dnsx", name: "dnsx", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "DNS query and resolution toolkit." },
+  { slug: "dnsx", name: "dnsx", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION", "DNS_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "DNS query and resolution toolkit." },
   { slug: "shuffledns", name: "shuffledns", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION", "SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Wildcard-aware DNS resolver wrapper." },
   { slug: "massdns", name: "MassDNS", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "High-performance DNS stub resolver." },
   { slug: "httpx", name: "httpx", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["HTTP_PROBING", "TECHNOLOGY_DETECTION"], supportedTargets: ["DOMAIN", "WEB_APPLICATION", "IP_ADDRESS"], requiresCredentials: [], description: "Fast HTTP probing with technology detection." },
   { slug: "naabu", name: "Naabu", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY"], supportedTargets: ["DOMAIN", "IP_ADDRESS", "CIDR"], requiresCredentials: [], description: "Fast port scanner written for pipeline use." },
-  { slug: "gau", name: "gau", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["URL_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fetches known URLs from web archives." },
-  { slug: "waybackurls", name: "waybackurls", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["URL_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fetches archived URLs from the Wayback Machine." },
+  { slug: "gau", name: "gau", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["URL_DISCOVERY", "HISTORICAL_URL_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fetches known URLs from web archives." },
+  { slug: "waybackurls", name: "waybackurls", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["URL_DISCOVERY", "HISTORICAL_URL_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fetches archived URLs from the Wayback Machine." },
   { slug: "hakrawler", name: "Hakrawler", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "URL_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Simple web crawler for endpoints and assets." },
   { slug: "theharvester", name: "theHarvester", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "OSINT gathering for emails, names and hosts." },
   { slug: "recon-ng", name: "Recon-ng", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Modular reconnaissance framework." },
@@ -179,7 +183,32 @@ async function main(): Promise<void> {
       },
     });
   }
-  // The one adapter that exists in this phase: the safe mock.
+  // Prompt 5: adapters implemented in code are seeded ENABLED so the
+  // registry/planner can select them. Health stays UNKNOWN in the catalog —
+  // the real state is probed live (API plan-time + worker execution-time).
+  const IMPLEMENTED_RECON: Array<{ slug: string; outputFormat: string; parser: string; defaultTimeout: number; networkPolicy: string }> = [
+    { slug: "subfinder", outputFormat: "JSONL", parser: "subfinder-jsonl", defaultTimeout: 300, networkPolicy: "INTERNET_READ_ONLY" },
+    { slug: "amass", outputFormat: "JSONL", parser: "amass-jsonl", defaultTimeout: 600, networkPolicy: "INTERNET_READ_ONLY" },
+    { slug: "assetfinder", outputFormat: "TEXT", parser: "assetfinder-text", defaultTimeout: 300, networkPolicy: "INTERNET_READ_ONLY" },
+    { slug: "findomain", outputFormat: "TEXT", parser: "findomain-text", defaultTimeout: 300, networkPolicy: "INTERNET_READ_ONLY" },
+    { slug: "dnsx", outputFormat: "JSONL", parser: "dnsx-jsonl", defaultTimeout: 300, networkPolicy: "SCOPE_ONLY" },
+    { slug: "httpx", outputFormat: "JSONL", parser: "httpx-jsonl", defaultTimeout: 600, networkPolicy: "SCOPE_ONLY" },
+    { slug: "whatweb", outputFormat: "JSON", parser: "whatweb-json", defaultTimeout: 300, networkPolicy: "SCOPE_ONLY" },
+    { slug: "gau", outputFormat: "TEXT", parser: "gau-text", defaultTimeout: 300, networkPolicy: "INTERNET_READ_ONLY" },
+    { slug: "waybackurls", outputFormat: "TEXT", parser: "waybackurls-text", defaultTimeout: 300, networkPolicy: "INTERNET_READ_ONLY" },
+    { slug: "katana", outputFormat: "JSONL", parser: "katana-jsonl", defaultTimeout: 900, networkPolicy: "SCOPE_ONLY" },
+  ];
+  for (const impl of IMPLEMENTED_RECON) {
+    const tool = await prisma.tool.findUnique({ where: { slug: impl.slug } });
+    const catalog = TOOLS.find((x) => x.slug === impl.slug);
+    if (!tool || !catalog) continue;
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, inputSchema: { note: "Implemented adapter (Prompt 5) — validated input schema enforced in code by the security-sdk adapter", implementedPhase: 5 } },
+      create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: "CONTAINER", outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 5)", implementedPhase: 5 } },
+    });
+  }
+  // The safe mock (simulation) and local echo (diagnostics).
   const mock = await prisma.tool.upsert({
     where: { slug: "mock" },
     update: {},
@@ -216,7 +245,7 @@ async function main(): Promise<void> {
       parser: "json", defaultTimeout: 5, networkPolicy: "NO_NETWORK", enabled: true,
     },
   });
-  console.log(`Seeded ${TOOLS.length + 2} tool catalog entries (metadata only; catalog adapters disabled)`);
+  console.log(`Seeded ${TOOLS.length + 2} tool catalog entries (10 recon adapters enabled — Prompt 5; other catalog adapters disabled)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

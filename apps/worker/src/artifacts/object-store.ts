@@ -36,6 +36,6 @@ export class InMemoryObjectStore implements ObjectStore {
   }
 }
 
-export function rawArtifactKey(scanId: string, executionId: string): string {
-  return `scans/${scanId}/executions/${executionId}/raw.json`;
+export function rawArtifactKey(scanId: string, executionId: string, fileName = "raw.json"): string {
+  return `scans/${scanId}/executions/${executionId}/${fileName}`;
 }

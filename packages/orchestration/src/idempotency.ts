@@ -6,8 +6,11 @@
  * failures are terminal by design.
  */
 
-export function idempotencyKey(scanId: string, stageId: string, attempt: number): string {
-  return `${scanId}:${stageId}:${attempt}`;
+export function idempotencyKey(scanId: string, stageId: string, attempt: number, adapterSlug?: string): string {
+  // Prompt 5: a stage may execute MULTIPLE adapters (parallel subdomain
+  // discovery, §16) — their executions need distinct keys. Without a slug
+  // the legacy format is preserved exactly.
+  return adapterSlug ? `${scanId}:${stageId}:${adapterSlug}:${attempt}` : `${scanId}:${stageId}:${attempt}`;
 }
 
 export function stageJobId(scanId: string, stageId: string, attempt: number): string {

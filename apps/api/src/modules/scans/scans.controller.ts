@@ -7,6 +7,7 @@ import { parseOrThrow } from "../../common/parse";
 import { resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
 import { QueueService } from "../../queue/queue.service";
+import { AssetsService } from "../assets/assets.service";
 
 /**
  * Scans are executions of approved assessments. Creating a scan records it as
@@ -20,6 +21,7 @@ export class ScansController {
     @Inject(PRISMA) private readonly prisma: PrismaClientLike,
     private readonly audit: AuditService,
     private readonly queue: QueueService,
+    private readonly assets: AssetsService,
   ) {}
 
   @Get()
@@ -62,6 +64,24 @@ export class ScansController {
     const scan = await this.prisma.scan.findFirst({ where: { id, workspaceId: workspace.id }, include: { stages: true, assessment: true, executions: true } });
     if (!scan) throw new NotFoundException("Scan not found");
     return scan;
+  }
+
+  /** Assets discovered by this scan (Prompt 5 §48). */
+  @Get(":id/assets")
+  async scanAssets(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.listScanAssets(user, id);
+  }
+
+  /** Endpoints discovered by this scan (Prompt 5 §48). */
+  @Get(":id/endpoints")
+  async scanEndpoints(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.listScanEndpoints(user, id);
+  }
+
+  /** Recon summary: inventory metrics, never vulnerability claims (§46). */
+  @Get(":id/recon-summary")
+  async reconSummary(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.assets.reconSummary(user, id);
   }
 
   @Post(":id/cancel")

@@ -23,12 +23,16 @@ describe("profile → plan mapping (§7)", () => {
   it("PASSIVE_RECON plan has the spec stage chain and no vulnerability-scan stage", () => {
     const { plan } = buildScanPlan({ ...baseInput, profile: "PASSIVE_RECON", registry: registry() });
     const types = plan.stages.map((s) => s.type);
+    // Prompt 5 §40: PASSIVE_RECON gains ENDPOINT_DISCOVERY (historical URL
+    // sources) while staying free of active probing/crawling stages.
     expect(types).toEqual([
       "AUTHORIZATION_CHECK", "SCOPE_VALIDATION", "PASSIVE_RECON", "ASSET_DISCOVERY",
-      "DNS_RESOLUTION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
+      "DNS_RESOLUTION", "ENDPOINT_DISCOVERY", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
     ]);
     const norm = plan.stages.find((s) => s.type === "NORMALIZATION");
-    expect(norm!.dependencies).toEqual(["DNS_RESOLUTION"]);
+    expect(norm!.dependencies).toEqual(["ENDPOINT_DISCOVERY"]);
+    const endpoints = plan.stages.find((s) => s.type === "ENDPOINT_DISCOVERY");
+    expect(endpoints!.dependencies).toEqual(["DNS_RESOLUTION"]); // crawl/tech deps substituted in this profile
   });
 
   it("WEB_BASELINE selects the mock (simulation) adapter for capability stages, honestly flagged", () => {

@@ -1,5 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import {
+  LocalEchoAdapter, MockSecurityAdapter, RECON_SLUGS, ToolRegistry,
+  reconHealthBySlug, registerReconAdapters,
+} from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
 import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
 import {
@@ -12,8 +15,11 @@ import { AuditService } from "../audit/audit.service";
 import { QueueService } from "../../queue/queue.service";
 import { ScanEventsService } from "./scan-events.service";
 
-/** Adapters executable in this phase (Prompt 4 §65): simulation only. */
-export const EXECUTABLE_SLUGS = ["mock", "local-echo"];
+/** Executable adapters: the simulation pair plus the Prompt 5 recon
+ *  adapters. Real adapters are selected only when their health probe passes
+ *  on this host; otherwise the stage falls back to the labelled simulation
+ *  adapter (Prompt 5 §39/§56) — never to a fake "real" run. */
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS];
 
 export function hostOf(value: string): string {
   try {
@@ -48,11 +54,24 @@ export class OrchestrationService {
     private readonly events: ScanEventsService,
   ) {}
 
+  private registryCache: { registry: ToolRegistry; healthBySlug: Record<string, string> } | undefined;
+
   private registry(): ToolRegistry {
-    const registry = new ToolRegistry();
-    registry.register(new MockSecurityAdapter());
-    registry.register(new LocalEchoAdapter());
-    return registry;
+    if (!this.registryCache) {
+      const registry = new ToolRegistry();
+      registry.register(new MockSecurityAdapter());
+      registry.register(new LocalEchoAdapter());
+      registerReconAdapters(registry);
+      // Plan-time health (§39): synchronous PATH probe of this host. The
+      // worker re-checks availability at execution time on ITS host.
+      this.registryCache = { registry, healthBySlug: reconHealthBySlug(registry.list()) };
+    }
+    return this.registryCache.registry;
+  }
+
+  private healthBySlug(): Record<string, string> {
+    this.registry();
+    return this.registryCache!.healthBySlug;
   }
 
   private async load(user: RequestUser, assessmentId: string): Promise<LoadedAssessment> {
@@ -88,7 +107,7 @@ export class OrchestrationService {
       targetVerified: target.verified,
       assessmentApproved: assessment.status === "APPROVED",
       registry: this.registry(),
-      selection: { executableSlugs: EXECUTABLE_SLUGS },
+      selection: { executableSlugs: EXECUTABLE_SLUGS, healthBySlug: this.healthBySlug() },
     });
     return plan;
   }
@@ -180,7 +199,13 @@ export class OrchestrationService {
     const workspace = await resolveWorkspace(this.prisma, user);
     const scan = await this.prisma.scan.findFirst({
       where: { id: scanId, workspaceId: workspace.id },
-      include: { stages: true, executions: true, assessment: { include: { target: true } } },
+      include: {
+        stages: true,
+        // Executions carry their tool identity so the Live Scan view can
+        // show WHICH adapter ran, its status and its metrics (§42).
+        executions: { include: { tool: { select: { slug: true, name: true } } }, orderBy: { createdAt: "asc" } },
+        assessment: { include: { target: true } },
+      },
     });
     if (!scan) throw new NotFoundException("Scan not found");
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {

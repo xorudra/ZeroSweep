@@ -26,8 +26,28 @@ interface ExecutionRow {
   id: string;
   status: string;
   toolId: string;
+  tool?: { slug: string; name: string } | null;
+  metrics?: Record<string, number> | null;
+  exitCode?: number | null;
+  error?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+}
+interface ReconSummary {
+  totalAssets: number;
+  inScopeAssets: number;
+  outOfScopeAssets: number;
+  subdomains: number;
+  resolvedHosts: number;
+  httpServices: number;
+  totalServices: number;
+  technologies: number;
+  totalEndpoints: number;
+  historicalUrls: number;
+  crawlUrls: number;
+  outOfScopeEndpoints: number;
+  bySource?: Record<string, number>;
+  toolsRun?: { slug?: string; name?: string; status: string }[];
 }
 interface ScanDetails {
   id: string;
@@ -72,6 +92,7 @@ export default function Page() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [scan, setScan] = useState<ScanDetails | null>(null);
+  const [recon, setRecon] = useState<ReconSummary | null>(null);
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -83,6 +104,8 @@ export default function Page() {
       const [details, ev] = await Promise.all([api.scanDetails(id), api.scanEvents(id)]);
       setScan(details as ScanDetails);
       setEvents((ev as { items: ScanEvent[] }).items ?? []);
+      // Recon summary is best-effort: older scans may have no recon data.
+      api.reconSummary(id).then((r) => setRecon(r as ReconSummary)).catch(() => undefined);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load scan");
@@ -193,7 +216,9 @@ export default function Page() {
             <div className="mt-4 space-y-1">
               {(scan.executions ?? []).map((ex) => (
                 <p key={ex.id} className="text-xs text-slate-400">
-                  tool execution {ex.id.slice(0, 8)}… — {ex.status}
+                  {ex.tool ? `${ex.tool.name} (${ex.tool.slug})` : `tool execution ${ex.id.slice(0, 8)}…`} — {ex.status}
+                  {ex.metrics ? ` · assets ${ex.metrics.assets ?? 0} · services ${ex.metrics.services ?? 0} · endpoints ${ex.metrics.endpoints ?? 0}` : ""}
+                  {ex.error ? ` · ${ex.error}` : ""}
                   {ex.startedAt ? ` · started ${new Date(ex.startedAt).toLocaleTimeString()}` : ""}
                 </p>
               ))}
@@ -204,6 +229,42 @@ export default function Page() {
               ))}
             </div>
           </Card>
+
+          {recon && recon.totalAssets + recon.totalEndpoints > 0 && (
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-200">Recon Summary</h3>
+              <p className="mt-1 text-xs text-slate-500">Inventory discovered by this scan — not vulnerability counts.</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  ["Assets", recon.totalAssets],
+                  ["In scope", recon.inScopeAssets],
+                  ["Out of scope", recon.outOfScopeAssets],
+                  ["Subdomains", recon.subdomains],
+                  ["Resolved hosts", recon.resolvedHosts],
+                  ["HTTP services", recon.httpServices],
+                  ["Technologies", recon.technologies],
+                  ["Endpoints", recon.totalEndpoints],
+                  ["Historical URLs", recon.historicalUrls],
+                  ["Crawl URLs", recon.crawlUrls],
+                ].map(([label, value]) => (
+                  <div key={label as string}>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-1 text-xl text-slate-100">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {recon.bySource && Object.keys(recon.bySource).length > 0 && (
+                <p className="mt-3 text-xs text-slate-400">
+                  Discovered by: {Object.entries(recon.bySource).map(([tool, n]) => `${tool} (${n})`).join(", ")}
+                </p>
+              )}
+              {recon.toolsRun && recon.toolsRun.length > 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Tools run: {recon.toolsRun.map((t) => `${t.slug ?? t.name} — ${t.status}`).join(" · ")}
+                </p>
+              )}
+            </Card>
+          )}
 
           <Card>
             <h3 className="text-sm font-semibold text-slate-200">Timeline</h3>

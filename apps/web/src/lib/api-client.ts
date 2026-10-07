@@ -66,4 +66,14 @@ export const api = {
   resumeScan: (scanId: string) => apiFetch(`/scans/${scanId}/resume`, { method: "POST", body: JSON.stringify({}) }),
   cancelScan: (scanId: string) => apiFetch(`/scans/${scanId}/cancel`, { method: "POST", body: JSON.stringify({}) }),
   stopScan: (scanId: string) => apiFetch(`/scans/${scanId}/stop`, { method: "POST", body: JSON.stringify({}) }),
+  // Prompt 5 recon inventory
+  assets: (query = "") => apiFetch(`/assets${query}`),
+  asset: (id: string) => apiFetch(`/assets/${id}`),
+  assetServices: (id: string) => apiFetch(`/assets/${id}/services`),
+  assetEndpoints: (id: string) => apiFetch(`/assets/${id}/endpoints`),
+  endpoints: (query = "") => apiFetch(`/endpoints${query}`),
+  scanAssets: (scanId: string) => apiFetch(`/scans/${scanId}/assets`),
+  scanEndpoints: (scanId: string) => apiFetch(`/scans/${scanId}/endpoints`),
+  reconSummary: (scanId: string) => apiFetch(`/scans/${scanId}/recon-summary`),
+  toolHealth: (slug: string) => apiFetch(`/tools/${slug}/health`),
 };

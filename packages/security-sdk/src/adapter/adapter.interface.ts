@@ -15,8 +15,10 @@ export interface SecurityToolAdapter {
   checkAvailability(): Promise<boolean>;
   prepare(ctx: AuthorizationContext): Promise<void>;
   buildExecutionPlan(target: AdapterTarget, config: Record<string, unknown>): Promise<ExecutionPlan>;
-  /** Interface/mock only in this phase — real execution lands in later phases. */
-  execute(plan: ExecutionPlan): Promise<{ rawOutputLocation?: string }>;
+  /** Executes the trusted plan (real adapters since Prompt 5). The raw
+   *  output string is returned for artifact storage + parsing; it is tool
+   *  output data, never a command channel. */
+  execute(plan: ExecutionPlan): Promise<{ rawOutputLocation?: string; rawOutput?: string }>;
   parse(raw: string): Promise<unknown>;
   normalize(parsed: unknown): Promise<NormalizedSecurityResult>;
   cleanup(): Promise<void>;

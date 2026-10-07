@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerReconAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -18,9 +18,11 @@ import { metrics, METRICS } from "./telemetry/metrics";
  * DSRclone worker (Prompt 4 §20–§23, §52): production queue consumer.
  * Registers a WorkerNode, heartbeats, consumes scan-orchestration jobs and
  * drives each plan's DAG — dispatching stage-execution jobs (IDs only) that
- * re-evaluate authorization/scope/policy before running an adapter. In this
- * phase ONLY the mock + local-echo adapters can execute; no real scanner
- * exists in the registry this process builds.
+ * re-evaluate authorization/scope/policy before running an adapter.
+ * Executable adapters: mock + local-echo (simulation/diagnostics) and the
+ * Prompt 5 recon adapters. A recon adapter whose binary is absent from the
+ * worker host reports UNAVAILABLE and is never executed — the DAG degrades
+ * the capability instead (Prompt 5 §2/§56).
  */
 
 const logger = createLogger("dsrclone-worker");
@@ -29,6 +31,7 @@ const store = new PrismaWorkerStore();
 const registry = new ToolRegistry();
 registry.register(new MockSecurityAdapter());
 registry.register(new LocalEchoAdapter());
+registerReconAdapters(registry);
 const executor = new StageExecutor(registry, store);
 const runner = new DagRunner(store, executor);
 const workerId = makeWorkerId();
@@ -123,7 +126,7 @@ void (async () => {
 const heartbeat = setInterval(() => void registerAndHeartbeat(), 15_000);
 heartbeat.unref?.();
 
-logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo"] });
+logger.info("worker started", { workerId, queues: workers.map((w) => w.name), executableAdapters: ["mock", "local-echo", "subfinder", "amass", "assetfinder", "findomain", "dnsx", "httpx", "whatweb", "gau", "waybackurls", "katana"] });
 
 /** Graceful drain (§52): stop taking jobs, let active work finish, flush state. */
 async function shutdown(signal: string): Promise<void> {

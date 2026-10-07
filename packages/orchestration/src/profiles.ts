@@ -68,14 +68,19 @@ function template(types: StageType[]): StageDefinition[] {
 }
 
 /**
- * Profile → stage template. In this phase only PASSIVE_RECON and WEB_BASELINE
- * are fully exercised end-to-end (with mock adapters); the rest are validated
- * architecture/templates whose network stages execute nothing real yet.
+ * Profile → stage template. Since Prompt 5, PASSIVE_RECON and WEB_BASELINE
+ * execute REAL recon adapters (subdomain discovery → DNS → HTTP probing →
+ * technology detection → historical URL discovery → conservative crawl)
+ * whenever the tool binaries are present, and degrade to the labelled
+ * simulation adapter when they are not. PASSIVE_RECON stays passive: its
+ * endpoint stage is fed by archive/history sources (gau/waybackurls), not by
+ * active probing or crawling (Prompt 5 §40). The remaining profiles are
+ * validated templates whose specialist stages land in later phases.
  * NORMALIZATION depends on the last discovery stage of each profile — handled
  * by rewriting its dependency when a profile omits SAFE_VULNERABILITY_SCAN.
  */
 export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
-  PASSIVE_RECON: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", ...TAIL]),
+  PASSIVE_RECON: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "ENDPOINT_DISCOVERY", ...TAIL]),
   WEB_BASELINE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "ENDPOINT_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   WEB_COMPREHENSIVE: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "PORT_DISCOVERY", "CRAWLING", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   API_ASSESSMENT: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", "DNS_RESOLUTION", "HTTP_DISCOVERY", "TECHNOLOGY_DETECTION", "CRAWLING", "ENDPOINT_DISCOVERY", "PARAMETER_DISCOVERY", "SAFE_VULNERABILITY_SCAN", ...TAIL]),
@@ -102,17 +107,19 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
     return defs.slice(0, idx).map((d) => d.type);
   };
   for (const def of defs) {
+    const substituted: StageType[] = [];
     def.dependencies = def.dependencies.filter((dep) => {
       if (present.has(dep)) return true;
-      // Dependency not in this profile: rewire NORMALIZATION-style tails to
-      // the last preceding included stage instead of dropping the ordering.
+      // Dependency not in this profile: substitute the nearest preceding
+      // included stage so ordering survives (e.g. ENDPOINT_DISCOVERY in
+      // PASSIVE_RECON follows DNS_RESOLUTION when the crawl/tech stages it
+      // usually follows are not part of the profile).
       const before = includedBefore(def.type);
-      if (def.type === "NORMALIZATION" || def.type === "CORRELATION" || def.type === "RISK_ANALYSIS" || def.type === "REPORT_GENERATION") {
-        const prev = before[before.length - 1];
-        if (prev && !def.dependencies.includes(prev)) def.dependencies.push(prev);
-      }
+      const prev = before[before.length - 1];
+      if (prev && !substituted.includes(prev)) substituted.push(prev);
       return false;
     });
+    for (const s of substituted) if (!def.dependencies.includes(s)) def.dependencies.push(s);
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];
     if (def.type === "RISK_ANALYSIS") def.dependencies = ["CORRELATION"];
