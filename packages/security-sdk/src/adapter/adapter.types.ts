@@ -28,6 +28,43 @@ export type NetworkPolicyMode = "NO_NETWORK" | "TARGET_ONLY" | "SCOPE_ONLY" | "I
 
 export interface ResourceRequirements { cpu: string; memory: string; timeoutSeconds: number; }
 
+/**
+ * Structured adapter input schema (Prompt 3 §8). Adapters declare the fields
+ * they accept; users submit values for those fields only. There is NO field
+ * type for a raw command and no API accepts one — a field named "command"
+ * (or similar) is rejected by validation.
+ */
+export const INPUT_FIELD_TYPES = ["string", "number", "boolean", "string[]", "number[]"] as const;
+export type InputFieldType = (typeof INPUT_FIELD_TYPES)[number];
+
+export interface AdapterInputField {
+  name: string;
+  type: InputFieldType;
+  required?: boolean;
+  description?: string;
+  /** Inclusive bounds for numeric fields; length bounds for strings/arrays. */
+  min?: number;
+  max?: number;
+  enumValues?: string[];
+}
+
+export const FORBIDDEN_INPUT_FIELDS = ["command", "cmd", "shell", "exec", "script", "args"] as const;
+
+/**
+ * A credential an adapter needs (Prompt 3 §23). Only the REFERENCE is ever
+ * declared, stored or logged; the secret value is resolved inside the trusted
+ * worker boundary at execution time and never enters metadata or API output.
+ */
+export interface CredentialRequirement {
+  reference: string; // e.g. "SHODAN_API_KEY" — a name, never a value
+  description?: string;
+  required: boolean;
+}
+
+export function credentialRequirementsOf(metadata: ToolMetadata): CredentialRequirement[] {
+  return metadata.requiresCredentials.map((reference) => ({ reference, required: true }));
+}
+
 export interface ToolMetadata {
   id: string;
   slug: string;
@@ -43,6 +80,8 @@ export interface ToolMetadata {
   supportedTargetTypes: TargetType[];
   supportedOutputFormats: OutputFormat[];
   capabilities: Capability[];
+  /** Declared structured inputs; configuration is validated against this. */
+  inputSchema?: AdapterInputField[];
   requiresCredentials: string[];
   requiresApproval: boolean;
   supportsContainerExecution: boolean;

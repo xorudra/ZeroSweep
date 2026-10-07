@@ -30,6 +30,12 @@ export interface PolicyInput {
   currentConcurrency: number;
   maxConcurrency: number;
   internalEngagementApproved?: boolean;
+  /** Network posture for this execution (Prompt 3 §13): false when the
+   *  tool's network policy does not permit reaching the target at all. */
+  networkPermitted?: boolean;
+  /** Rate accounting for this tool in the current window (Prompt 3 §33). */
+  requestsInWindow?: number;
+  rateLimitPerMinute?: number;
 }
 
 const allow = (): PolicyDecision => ({ decision: "ALLOW", reasonCode: "OK", message: "Execution permitted by policy" });
@@ -89,6 +95,13 @@ export function evaluateToolPolicy(input: PolicyInput): PolicyDecision {
     return deny("CREDENTIAL_REQUIRED", `Missing required credential reference(s): ${missing.join(", ")}`);
   }
 
+  if (input.networkPermitted === false) {
+    return deny("NETWORK_POLICY_DENIED", "The tool's network policy does not permit this execution");
+  }
+  if (input.requestsInWindow !== undefined && input.rateLimitPerMinute !== undefined
+    && input.requestsInWindow >= input.rateLimitPerMinute) {
+    return deny("RATE_LIMIT_EXCEEDED", "Tool rate limit exceeded for the current window");
+  }
   if (input.currentConcurrency >= input.maxConcurrency) {
     return deny("CONCURRENCY_LIMIT", "Tool concurrency limit reached");
   }

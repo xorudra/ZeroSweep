@@ -3,52 +3,180 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 /**
- * Tool catalog seed — metadata entries for the tools DSRclone will integrate
- * through adapters in later phases. No commands are stored or executed.
- * Commercial tools are marked ADMIN_PROVIDED: the administrator supplies the
- * installation/license; DSRclone does not redistribute them.
+ * Tool catalog seed (Prompt 3 §41) — METADATA ONLY for every tool DSRclone
+ * will integrate through adapters in later phases. No commands are stored,
+ * no tool is executed by seeding, and catalog adapters are seeded DISABLED:
+ * an adapter row here means "known to the registry", not "implemented".
+ * Only the Mock adapter (below) is real in this phase.
+ *
+ * Multi-category tools keep ONE identity (e.g. Naabu = RECON, Trivy =
+ * CONTAINER, Wireshark = NETWORK, Ghidra = BINARY, mitmproxy = API).
+ * Commercial tools are ADMIN_PROVIDED: the administrator supplies the
+ * installation/license/API; DSRclone never redistributes them.
  */
-const TOOLS: Array<{
-  slug: string; name: string; category: "RECON" | "WEB" | "NETWORK" | "API" | "MOBILE" | "CLOUD" | "CONTAINER" | "SOURCE_CODE" | "BINARY" | "WIRELESS" | "REPORTING";
-  riskLevel: "PASSIVE" | "LOW" | "MODERATE" | "INTRUSIVE" | "RESTRICTED";
-  licenseType: "OPEN_SOURCE" | "COMMERCIAL" | "EXTERNAL_API" | "ADMIN_PROVIDED";
-  requiresApproval?: boolean;
-}> = [
-  { slug: "subfinder", name: "Subfinder", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE" },
-  { slug: "amass", name: "Amass", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE" },
-  { slug: "httpx", name: "httpx", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "naabu", name: "Naabu", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "nuclei", name: "Nuclei", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "katana", name: "Katana", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "ffuf", name: "ffuf", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "owasp-zap", name: "OWASP ZAP", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "nikto", name: "Nikto", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "whatweb", name: "WhatWeb", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "wpscan", name: "WPScan", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "testssl", name: "testssl.sh", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "burp-suite-professional", name: "Burp Suite Professional", category: "WEB", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true },
-  { slug: "nmap", name: "Nmap", category: "NETWORK", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "rustscan", name: "RustScan", category: "NETWORK", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "masscan", name: "Masscan", category: "NETWORK", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "nessus-professional", name: "Nessus Professional", category: "NETWORK", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true },
-  { slug: "schemathesis", name: "Schemathesis", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "jwt-tool", name: "jwt_tool", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE" },
-  { slug: "trivy", name: "Trivy", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "grype", name: "Grype", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "checkov", name: "Checkov", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "prowler", name: "Prowler", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true },
-  { slug: "semgrep", name: "Semgrep", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "gitleaks", name: "Gitleaks", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "mobsf", name: "MobSF", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
-  { slug: "ghidra", name: "Ghidra", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE" },
+type Cat = "RECON" | "WEB" | "NETWORK" | "API" | "ACTIVE_DIRECTORY" | "PASSWORD_AUDIT" | "MOBILE" | "CLOUD" | "CONTAINER" | "SOURCE_CODE" | "BINARY" | "WIRELESS" | "REPORTING";
+type Risk = "PASSIVE" | "LOW" | "MODERATE" | "INTRUSIVE" | "RESTRICTED";
+type Lic = "OPEN_SOURCE" | "COMMERCIAL" | "EXTERNAL_API" | "ADMIN_PROVIDED";
+
+interface CatalogTool {
+  slug: string; name: string; category: Cat; riskLevel: Risk; licenseType: Lic;
+  requiresApproval: boolean; description: string;
+  capabilities: string[]; supportedTargets: string[]; requiresCredentials: string[];
+}
+
+const TOOLS: CatalogTool[] = [
+  { slug: "burp-suite-professional", name: "Burp Suite Professional", category: "WEB", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["WEB_CRAWLING", "VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Commercial web proxy/scanner; admin supplies license and installation." },
+  { slug: "caido", name: "Caido", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "HTTP_PROBING"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Modern web security proxy toolkit." },
+  { slug: "owasp-zap", name: "OWASP ZAP", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Open-source web application scanner and proxy." },
+  { slug: "nuclei", name: "Nuclei", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION", "DOMAIN", "API"], requiresCredentials: [], description: "Template-based vulnerability scanner." },
+  { slug: "nikto", name: "Nikto", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "TECHNOLOGY_DETECTION"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web server scanner for dangerous files and outdated software." },
+  { slug: "ffuf", name: "ffuf", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast web fuzzer for content and parameter discovery." },
+  { slug: "feroxbuster", name: "Feroxbuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Recursive content discovery scanner." },
+  { slug: "gobuster", name: "Gobuster", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "SUBDOMAIN_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "DOMAIN"], requiresCredentials: [], description: "Directory, DNS and vhost busting tool." },
+  { slug: "wfuzz", name: "Wfuzz", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web application fuzzer." },
+  { slug: "katana", name: "Katana", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "URL_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Fast web crawler for endpoint discovery." },
+  { slug: "arjun", name: "Arjun", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "HTTP parameter discovery suite." },
+  { slug: "dalfox", name: "Dalfox", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "PARAMETER_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Focused XSS scanner and parameter analysis." },
+  { slug: "xsstrike", name: "XSStrike", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Advanced XSS detection suite." },
+  { slug: "sqlmap", name: "SQLmap", category: "WEB", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION", "API"], requiresCredentials: [], description: "Automatic SQL injection detection; intrusive features require explicit approval." },
+  { slug: "commix", name: "Commix", category: "WEB", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Automated command injection testing; requires explicit approval." },
+  { slug: "sstimap", name: "SSTImap", category: "WEB", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Server-side template injection detection; requires explicit approval." },
+  { slug: "whatweb", name: "WhatWeb", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["TECHNOLOGY_DETECTION", "HTTP_PROBING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web technology fingerprinting." },
+  { slug: "wpscan", name: "WPScan", category: "WEB", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "TECHNOLOGY_DETECTION"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "WordPress security scanner." },
+  { slug: "testssl", name: "testssl.sh", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["TLS_ANALYSIS"], supportedTargets: ["DOMAIN", "WEB_APPLICATION"], requiresCredentials: [], description: "TLS/SSL configuration checker." },
+  { slug: "sslyze", name: "SSLyze", category: "WEB", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["TLS_ANALYSIS"], supportedTargets: ["DOMAIN", "WEB_APPLICATION"], requiresCredentials: [], description: "Fast TLS configuration analyzer." },
+  { slug: "amass", name: "Amass", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY", "DNS_RESOLUTION"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Attack surface mapping and asset discovery via OSINT." },
+  { slug: "subfinder", name: "Subfinder", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Passive subdomain enumeration." },
+  { slug: "assetfinder", name: "Assetfinder", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Domain asset discovery for related hosts." },
+  { slug: "findomain", name: "Findomain", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fast cross-platform subdomain enumerator." },
+  { slug: "dnsx", name: "dnsx", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "DNS query and resolution toolkit." },
+  { slug: "shuffledns", name: "shuffledns", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION", "SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Wildcard-aware DNS resolver wrapper." },
+  { slug: "massdns", name: "MassDNS", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["DNS_RESOLUTION"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "High-performance DNS stub resolver." },
+  { slug: "httpx", name: "httpx", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["HTTP_PROBING", "TECHNOLOGY_DETECTION"], supportedTargets: ["DOMAIN", "WEB_APPLICATION", "IP_ADDRESS"], requiresCredentials: [], description: "Fast HTTP probing with technology detection." },
+  { slug: "naabu", name: "Naabu", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY"], supportedTargets: ["DOMAIN", "IP_ADDRESS", "CIDR"], requiresCredentials: [], description: "Fast port scanner written for pipeline use." },
+  { slug: "gau", name: "gau", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["URL_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fetches known URLs from web archives." },
+  { slug: "waybackurls", name: "waybackurls", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["URL_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Fetches archived URLs from the Wayback Machine." },
+  { slug: "hakrawler", name: "Hakrawler", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["WEB_CRAWLING", "URL_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Simple web crawler for endpoints and assets." },
+  { slug: "theharvester", name: "theHarvester", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "OSINT gathering for emails, names and hosts." },
+  { slug: "recon-ng", name: "Recon-ng", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY"], supportedTargets: ["DOMAIN"], requiresCredentials: [], description: "Modular reconnaissance framework." },
+  { slug: "spiderfoot", name: "SpiderFoot", category: "RECON", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY", "HTTP_PROBING"], supportedTargets: ["DOMAIN", "IP_ADDRESS"], requiresCredentials: [], description: "Automated OSINT collection and analysis." },
+  { slug: "eyewitness", name: "EyeWitness", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["HTTP_PROBING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web screenshot and fingerprint triage." },
+  { slug: "gowitness", name: "gowitness", category: "RECON", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["HTTP_PROBING"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Web screenshot utility using headless Chrome." },
+  { slug: "shodan-cli", name: "Shodan CLI", category: "RECON", riskLevel: "PASSIVE", licenseType: "EXTERNAL_API", requiresApproval: false, capabilities: ["SUBDOMAIN_DISCOVERY", "SERVICE_DETECTION"], supportedTargets: ["DOMAIN", "IP_ADDRESS"], requiresCredentials: ["SHODAN_API_KEY"], description: "Shodan search API client; administrator supplies the API key." },
+  { slug: "censys-cli", name: "Censys CLI", category: "RECON", riskLevel: "PASSIVE", licenseType: "EXTERNAL_API", requiresApproval: false, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["DOMAIN", "IP_ADDRESS"], requiresCredentials: ["CENSYS_CREDENTIAL"], description: "Censys search API client; administrator supplies credentials." },
+  { slug: "nmap", name: "Nmap", category: "NETWORK", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY", "SERVICE_DETECTION"], supportedTargets: ["IP_ADDRESS", "CIDR", "DOMAIN"], requiresCredentials: [], description: "Network discovery and service version detection." },
+  { slug: "masscan", name: "Masscan", category: "NETWORK", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY"], supportedTargets: ["IP_ADDRESS", "CIDR"], requiresCredentials: [], description: "High-speed internet-scale port scanner." },
+  { slug: "rustscan", name: "RustScan", category: "NETWORK", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY"], supportedTargets: ["IP_ADDRESS", "CIDR"], requiresCredentials: [], description: "Fast port scanner front-end." },
+  { slug: "netdiscover", name: "Netdiscover", category: "NETWORK", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY"], supportedTargets: ["CIDR"], requiresCredentials: [], description: "ARP-based local network host discovery (lab networks)." },
+  { slug: "arp-scan", name: "arp-scan", category: "NETWORK", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["PORT_DISCOVERY"], supportedTargets: ["CIDR"], requiresCredentials: [], description: "ARP-based local network discovery (lab networks)." },
+  { slug: "wireshark", name: "Wireshark", category: "NETWORK", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["CIDR"], requiresCredentials: [], description: "Packet capture analysis (lab/offline captures)." },
+  { slug: "tcpdump", name: "tcpdump", category: "NETWORK", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["CIDR"], requiresCredentials: [], description: "Command-line packet analyzer (lab/offline captures)." },
+  { slug: "tshark", name: "tshark", category: "NETWORK", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["CIDR"], requiresCredentials: [], description: "Terminal Wireshark for capture analysis." },
+  { slug: "metasploit-framework", name: "Metasploit Framework", category: "NETWORK", riskLevel: "RESTRICTED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS"], requiresCredentials: [], description: "Exploitation framework — restricted: controlled validation only, disabled by default, never auto-selected." },
+  { slug: "searchsploit", name: "SearchSploit", category: "NETWORK", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS"], requiresCredentials: [], description: "Local Exploit-DB search; offline reference only." },
+  { slug: "greenbone-openvas", name: "Greenbone/OpenVAS", category: "NETWORK", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS", "CIDR"], requiresCredentials: [], description: "Full vulnerability scanner appliance integration." },
+  { slug: "nessus-professional", name: "Nessus Professional", category: "NETWORK", riskLevel: "MODERATE", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS", "CIDR"], requiresCredentials: ["NESSUS_API"], description: "Commercial vulnerability scanner; admin supplies license and API access." },
+  { slug: "postman", name: "Postman", category: "API", riskLevel: "LOW", licenseType: "COMMERCIAL", requiresApproval: false, capabilities: ["API_DISCOVERY"], supportedTargets: ["API"], requiresCredentials: [], description: "API platform used for collection import and API inventory." },
+  { slug: "insomnia", name: "Insomnia", category: "API", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["API_DISCOVERY"], supportedTargets: ["API"], requiresCredentials: [], description: "API client used for request collection import." },
+  { slug: "kiterunner", name: "Kiterunner", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["API_DISCOVERY", "CONTENT_DISCOVERY"], supportedTargets: ["API"], requiresCredentials: [], description: "API endpoint discovery and route scanning." },
+  { slug: "jwt-tool", name: "jwt_tool", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["API", "GRAPHQL"], requiresCredentials: [], description: "JWT security testing toolkit; attack modes require approval." },
+  { slug: "graphqlmap", name: "GraphQLmap", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING", "API_DISCOVERY"], supportedTargets: ["GRAPHQL"], requiresCredentials: [], description: "GraphQL security assessment toolkit." },
+  { slug: "inql", name: "InQL", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["API_DISCOVERY", "VULNERABILITY_SCANNING"], supportedTargets: ["GRAPHQL"], requiresCredentials: [], description: "GraphQL introspection and security analysis (Burp extension)." },
+  { slug: "schemathesis", name: "Schemathesis", category: "API", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["VULNERABILITY_SCANNING", "API_DISCOVERY"], supportedTargets: ["API"], requiresCredentials: [], description: "Property-based API testing from OpenAPI/GraphQL schemas." },
+  { slug: "mitmproxy", name: "mitmproxy", category: "API", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["HTTP_PROBING"], supportedTargets: ["API", "WEB_APPLICATION"], requiresCredentials: [], description: "Interactive intercepting proxy for traffic capture." },
+  { slug: "bloodhound", name: "BloodHound", category: "ACTIVE_DIRECTORY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "AD identity graph analysis from collected data (approved environments only)." },
+  { slug: "sharphound", name: "SharpHound", category: "ACTIVE_DIRECTORY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "BloodHound data collector for authorized AD environments." },
+  { slug: "netexec", name: "NetExec", category: "ACTIVE_DIRECTORY", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION", "VULNERABILITY_SCANNING"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: ["AD_CREDENTIAL"], description: "Network service exploitation framework for approved AD engagements." },
+  { slug: "impacket", name: "Impacket", category: "ACTIVE_DIRECTORY", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: ["AD_CREDENTIAL"], description: "Python classes for network protocol work in approved AD labs." },
+  { slug: "certipy", name: "Certipy", category: "ACTIVE_DIRECTORY", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: ["AD_CREDENTIAL"], description: "AD Certificate Services enumeration and auditing." },
+  { slug: "pingcastle", name: "PingCastle", category: "ACTIVE_DIRECTORY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "Active Directory security posture assessment." },
+  { slug: "enum4linux-ng", name: "enum4linux-ng", category: "ACTIVE_DIRECTORY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "SMB/LDAP enumeration for approved environments." },
+  { slug: "smbmap", name: "SMBMap", category: "ACTIVE_DIRECTORY", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: ["AD_CREDENTIAL"], description: "SMB share enumeration for approved environments." },
+  { slug: "ldapsearch", name: "ldapsearch", category: "ACTIVE_DIRECTORY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "LDAP directory queries for approved environments." },
+  { slug: "kerbrute", name: "Kerbrute", category: "ACTIVE_DIRECTORY", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "Kerberos pre-auth enumeration in approved environments." },
+  { slug: "responder", name: "Responder", category: "ACTIVE_DIRECTORY", riskLevel: "RESTRICTED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "LLMNR/NBT-NS poisoner — restricted, lab-only, disabled by default." },
+  { slug: "powerview", name: "PowerView", category: "ACTIVE_DIRECTORY", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "PowerSploit AD reconnaissance for approved environments." },
+  { slug: "adexplorer", name: "ADExplorer", category: "ACTIVE_DIRECTORY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["ACTIVE_DIRECTORY"], requiresCredentials: [], description: "Sysinternals AD object viewer for approved environments." },
+  { slug: "hashcat", name: "Hashcat", category: "PASSWORD_AUDIT", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Offline password recovery — only on explicitly uploaded, authorized audit material." },
+  { slug: "john-the-ripper", name: "John the Ripper", category: "PASSWORD_AUDIT", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Offline password auditing on uploaded, authorized material only." },
+  { slug: "hydra", name: "Hydra", category: "PASSWORD_AUDIT", riskLevel: "RESTRICTED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS"], requiresCredentials: [], description: "Online credential attacks — restricted and disabled by default." },
+  { slug: "medusa", name: "Medusa", category: "PASSWORD_AUDIT", riskLevel: "RESTRICTED", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["IP_ADDRESS"], requiresCredentials: [], description: "Online credential attacks — restricted and disabled by default." },
+  { slug: "cewl", name: "CeWL", category: "PASSWORD_AUDIT", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Custom wordlist generator from target content (offline auditing aid)." },
+  { slug: "crunch", name: "Crunch", category: "PASSWORD_AUDIT", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTENT_DISCOVERY"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Wordlist generator for offline auditing." },
+  { slug: "mobsf", name: "MobSF", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Mobile security framework for APK static analysis." },
+  { slug: "frida", name: "Frida", category: "MOBILE", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Dynamic instrumentation on authorized test devices only." },
+  { slug: "objection", name: "Objection", category: "MOBILE", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Runtime mobile exploration on authorized test devices only." },
+  { slug: "jadx", name: "JADX", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Android decompiler for static analysis." },
+  { slug: "apktool", name: "apktool", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "APK resource decoding for static analysis." },
+  { slug: "adb", name: "ADB", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Android Debug Bridge for authorized test devices only." },
+  { slug: "prowler", name: "Prowler", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Cloud security assessment with read-only credentials." },
+  { slug: "scoutsuite", name: "ScoutSuite", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Multi-cloud security auditing tool." },
+  { slug: "cloudmapper", name: "CloudMapper", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Cloud environment visualization and analysis." },
+  { slug: "roadtools", name: "ROADtools", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AZURE"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Azure AD exploration framework for authorized tenants." },
+  { slug: "pacu", name: "Pacu", category: "CLOUD", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "AWS exploitation framework — approved cloud engagements only." },
+  { slug: "steampipe", name: "Steampipe", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "SQL queries over cloud APIs for posture checks." },
+  { slug: "checkov", name: "Checkov", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CLOUD_CONFIGURATION_AUDIT", "SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Infrastructure-as-code static analysis." },
+  { slug: "trivy", name: "Trivy", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTAINER_SCANNING", "SCA", "SECRET_SCANNING"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Container, IaC and repository vulnerability scanner." },
+  { slug: "grype", name: "Grype", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTAINER_SCANNING", "SCA"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Vulnerability scanner for container images and filesystems." },
+  { slug: "syft", name: "Syft", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SCA"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "SBOM generation for images and filesystems." },
+  { slug: "docker-bench-for-security", name: "Docker Bench for Security", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["DOCKER"], requiresCredentials: [], description: "Docker host configuration checks (CIS benchmark)." },
+  { slug: "kube-bench", name: "kube-bench", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES"], requiresCredentials: [], description: "Kubernetes CIS benchmark checks." },
+  { slug: "kube-hunter", name: "kube-hunter", category: "CONTAINER", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES"], requiresCredentials: [], description: "Kubernetes penetration-testing discovery tool." },
+  { slug: "kubescape", name: "Kubescape", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES"], requiresCredentials: [], description: "Kubernetes security posture framework." },
+  { slug: "falco", name: "Falco", category: "CONTAINER", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CONTAINER_SCANNING"], supportedTargets: ["KUBERNETES", "DOCKER"], requiresCredentials: [], description: "Runtime security monitoring for containers." },
+  { slug: "semgrep", name: "Semgrep", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Static analysis with community and custom rules." },
+  { slug: "sonarqube", name: "SonarQube", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SAST", "SCA"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: ["SONAR_TOKEN"], description: "Code quality and security platform (self-hosted or admin-provided)." },
+  { slug: "codeql", name: "CodeQL", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Semantic code analysis engine." },
+  { slug: "bandit", name: "Bandit", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Python source security linter." },
+  { slug: "brakeman", name: "Brakeman", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Rails application security scanner." },
+  { slug: "spotbugs", name: "SpotBugs", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SAST"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Java bytecode bug and security analysis." },
+  { slug: "gitleaks", name: "Gitleaks", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SECRET_SCANNING"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Secret scanning for git repositories." },
+  { slug: "trufflehog", name: "TruffleHog", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SECRET_SCANNING"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "High-entropy secret scanning for repositories." },
+  { slug: "owasp-dependency-check", name: "OWASP Dependency-Check", category: "SOURCE_CODE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["SCA"], supportedTargets: ["SOURCE_REPOSITORY"], requiresCredentials: [], description: "Dependency vulnerability analysis (CVE matching)." },
+  { slug: "ghidra", name: "Ghidra", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Software reverse engineering suite for uploaded binaries." },
+  { slug: "cutter", name: "Cutter", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "radare2-powered reverse engineering GUI backend." },
+  { slug: "radare2", name: "radare2", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Reverse engineering framework for uploaded artifacts." },
+  { slug: "gdb", name: "GDB", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Debugger for authorized lab artifacts only." },
+  { slug: "pwndbg", name: "pwndbg", category: "BINARY", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "GDB enhancement for lab binary analysis." },
+  { slug: "binary-ninja", name: "Binary Ninja", category: "BINARY", riskLevel: "LOW", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Commercial reverse engineering platform; admin supplies license." },
+  { slug: "ida", name: "IDA", category: "BINARY", riskLevel: "LOW", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Commercial disassembler; admin supplies license and installation." },
+  { slug: "checksec", name: "checksec", category: "BINARY", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["BINARY_ANALYSIS"], supportedTargets: ["BINARY"], requiresCredentials: [], description: "Binary hardening property checker." },
+  { slug: "aircrack-ng", name: "Aircrack-ng", category: "WIRELESS", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WIRELESS_LAB"], requiresCredentials: [], description: "Wireless lab assessment suite — lab module only, never an internet target." },
+  { slug: "kismet", name: "Kismet", category: "WIRELESS", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["WIRELESS_LAB"], requiresCredentials: [], description: "Wireless network detector for lab use." },
+  { slug: "wifite", name: "Wifite", category: "WIRELESS", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["VULNERABILITY_SCANNING"], supportedTargets: ["WIRELESS_LAB"], requiresCredentials: [], description: "Automated wireless auditing — isolated lab only, requires approval." },
+  { slug: "hcxdumptool", name: "hcxdumptool", category: "WIRELESS", riskLevel: "MODERATE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["WIRELESS_LAB"], requiresCredentials: [], description: "WLAN packet capture for lab assessments." },
+  { slug: "hcxtools", name: "hcxtools", category: "WIRELESS", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["SERVICE_DETECTION"], supportedTargets: ["WIRELESS_LAB"], requiresCredentials: [], description: "WLAN capture conversion tools for lab assessments." },
+  { slug: "defectdojo", name: "DefectDojo", category: "REPORTING", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["REPORT_EXPORT"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: ["DEFECTDOJO_API_KEY"], description: "Vulnerability management platform export target." },
+  { slug: "faraday", name: "Faraday", category: "REPORTING", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["REPORT_EXPORT"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Collaborative vulnerability management workspace export." },
+  { slug: "dradis", name: "Dradis", category: "REPORTING", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["REPORT_EXPORT"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Reporting and collaboration framework export." },
+  { slug: "plextrac", name: "PlexTrac", category: "REPORTING", riskLevel: "PASSIVE", licenseType: "ADMIN_PROVIDED", requiresApproval: true, capabilities: ["REPORT_EXPORT"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: ["PLEXTRAC_API"], description: "Commercial reporting platform; admin supplies access." },
+  { slug: "serpico", name: "Serpico", category: "REPORTING", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["REPORT_EXPORT"], supportedTargets: ["WEB_APPLICATION"], requiresCredentials: [], description: "Report generation collaboration tool export." },
 ];
+
+const MODE: Record<string, "CONTAINER" | "EXTERNAL_API" | "ADMIN_PROVIDED"> = {
+  "shodan-cli": "EXTERNAL_API", "censys-cli": "EXTERNAL_API",
+  "burp-suite-professional": "ADMIN_PROVIDED", "nessus-professional": "ADMIN_PROVIDED",
+  "binary-ninja": "ADMIN_PROVIDED", "ida": "ADMIN_PROVIDED", "plextrac": "ADMIN_PROVIDED",
+};
 
 async function main(): Promise<void> {
   for (const t of TOOLS) {
-    await prisma.tool.upsert({
+    const tool = await prisma.tool.upsert({
       where: { slug: t.slug },
-      update: { name: t.name, category: t.category, riskLevel: t.riskLevel, licenseType: t.licenseType, requiresApproval: t.requiresApproval ?? false },
-      create: { slug: t.slug, name: t.name, category: t.category, riskLevel: t.riskLevel, licenseType: t.licenseType, requiresApproval: t.requiresApproval ?? false },
+      update: { name: t.name, category: t.category, description: t.description, riskLevel: t.riskLevel, licenseType: t.licenseType, requiresApproval: t.requiresApproval },
+      create: { slug: t.slug, name: t.name, category: t.category, description: t.description, riskLevel: t.riskLevel, licenseType: t.licenseType, requiresApproval: t.requiresApproval },
+    });
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { capabilities: t.capabilities, supportedTargets: t.supportedTargets },
+      create: {
+        toolId: tool.id, adapterVersion: "1.0.0",
+        executionMode: MODE[t.slug] ?? "CONTAINER",
+        supportedTargets: t.supportedTargets, capabilities: t.capabilities,
+        inputSchema: { note: "Catalog metadata only — adapter not yet implemented", requiresCredentials: t.requiresCredentials },
+        outputFormat: "JSON", parser: "json", defaultTimeout: 600,
+        networkPolicy: "SCOPE_ONLY", enabled: false, // catalog entry, NOT an implemented adapter
+      },
     });
   }
   // The one adapter that exists in this phase: the safe mock.
@@ -67,10 +195,28 @@ async function main(): Promise<void> {
     create: {
       toolId: mock.id, adapterVersion: "1.0.0", executionMode: "MOCK",
       supportedTargets: ["DOMAIN", "WEB_APPLICATION"], capabilities: [], outputFormat: "JSON",
-      parser: "json", defaultTimeout: 5, networkPolicy: "NO_NETWORK",
+      parser: "json", defaultTimeout: 5, networkPolicy: "NO_NETWORK", enabled: true,
     },
   });
-  console.log(`Seeded ${TOOLS.length + 1} tool catalog entries (metadata only)`);
+  const echo = await prisma.tool.upsert({
+    where: { slug: "local-echo" },
+    update: {},
+    create: {
+      slug: "local-echo", name: "Local Echo Adapter (TEST ONLY)", category: "REPORTING",
+      description: "Echoes validated plan arguments in-process. No network, no subprocess, no findings.",
+      riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", installed: true, healthStatus: "HEALTHY",
+    },
+  });
+  await prisma.toolAdapter.upsert({
+    where: { toolId_adapterVersion: { toolId: echo.id, adapterVersion: "1.0.0" } },
+    update: {},
+    create: {
+      toolId: echo.id, adapterVersion: "1.0.0", executionMode: "MOCK",
+      supportedTargets: ["DOMAIN", "WEB_APPLICATION"], capabilities: [], outputFormat: "JSON",
+      parser: "json", defaultTimeout: 5, networkPolicy: "NO_NETWORK", enabled: true,
+    },
+  });
+  console.log(`Seeded ${TOOLS.length + 2} tool catalog entries (metadata only; catalog adapters disabled)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

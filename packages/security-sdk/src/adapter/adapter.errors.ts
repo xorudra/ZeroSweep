@@ -6,3 +6,7 @@ export class PolicyDeniedError extends Error { name = "PolicyDeniedError"; }
 export class ExecutionTimeoutError extends Error { name = "ExecutionTimeoutError"; }
 export class ParserError extends Error { name = "ParserError"; }
 export class ArtifactLimitError extends Error { name = "ArtifactLimitError"; }
+export class RegistryError extends Error { name = "RegistryError"; }
+export class DuplicateAdapterError extends RegistryError { name = "DuplicateAdapterError"; }
+export class InvalidAdapterMetadataError extends AdapterConfigurationError { name = "InvalidAdapterMetadataError"; }
+export class TargetValidationError extends Error { name = "TargetValidationError"; }

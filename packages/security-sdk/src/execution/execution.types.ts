@@ -70,3 +70,72 @@ export const TOOL_EXECUTION_EVENTS = [
 export type ToolExecutionEvent = (typeof TOOL_EXECUTION_EVENTS)[number];
 
 export interface RiskContext { riskLevel: RiskLevel; }
+
+/**
+ * Container execution contract (Prompt 3 §12). Defaults are the secure
+ * posture: non-root, read-only root filesystem, no privileged mode, no host
+ * networking, no Docker socket, all capabilities dropped, tmpfs workspace.
+ */
+export interface ContainerExecutionSpec {
+  image: string;
+  imageDigest?: string;
+  entrypoint?: string;
+  args: string[];
+  environmentReferences: string[]; // secret REFERENCES resolved inside the worker only
+  runAsNonRoot: boolean;
+  readOnlyRootFilesystem: boolean;
+  privileged: boolean;
+  networkMode: NetworkPolicyMode;
+  cpuLimit: string;
+  memoryLimit: string;
+  pidsLimit: number;
+  timeoutSeconds: number;
+  workingDirectory: string;
+  mountedInputs: string[];
+  mountedOutputs: string[];
+  dropCapabilities: string[]; // ["ALL"] by default
+}
+
+export function defaultContainerSpec(partial: Partial<ContainerExecutionSpec> & { image: string; args: string[] }): ContainerExecutionSpec {
+  return {
+    entrypoint: undefined, environmentReferences: [], runAsNonRoot: true,
+    readOnlyRootFilesystem: true, privileged: false, networkMode: "SCOPE_ONLY",
+    cpuLimit: "1", memoryLimit: "512Mi", pidsLimit: 128, timeoutSeconds: 600,
+    workingDirectory: "/work", mountedInputs: [], mountedOutputs: [],
+    dropCapabilities: ["ALL"], ...partial,
+  };
+}
+
+/** Execution telemetry (Prompt 3 §38) — counts and timings only, never
+ *  secrets, request bodies or raw credentials. */
+export interface ExecutionTelemetry {
+  executionId: string;
+  toolSlug: string;
+  queueWaitMs: number;
+  durationMs: number;
+  exitStatus: ExecutionStatus;
+  cpuMillis?: number;
+  memoryPeakBytes?: number;
+  stdoutBytes: number;
+  stderrBytes: number;
+  artifactBytes: number;
+  findingCount: number;
+  assetCount: number;
+}
+
+export interface ExecutionResult {
+  status: ExecutionStatus;
+  exitCode?: number;
+  telemetry: ExecutionTelemetry;
+  rawArtifactIds: string[];
+  errorCategory?: RetryCategory;
+  errorMessage?: string; // sanitized — safe for API display
+}
+
+export interface ExecutionEventRecord {
+  type: ToolExecutionEvent;
+  executionId: string;
+  scanId: string;
+  at: string; // ISO timestamp
+  detail?: string;
+}

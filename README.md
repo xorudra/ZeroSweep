@@ -10,11 +10,14 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 1/2 foundation.** This repository currently contains the production
-> monorepo, backend foundation, database schema, tool-adapter SDK skeleton, GUI
-> dashboard shell and queue/worker foundation. **No security scanners are integrated
-> or executed yet** (no Nmap/Nuclei/ZAP/etc.), there is no fake scan data anywhere,
-> and the AI service has no LLM connected yet. Those arrive in later phases, one at a time.
+> **Status — Phase 3 complete (Prompts 1–3).** Production monorepo, backend and
+> database foundation, the complete Tool Adapter SDK (lifecycle contract, registry,
+> policy engine, scope/SSRF protections, parsers, limits), a 126-tool metadata
+> catalog, tool management API and Tools UI. **No security scanners are integrated
+> or executed yet** (no Nmap/Nuclei/ZAP/etc.) — the only working adapters are the
+> network-free Mock and Local Echo test adapters — there is no fake scan data
+> anywhere, and the AI service has no LLM connected yet. Real adapters arrive in
+> later phases, one at a time.
 
 ## Architecture
 
@@ -132,12 +135,21 @@ and the AI health endpoint.
 ## Roadmap (from the master spec)
 
 1. ✅ Architecture (Prompt 1) 2. ✅ Monorepo + backend + database foundation (Prompt 2)
-3. Tool adapter SDK hardening + registry 4. First safe adapters (passive/recon/web
-baseline) 5. Normalization, deduplication, risk engine 6. Reporting engine
-7. API/cloud/container/source-code modules 8. Lab-only modules (AD, wireless, mobile)
+3. ✅ Universal Tool Adapter SDK, registry & safe execution framework (Prompt 3)
+4. Scan orchestration engine (Prompt 4) 5. First safe adapters (passive/recon/web
+baseline) 6. Normalization, deduplication, risk engine 7. Reporting engine
+8. API/cloud/container/source-code modules 9. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 3: Tool Adapter SDK.** Completed `packages/security-sdk`
+  (adapter lifecycle + base gates, registry with metadata validation, policy
+  engine with all reason codes, target/scope validation with SSRF + DNS-rebinding
+  guards, JSON/JSONL/XML parsers, output/timeout/rate limits, container contract,
+  Local Echo test adapter), expanded the seeded tool catalog to 126 tools across
+  all 13 categories (metadata only, catalog adapters disabled), added tool list
+  filters to the API, and built the filterable Tools page + tool detail view.
+  See `docs/architecture/tool-adapter-sdk.md`.
 - **2026-10-07 — v0.1.0 foundation.** New pnpm/Turborepo monorepo supersedes the
   earlier standalone scaffold (Flask backend + React/Vite frontend), which was
   removed; this codebase is the single DSRclone going forward.

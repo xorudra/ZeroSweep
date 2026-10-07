@@ -1,11 +1,20 @@
-import { Controller, Get, Inject, NotFoundException, Param, Patch, Body } from "@nestjs/common";
+import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
-import { TOOL_CATEGORIES } from "@dsrclone/security-sdk";
+import { CAPABILITIES, RISK_LEVELS, TOOL_CATEGORIES } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { Roles } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 
 const updateToolSchema = z.object({ enabled: z.boolean().optional() });
+
+const listQuerySchema = z.object({
+  category: z.enum(TOOL_CATEGORIES).optional(),
+  riskLevel: z.enum(RISK_LEVELS).optional(),
+  health: z.string().max(32).optional(),
+  enabled: z.enum(["true", "false"]).optional(),
+  capability: z.enum(CAPABILITIES).optional(),
+  search: z.string().max(100).optional(),
+});
 
 /**
  * Tool management is metadata only. There is deliberately NO endpoint that
@@ -16,9 +25,23 @@ const updateToolSchema = z.object({ enabled: z.boolean().optional() });
 export class ToolsController {
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
+  /**
+   * Catalog listing (Prompt 3 §42/§43). Filters are validated enums/strings;
+   * responses contain metadata only — adapter rows expose capabilities,
+   * targets, timeouts and credential REFERENCE names, never secret values,
+   * and there is no execution field anywhere in this payload.
+   */
   @Get()
-  async list() {
-    return this.prisma.tool.findMany({ include: { adapters: true }, orderBy: { name: "asc" } });
+  async list(@Query() query: Record<string, string> = {}) {
+    const q = parseOrThrow(listQuerySchema, query);
+    const where: Record<string, unknown> = {};
+    if (q.category) where.category = q.category;
+    if (q.riskLevel) where.riskLevel = q.riskLevel;
+    if (q.health) where.healthStatus = q.health;
+    if (q.enabled) where.enabled = q.enabled === "true";
+    if (q.search) where.name = { contains: q.search, mode: "insensitive" };
+    if (q.capability) where.adapters = { some: { capabilities: { array_contains: [q.capability] } } };
+    return this.prisma.tool.findMany({ where, include: { adapters: true }, orderBy: { name: "asc" } });
   }
 
   @Get("categories")

@@ -17,6 +17,18 @@ export class ScopeMatcher {
     return this.rules.includeCidrs.length > 0 && /^[0-9.]+$/.test(h) && this.ipInAnyCidr(h);
   }
 
+  isIpAllowed(ip: string): boolean {
+    if (!/^[0-9.]+$/.test(ip) && !ip.includes(":")) return false;
+    return this.ipInAnyCidr(ip) || this.matchesAny(this.rules.includeHosts, ip.toLowerCase());
+  }
+
+  /** A discovered subdomain stays in scope only if it is allowed AND not
+   *  excluded — assets found mid-scan never expand scope on their own. */
+  isDiscoveredAssetInScope(host: string): { allowed: boolean; reason?: string } {
+    if (this.matchesAny(this.rules.excludeHosts, host.toLowerCase())) return { allowed: false, reason: "host is explicitly excluded" };
+    return this.isHostAllowed(host) ? { allowed: true } : { allowed: false, reason: "host is outside the approved scope" };
+  }
+
   isPortAllowed(port: number): boolean {
     return this.rules.allowedPorts.length === 0 || this.rules.allowedPorts.includes(port);
   }
@@ -31,6 +43,8 @@ export class ScopeMatcher {
     let u: URL;
     try { u = new URL(rawUrl); } catch { return false; }
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    if (u.username || u.password) return false; // embedded credentials are never in scope
+    if (blockedTargetReason(u.hostname)) return false; // URLs to internal targets are never in scope
     const port = u.port ? Number(u.port) : u.protocol === "https:" ? 443 : 80;
     return this.isHostAllowed(u.hostname) && this.isPortAllowed(port) && this.isPathAllowed(u.pathname);
   }
@@ -77,6 +91,10 @@ const BLOCKED_PATTERNS: Array<{ test: (host: string) => boolean; reason: string 
   { test: (h) => cidrContains("172.16.0.0/12", h), reason: "private range requires an approved internal engagement" },
   { test: (h) => cidrContains("192.168.0.0/16", h), reason: "private range requires an approved internal engagement" },
   { test: (h) => h === "::1", reason: "IPv6 loopback is blocked" },
+  { test: (h) => /^f[cd][0-9a-f]{2}:/.test(h), reason: "IPv6 unique-local range requires an approved internal engagement" },
+  { test: (h) => /^fe[89ab][0-9a-f]:/.test(h), reason: "IPv6 link-local range is blocked" },
+  { test: (h) => cidrContains("0.0.0.0/8", h), reason: "unspecified range is blocked" },
+  { test: (h) => cidrContains("100.64.0.0/10", h), reason: "shared address space requires an approved internal engagement" },
 ];
 
 export function blockedTargetReason(host: string): string | null {
