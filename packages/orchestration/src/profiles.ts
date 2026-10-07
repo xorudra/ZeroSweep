@@ -36,6 +36,9 @@ export const STAGE_TYPES = [
   "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS",
   "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS",
   "CLOUD_CSPM", "CLOUD_COMPLIANCE",
+  // Prompt 15: Active Directory pipeline stages (§86).
+  "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "LDAP_POSTURE", "SMB_POSTURE",
+  "GRAPH_COLLECTION", "PINGCASTLE_POSTURE", "ADCS_POSTURE", "ATTACK_PATH_ANALYSIS",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -214,6 +217,43 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     simulationFallback: false,
   },
   CLOUD_COMPLIANCE: S("CLOUD_COMPLIANCE", "Cloud Compliance Assessment", "Map the scan's control assessments onto CIS AWS/Azure/GCP and the mapped frameworks (NIST 800-53 / PCI DSS / SOC 2 / ISO 27001) through the shared compliance machinery (Prompt 14 §68/§69). PASS means control evidence was observed — never certification. Platform stage.", [], ["RISK_ANALYSIS"], 3, 300, "FAIL_STAGE_CONTINUE"),
+  // Prompt 15 §86: the AD chain. DOMAIN_DISCOVERY validates the
+  //  registered domain + credential lease and resolves approved DCs
+  //  (platform; an unregistered domain fails honestly as
+  //  NOT_CONFIGURED). DIRECTORY_INVENTORY collects through the LDAP /
+  //  BloodHound connectors + governed ldapsearch/SharpHound adapters.
+  //  LDAP_POSTURE, GRAPH_COLLECTION and ATTACK_PATH_ANALYSIS are
+  //  platform analysis over persisted inventory. NO stage in this
+  //  chain can select an offensive tool (§103/§112): NetExec-offensive,
+  //  Impacket, Kerbrute, Responder, PowerView-offensive and Certipy-
+  //  offensive have no adapters and no capability below names them.
+  DOMAIN_DISCOVERY: S("DOMAIN_DISCOVERY", "Domain Discovery", "Validate the registered AD domain, its read-only credential lease and the explicitly approved DC set before any directory contact (Prompt 15 §9–§12). DNS/SRV discovery is bounded to the authorized domain. Platform stage: an unregistered or unvalidated domain fails honestly as NOT_CONFIGURED.", [], ["SCOPE_VALIDATION"], 3, 120, "FAIL_SCAN"),
+  DIRECTORY_INVENTORY: {
+    ...S("DIRECTORY_INVENTORY", "Directory Inventory", "Read-only directory collection (Prompt 15 §13–§18): domains, DCs, users, groups, computers, OUs, GPO metadata, trusts, SPN/delegation metadata, password-policy metadata and AD CS metadata through the LDAP/BloodHound connectors and governed ldapsearch/SharpHound adapters. Passwords and credential material are never collected (§19).", ["DIRECTORY_INVENTORY"], ["DOMAIN_DISCOVERY"], 14, 1800, "FAIL_STAGE_CONTINUE", true),
+    capabilityGroups: [["DIRECTORY_INVENTORY"], ["DIRECTORY_RELATIONSHIP_COLLECTION"], ["IDENTITY_GRAPH"]],
+    simulationFallback: false,
+  },
+  LDAP_POSTURE: S("LDAP_POSTURE", "LDAP Posture", "LDAP/DC posture analysis over collected service metadata (Prompt 15 §70/§71): LDAP signing, channel binding, SMB dialect/signing on DCs. Platform stage — deterministic analysis, no additional directory contact.", [], ["DIRECTORY_INVENTORY"], 6, 600, "FAIL_STAGE_CONTINUE"),
+  SMB_POSTURE: {
+    ...S("SMB_POSTURE", "SMB Posture", "SMB share + protocol inventory over in-scope hosts (Prompt 15 §41–§45): enum4linux-ng service/share enumeration and SMBMap share/permission inventory. Contents are never downloaded (§44); findings come only from collected evidence (§43).", ["SMB_SHARE_INVENTORY"], ["DIRECTORY_INVENTORY"], 8, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["SMB_SHARE_INVENTORY", "SMB_PERMISSION_REVIEW"], ["SMB_DIRECTORY_ENUMERATION", "WINDOWS_SERVICE_DISCOVERY"]],
+    adapterAllowlist: ["enum4linux-ng", "smbmap"],
+    simulationFallback: false,
+  },
+  GRAPH_COLLECTION: S("GRAPH_COLLECTION", "Identity Graph Collection", "Build the identity graph from the collected, evidence-backed relationships and resolve nested group membership with cycle/depth protection (Prompt 15 §32/§33/§65/§108). Platform stage over persisted inventory.", [], ["DIRECTORY_INVENTORY"], 6, 900, "FAIL_STAGE_CONTINUE"),
+  PINGCASTLE_POSTURE: {
+    ...S("PINGCASTLE_POSTURE", "PingCastle Posture", "PingCastle healthcheck posture (Prompt 15 §38/§39): rule results normalize onto canonical AD rules and merge with native analysis; the PingCastle score is preserved separately from the DSRclone risk score.", ["AD_SECURITY_POSTURE"], ["DIRECTORY_INVENTORY"], 8, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["AD_SECURITY_POSTURE", "DOMAIN_CONFIGURATION_REVIEW", "AD_RISK_ASSESSMENT"]],
+    adapterAllowlist: ["pingcastle"],
+    simulationFallback: false,
+  },
+  ADCS_POSTURE: {
+    ...S("ADCS_POSTURE", "AD CS Posture", "AD CS inventory + posture through the Certipy FIND-only adapter (Prompt 15 §47–§50): CA/template configuration classified into governed ESC-style risk classes. Never requests certificates, never authenticates as another identity.", ["ADCS_INVENTORY"], ["DIRECTORY_INVENTORY"], 8, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["ADCS_INVENTORY", "ADCS_POSTURE_ANALYSIS"]],
+    adapterAllowlist: ["certipy-posture"],
+    simulationFallback: false,
+  },
+  ATTACK_PATH_ANALYSIS: S("ATTACK_PATH_ANALYSIS", "Attack-Path Analysis", "Defensive attack-path MODELING over the identity graph (Prompt 15 §34–§37): bounded graph computation with confidence and explained risk. Paths are analysis results — never executed, never labelled COMPROMISED. Platform stage.", [], ["GRAPH_COLLECTION"], 6, 900, "FAIL_STAGE_CONTINUE"),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -300,6 +340,17 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   PUBLIC_EXPOSURE_REVIEW: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "NETWORK_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
   COMPLIANCE_ASSESSMENT: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
   IAC_TO_CLOUD_CORRELATION: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "MANIFEST_SCAN", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  // Prompt 15 §85/§86: AD profiles follow the governed chain
+  //  DOMAIN_DISCOVERY → DIRECTORY_INVENTORY → LDAP/SMB posture →
+  //  GRAPH_COLLECTION → PINGCASTLE → ADCS → NORMALIZATION →
+  //  CORRELATION → ATTACK_PATH_ANALYSIS → RISK_ANALYSIS → REPORTING.
+  AD_INVENTORY: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", ...TAIL]),
+  AD_BASELINE: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "LDAP_POSTURE", "GRAPH_COLLECTION", "PINGCASTLE_POSTURE", "ADCS_POSTURE", "NORMALIZATION", "CORRELATION", "ATTACK_PATH_ANALYSIS", "RISK_ANALYSIS", "REPORT_GENERATION"]),
+  AD_COMPREHENSIVE: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "LDAP_POSTURE", "SMB_POSTURE", "GRAPH_COLLECTION", "PINGCASTLE_POSTURE", "ADCS_POSTURE", "NORMALIZATION", "CORRELATION", "ATTACK_PATH_ANALYSIS", "RISK_ANALYSIS", "REPORT_GENERATION"]),
+  ADCS_POSTURE: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "ADCS_POSTURE", ...TAIL]),
+  SMB_POSTURE: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "SMB_POSTURE", ...TAIL]),
+  IDENTITY_GRAPH: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "GRAPH_COLLECTION", "NORMALIZATION", "CORRELATION", "ATTACK_PATH_ANALYSIS", "RISK_ANALYSIS", "REPORT_GENERATION"]),
+  ATTACK_PATH_ANALYSIS: template([...HEAD, "DOMAIN_DISCOVERY", "DIRECTORY_INVENTORY", "GRAPH_COLLECTION", "NORMALIZATION", "CORRELATION", "ATTACK_PATH_ANALYSIS", "RISK_ANALYSIS", "REPORT_GENERATION"]),
   CLOUD: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
   MOBILE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CUSTOM: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
@@ -408,9 +459,19 @@ export function resolveTemplate(profile: AssessmentProfile): StageDefinition[] {
     if (def.type === "KUBERNETES_POSTURE" && profile !== "KUBERNETES_COMPREHENSIVE" && profile !== "CLOUD_NATIVE_FULL") {
       def.adapterAllowlist = ["kubernetes-connector", "kubescape", "kube-bench"];
     }
+    // Prompt 15 §86: in AD profiles the attack-path analysis runs over
+    // the correlated graph (after CORRELATION), and risk analysis
+    // consumes its results — the chain order is part of the template.
+    const AD_PROFILES = ["AD_INVENTORY", "AD_BASELINE", "AD_COMPREHENSIVE", "ADCS_POSTURE", "SMB_POSTURE", "IDENTITY_GRAPH", "ATTACK_PATH_ANALYSIS"];
+    if (AD_PROFILES.includes(profile) && def.type === "ATTACK_PATH_ANALYSIS") {
+      def.dependencies = present.has("CORRELATION") ? ["GRAPH_COLLECTION", "CORRELATION"] : ["GRAPH_COLLECTION"];
+    }
+    if (AD_PROFILES.includes(profile) && def.type === "RISK_ANALYSIS" && present.has("ATTACK_PATH_ANALYSIS")) {
+      def.dependencies = ["CORRELATION", "ATTACK_PATH_ANALYSIS"];
+    }
     // Tail stages keep strict ordering among themselves.
     if (def.type === "CORRELATION") def.dependencies = ["NORMALIZATION"];
-    if (def.type === "RISK_ANALYSIS") def.dependencies = ["CORRELATION"];
+    if (def.type === "RISK_ANALYSIS" && !(AD_PROFILES.includes(profile) && present.has("ATTACK_PATH_ANALYSIS"))) def.dependencies = ["CORRELATION"];
     // Prompt 12 §96: when a quality gate stage exists it sits between
     // risk analysis and report generation.
     if (def.type === "QUALITY_GATE") def.dependencies = ["RISK_ANALYSIS"];

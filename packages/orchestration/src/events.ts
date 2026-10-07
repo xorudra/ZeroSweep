@@ -47,6 +47,12 @@ export const SCAN_EVENT_TYPES = [
   "cloud.account_validated", "cloud.inventory_recorded", "cloud.public_exposure_detected",
   "cloud.iam_risk_detected", "cloud.drift_detected", "cloud.compliance_assessed",
   "cloud.analysis_completed", "cloud.quality_gate_evaluated", "cloud.scan_completed",
+  // Prompt 15 — Active Directory events (§117-adjacent scan events).
+  // Counts/ids/verdicts only; never credentials or directory payloads.
+  "ad.domain_validated", "ad.inventory_recorded", "ad.trust_discovered",
+  "ad.ldap_posture_completed", "ad.graph_built", "ad.privileged_identity_detected",
+  "ad.attack_paths_analyzed", "ad.attack_path_detected", "ad.adcs_risk_detected",
+  "ad.drift_detected", "ad.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

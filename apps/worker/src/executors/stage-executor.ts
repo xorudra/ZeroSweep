@@ -1,5 +1,5 @@
 import {
-  API_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  ALL_DIRECTORY_SLUGS, API_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
   approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
@@ -24,7 +24,12 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS] as const;
+
+/** Prompt 15 §10/§15: directory connectors resolve a registered domain
+ *  through the store context — they never take an endpoint or a
+ *  credential from a plan. */
+export const DIRECTORY_CONNECTOR_SLUGS = DIRECTORY_SLUGS.connectors;
 
 /** Prompt 14 §10/§21: cloud connectors resolve a registered account
  *  through the store context — they never take an endpoint or a
@@ -125,6 +130,19 @@ export interface ExecutionContextRecord {
     environment?: string;
     queryPack?: string;
   };
+  /** Prompt 15: the scan's Active Directory context, resolved by the
+   *  STORE from the registered ActiveDirectoryDomain row — domain id,
+   *  DNS ref (fingerprint component), forest id, credential REFERENCE
+   *  name (never a value) and the explicitly approved DC hosts (§11).
+   *  Never client input. */
+  directory?: {
+    domainId?: string;
+    domainRef?: string;
+    forestId?: string;
+    credentialReference?: string;
+    identityKind?: string;
+    dcHosts?: string[];
+  };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
 }
@@ -133,7 +151,7 @@ export interface ExecutionStore {
   loadExecutionContext(executionId: string): Promise<ExecutionContextRecord | null>;
   updateExecution(id: string, patch: Record<string, unknown>): Promise<void>;
   recordEvent(event: ScanEventRecord): Promise<void>;
-  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number; packetCaptures?: number; components?: number }>;
+  persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints?: number; services?: number; technologies?: number; parameters?: number; forms?: number; transactions?: number; webSockets?: number; apiServices?: number; graphqlServices?: number; jwtProfiles?: number; packetCaptures?: number; components?: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number; attackPaths?: number }>;
   recordDeadLetter(entry: { jobId: string; queue: string; scanId: string; stageId: string; executionId: string; errorCategory: string; errorMessage: string; attempts: number }): Promise<void>;
   isCancelled(scanId: string): Promise<boolean>;
 }
@@ -268,6 +286,24 @@ export class StageExecutor {
       if (isCloudConnector && !ctx.cloud?.accountId) {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
         await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no cloud account is registered for this scan (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      // Prompt 15 gates (§10/§11/§15): directory adapters run ONLY on
+      // DIRECTORY_ANALYSIS workers (directory credentials are leased
+      // only there, and only approved internal workers may contact a
+      // domain), and directory connectors additionally require the
+      // store to have resolved a registered domain for this scan —
+      // absent = NOT_CONFIGURED → TOOL_UNAVAILABLE, never fabricated.
+      const isDirectoryAdapter = (ALL_DIRECTORY_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      const isDirectoryConnector = (DIRECTORY_CONNECTOR_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      if (isDirectoryAdapter && !this.workerCapabilities.includes("DIRECTORY_ANALYSIS")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: Active Directory assessment runs only on DIRECTORY_ANALYSIS workers (§10) — this worker does not hold DIRECTORY_ANALYSIS`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (isDirectoryConnector && !ctx.directory?.domainId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no Active Directory domain is registered for this scan (NOT_CONFIGURED)`);
         return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
       }
       if ((PRIVILEGED_CLOUD_SLUGS as readonly string[]).includes(ctx.adapterSlug)
@@ -512,6 +548,27 @@ export class StageExecutor {
           if (declared.has("queryPack") && cloudCtx.queryPack) config.queryPack = cloudCtx.queryPack;
         }
       }
+      // Prompt 15 derived configuration — worker-computed from the
+      // scan's directory context (store-resolved), never client input
+      // (§7/§11/§14): domain id + DNS ref, the credential REFERENCE
+      // name (the value is resolved inside this worker boundary only),
+      // the approved DC hosts, and the governed LDAP query kind for
+      // the inventory stage. SharpHound collection methods are NEVER
+      // derived here — the adapter's SAFE default applies unless an
+      // administrator-approved set was recorded (§29), which this
+      // build does not auto-approve.
+      if ((ALL_DIRECTORY_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        const dirCtx = ctx.directory;
+        if (dirCtx) {
+          if (declared.has("directoryDomainId") && dirCtx.domainId) config.directoryDomainId = dirCtx.domainId;
+          if (declared.has("directoryDomainRef") && dirCtx.domainRef) config.directoryDomainRef = dirCtx.domainRef;
+          if (declared.has("credentialReference") && dirCtx.credentialReference) config.credentialReference = dirCtx.credentialReference;
+          if (declared.has("dcHosts") && (dirCtx.dcHosts?.length ?? 0) > 0) config.dcHosts = dirCtx.dcHosts;
+        }
+        if (declared.has("queryKind")) config.queryKind = "USERS";
+        if (declared.has("mode") && ctx.adapterSlug === "pingcastle") config.mode = "healthcheck";
+        if (declared.has("action") && ctx.adapterSlug === "certipy-posture") config.action = "find";
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -639,6 +696,24 @@ export class StageExecutor {
       }
       if (processed.cloud.controlAssessments.length > 0) {
         await emit("cloud.compliance_assessed", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.cloud.controlAssessments.length, failed: processed.cloud.controlAssessments.filter((a) => a.status === "FAIL").length });
+      }
+      // Prompt 15 §117/§118 scan events — counts/ids only, never
+      // credentials, never directory payloads (§113).
+      const dirPayload = processed.directory;
+      const dirObjectCount = dirPayload.users.length + dirPayload.groups.length + dirPayload.computers.length + dirPayload.domainControllers.length;
+      if (dirObjectCount > 0 || dirPayload.relationships.length > 0) {
+        await emit("ad.inventory_recorded", {
+          stageId: ctx.stageId, tool: ctx.adapterSlug,
+          users: dirPayload.users.length, groups: dirPayload.groups.length,
+          computers: dirPayload.computers.length, domainControllers: dirPayload.domainControllers.length,
+          relationships: dirPayload.relationships.length, trusts: dirPayload.trusts.length,
+        });
+        if (dirPayload.trusts.length > 0) {
+          await emit("ad.trust_discovered", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: dirPayload.trusts.length });
+        }
+        if (dirPayload.certificateTemplates.some((t) => (t.riskClasses ?? []).length > 0)) {
+          await emit("ad.adcs_risk_detected", { stageId: ctx.stageId, tool: ctx.adapterSlug, templates: dirPayload.certificateTemplates.filter((t) => (t.riskClasses ?? []).length > 0).length });
+        }
       }
 
       await this.store.updateExecution(ctx.executionId, {

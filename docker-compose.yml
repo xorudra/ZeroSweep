@@ -150,6 +150,27 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  # Prompt 15 §10/§11: the ONLY worker that may run directory
+  # collection (DIRECTORY_ANALYSIS). Deployed inside the approved
+  # internal engagement segment with network reachability to the
+  # registered domain controllers only — never part of the general
+  # worker pool, and credential leases are issued to it alone (§12).
+  worker-directory-analysis:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://minio:9000
+      DSRCLONE_WORKER_TYPE: DIRECTORY_ANALYSIS
+      DSRCLONE_WORKER_CAPABILITIES: DIRECTORY_ANALYSIS
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   # Prompt 13 §28/§39: the ONLY worker that may run the INTERNAL_PRIVILEGED
   # CIS benchmark adapters (Docker Bench / kube-bench), and only against
   # explicitly approved hosts/clusters. Deployed on the assessed host's

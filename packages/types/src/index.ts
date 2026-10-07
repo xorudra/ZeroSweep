@@ -11,6 +11,9 @@ export const TARGET_TYPES = [
   // Prompt 13 §3: cloud-native target kinds. DOCKER / KUBERNETES above
   // remain as legacy aliases resolving to DOCKER_HOST / KUBERNETES_CLUSTER.
   "CONTAINER_REGISTRY", "DOCKER_HOST", "KUBERNETES_CLUSTER", "KUBERNETES_MANIFEST", "HELM_CHART",
+  // Prompt 15 §3: Active Directory target kinds. ACTIVE_DIRECTORY above
+  // remains as the legacy alias resolving to ACTIVE_DIRECTORY_DOMAIN.
+  "ACTIVE_DIRECTORY_DOMAIN", "ACTIVE_DIRECTORY_FOREST", "DOMAIN_CONTROLLER", "LDAP_DIRECTORY",
 ] as const;
 export type TargetType = (typeof TARGET_TYPES)[number];
 
@@ -32,6 +35,10 @@ export const ASSESSMENT_PROFILES = [
   // legacy alias and resolves to the CLOUD_BASELINE stage chain.
   "CLOUD_INVENTORY", "CLOUD_BASELINE", "CLOUD_COMPREHENSIVE", "IAM_REVIEW",
   "PUBLIC_EXPOSURE_REVIEW", "COMPLIANCE_ASSESSMENT", "IAC_TO_CLOUD_CORRELATION",
+  // Prompt 15 §85: Active Directory profiles — defensive only; no
+  // profile performs credential attacks (§120).
+  "AD_INVENTORY", "AD_BASELINE", "AD_COMPREHENSIVE", "ADCS_POSTURE",
+  "SMB_POSTURE", "IDENTITY_GRAPH", "ATTACK_PATH_ANALYSIS",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

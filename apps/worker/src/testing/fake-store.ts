@@ -1,8 +1,8 @@
 import {
   CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, FIXTURE_MANIFEST_CONTENTS, FIXTURE_SOURCE_FILES,
-  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline,
-  detectRepository, diffCloudInventories, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, parseManifests, summarizeForQualityGate,
-  type NormalizedCloudIdentity, type NormalizedCloudResource, type SourceFileEntry,
+  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeDirectoryPosture, analyzeEncryption, analyzeIam, analyzeLdapPosture, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, buildIdentityGraph, classifyBaseline,
+  detectRepository, diffCloudInventories, diffDirectorySnapshots, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, findAttackPaths, parseManifests, privilegedPrincipals, resolveNestedGroups, summarizeForQualityGate,
+  type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type SourceFileEntry,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
@@ -32,7 +32,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -78,6 +78,19 @@ export interface FakeStoreOptions {
    *  REFERENCE (never a value), scope regions, and the PREVIOUS
    *  inventory for drift comparison (§64). Absent accountId = the
    *  account is not registered (NOT_CONFIGURED). */
+  /** Prompt 15: the fixture AD domain the store resolves for a
+   *  directory scan — registered domain identity + credential
+   *  REFERENCE (never a value), approved DC hosts, and the PREVIOUS
+   *  snapshot's data for drift comparison (§79). Absent domainId = the
+   *  domain is not registered (NOT_CONFIGURED). */
+  directoryFixtures?: {
+    domainId?: string;
+    domainRef?: string;
+    credentialReference?: string;
+    identityKind?: string;
+    dcHosts?: string[];
+    previousData?: NormalizedDirectoryData;
+  };
   cloudSecFixtures?: {
     accountId?: string;
     accountRef?: string;
@@ -131,6 +144,19 @@ export class FakeStore implements ScanRunStore {
   cloudGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
   cloudAccountStatus = "REGISTERED";
   cloudSecFixtures: NonNullable<FakeStoreOptions["cloudSecFixtures"]> = {};
+  /** Prompt 15 Active Directory state mirroring the Prisma store's
+   *  directory rows. */
+  directoryData: NormalizedDirectoryData = {
+    domainControllers: [], users: [], groups: [], computers: [], organizationalUnits: [],
+    groupPolicies: [], trusts: [], relationships: [], smbShares: [],
+    certificateAuthorities: [], certificateTemplates: [],
+  };
+  directorySnapshots: Array<{ snapshotHash: string; collectionProfile: string }> = [];
+  adDrift: Array<{ kind: string; objectRef?: string; detail: string }> = [];
+  attackPaths: Array<{ title: string; status: string; riskScore: number }> = [];
+  directoryDomainStatus = "REGISTERED";
+  directoryFixtures: NonNullable<FakeStoreOptions["directoryFixtures"]> = {};
+  private directoryDriftComputed = false;
   /** Prompt 12 source state mirroring the Prisma store's snapshot rows. */
   sourceSnapshot: { id: string; repositoryId: string; hash: string; files: SourceFileEntry[]; manifests: Record<string, string> } | null = null;
   sourceLanguages: string[] = [];
@@ -147,17 +173,18 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
     this.sourceFixtures = opts.sourceFixtures ?? {};
     this.cloudFixtures = opts.cloudFixtures ?? {};
     this.cloudSecFixtures = opts.cloudSecFixtures ?? {};
+    this.directoryFixtures = opts.directoryFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -250,6 +277,17 @@ export class FakeStore implements ScanRunStore {
         ...(this.cloudSecFixtures.environment ? { environment: this.cloudSecFixtures.environment } : {}),
         ...(this.cloudSecFixtures.queryPack ? { queryPack: this.cloudSecFixtures.queryPack } : {}),
       } : undefined,
+      // Prompt 15: the scan's directory context (§7/§11) — resolved
+      // from the registered-domain fixture, mirroring the Prisma
+      // store's ActiveDirectoryDomain lookup. No domainId =
+      // NOT_CONFIGURED.
+      directory: this.targetType === "ACTIVE_DIRECTORY_DOMAIN" ? {
+        ...(this.directoryFixtures.domainId ? { domainId: this.directoryFixtures.domainId } : {}),
+        ...(this.directoryFixtures.domainRef ? { domainRef: this.directoryFixtures.domainRef } : {}),
+        ...(this.directoryFixtures.credentialReference ? { credentialReference: this.directoryFixtures.credentialReference } : {}),
+        ...(this.directoryFixtures.identityKind ? { identityKind: this.directoryFixtures.identityKind } : {}),
+        ...(this.directoryFixtures.dcHosts ? { dcHosts: this.directoryFixtures.dcHosts } : {}),
+      } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
@@ -309,7 +347,7 @@ export class FakeStore implements ScanRunStore {
     if (typeof patch.status === "string") exec.status = patch.status;
   }
   async recordEvent(event: ScanEventRecord): Promise<void> { this.events.push(event); }
-  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number }> {
+  async persistResult(_scanId: string, _executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
     // Assets merge by host (one canonical row, provenance unioned) —
     // mirrors the Prisma store's upsert behaviour.
     for (const a of processed.assets) {
@@ -401,7 +439,70 @@ export class FakeStore implements ScanRunStore {
     }
     this.controlAssessments.push(...processed.cloud.controlAssessments);
     this.cloudRiskPaths.push(...processed.cloud.riskPaths);
-    return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length };
+    // Prompt 15 directory payloads: inventory merges by identity key
+    // (mirrors the Prisma upserts); the posture analysis runs over
+    // the merged inventory and its findings join the scan deduped by
+    // canonical fingerprint; drift diffs against the previous
+    // snapshot fixture once (§79).
+    const dirCounts = this.persistDirectory(processed);
+    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
+  }
+
+  /** Prompt 15 directory persistence mirror (§13–§19/§57–§79). */
+  private persistDirectory(processed: ProcessedResult): { users: number; groups: number; computers: number; relationships: number; findings: number } {
+    const payload = processed.directory;
+    const has = payload.users.length + payload.groups.length + payload.computers.length + payload.domainControllers.length
+      + payload.relationships.length + payload.smbShares.length + payload.certificateAuthorities.length + payload.certificateTemplates.length > 0 || !!payload.snapshot;
+    if (!has || this.targetType !== "ACTIVE_DIRECTORY_DOMAIN" || !this.directoryFixtures.domainId) {
+      return { users: 0, groups: 0, computers: 0, relationships: 0, findings: 0 };
+    }
+    const mergeBy = <T,>(list: T[], items: T[], key: (x: T) => string) => {
+      for (const item of items) {
+        const idx = list.findIndex((x) => key(x) === key(item));
+        if (idx >= 0) list[idx] = item; else list.push(item);
+      }
+    };
+    if (payload.domain) this.directoryData.domain = payload.domain;
+    if (payload.passwordPolicy) this.directoryData.passwordPolicy = payload.passwordPolicy;
+    mergeBy(this.directoryData.domainControllers, payload.domainControllers, (d) => d.hostname);
+    mergeBy(this.directoryData.users, payload.users, (u) => u.objectId);
+    mergeBy(this.directoryData.groups, payload.groups, (g) => g.objectId);
+    mergeBy(this.directoryData.computers, payload.computers, (c) => c.objectId);
+    mergeBy(this.directoryData.organizationalUnits, payload.organizationalUnits, (o) => o.objectId);
+    mergeBy(this.directoryData.groupPolicies, payload.groupPolicies, (g) => g.objectId);
+    mergeBy(this.directoryData.trusts, payload.trusts, (t) => t.targetDomainName);
+    mergeBy(this.directoryData.relationships, payload.relationships, (r) => `${r.fromType}|${r.fromRef}|${r.relationship}|${r.toType}|${r.toRef}`);
+    mergeBy(this.directoryData.smbShares, payload.smbShares, (x) => `${x.host}/${x.shareName}`);
+    mergeBy(this.directoryData.certificateAuthorities, payload.certificateAuthorities, (c) => c.name);
+    mergeBy(this.directoryData.certificateTemplates, payload.certificateTemplates, (t) => t.name);
+    if (payload.snapshot) this.directorySnapshots.push({ snapshotHash: payload.snapshot.snapshotHash, collectionProfile: payload.snapshot.collectionProfile });
+    if (!this.directoryDriftComputed && this.directoryFixtures.previousData) {
+      this.directoryDriftComputed = true;
+      this.adDrift.push(...diffDirectorySnapshots(this.directoryFixtures.previousData, this.directoryData, this.directoryFixtures.domainRef ?? "corp.example")
+        .map((e) => ({ kind: e.kind, ...(e.objectRef ? { objectRef: e.objectRef } : {}), detail: e.detail })));
+    }
+    const posture = analyzeDirectoryPosture(this.directoryData, {
+      domainId: this.directoryFixtures.domainId, domainRef: this.directoryFixtures.domainRef ?? "corp.example",
+      toolSlug: "directory-platform-analysis",
+    });
+    const fresh = posture.findings.filter((f) => !this.findings.some((x) => x.fingerprint === f.sourceFingerprint));
+    if (fresh.length > 0) {
+      const processedFindings = processNormalizedResult({
+        assets: [], services: [], endpoints: [], technologies: [], findings: fresh,
+        artifacts: [], metrics: {}, mock: false,
+      }, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-directory-analysis", toolSlug: "directory-platform-analysis" });
+      this.findings.push(...processedFindings.findings);
+    }
+    for (const a of posture.controlAssessments) {
+      if (!this.controlAssessments.some((x) => x.frameworkKey === a.frameworkKey && x.controlId === a.controlId && x.subjectRef === a.subjectRef)) {
+        this.controlAssessments.push({ ...a });
+      }
+    }
+    return {
+      users: payload.users.length, groups: payload.groups.length,
+      computers: payload.computers.length, relationships: payload.relationships.length,
+      findings: fresh.length,
+    };
   }
 
   /** Prompt 12 platform hooks mirroring the Prisma store (§19). */
@@ -621,6 +722,63 @@ export class FakeStore implements ScanRunStore {
   async inventoryWebSockets(): Promise<{ webSockets: number; authenticated: number } | null> {
     if (this.webSockets.length === 0) return null;
     return { webSockets: this.webSockets.length, authenticated: this.webSockets.filter((w) => w.authPresent).length };
+  }
+
+  // ── Prompt 15 platform hooks mirroring the Prisma store ──────────
+
+  /** DOMAIN_DISCOVERY (§9/§12): the registered fixture domain
+   *  validates only when a credential REFERENCE is configured. */
+  async validateDirectoryDomain(): Promise<{ status: string; domainRef?: string } | null> {
+    if (this.targetType !== "ACTIVE_DIRECTORY_DOMAIN") return null;
+    if (!this.directoryFixtures.domainId) return null;
+    if (!this.directoryFixtures.credentialReference) {
+      this.directoryDomainStatus = "NOT_CONFIGURED";
+      return { status: "NOT_CONFIGURED", domainRef: this.directoryFixtures.domainRef };
+    }
+    this.directoryDomainStatus = "VALIDATED";
+    return { status: "VALIDATED", domainRef: this.directoryFixtures.domainRef };
+  }
+
+  /** LDAP_POSTURE (§70/§71): the analyzer slice over the persisted
+   *  fixture inventory; findings already joined at collection time. */
+  async analyzeDirectoryLdapPosture(): Promise<{ findings: number; assessments: number } | null> {
+    if (this.targetType !== "ACTIVE_DIRECTORY_DOMAIN" || this.directoryData.domainControllers.length === 0) return null;
+    const findings = analyzeLdapPosture(this.directoryData, {
+      domainId: this.directoryFixtures.domainId ?? "fixture-domain-1",
+      domainRef: this.directoryFixtures.domainRef ?? "corp.example",
+      toolSlug: "directory-platform-analysis",
+    });
+    const present = findings.filter((f) => this.findings.some((x) => x.fingerprint === f.sourceFingerprint)).length;
+    return { findings: present, assessments: this.controlAssessments.length };
+  }
+
+  /** GRAPH_COLLECTION (§32/§65): graph build over the fixture
+   *  inventory — counts, privileged principals, drift events. */
+  async buildDirectoryGraph(): Promise<{ nodes: number; edges: number; privileged: number; drift: number } | null> {
+    if (this.targetType !== "ACTIVE_DIRECTORY_DOMAIN") return null;
+    if (this.directoryData.users.length + this.directoryData.groups.length + this.directoryData.computers.length === 0) return null;
+    const domainRef = this.directoryFixtures.domainRef ?? "corp.example";
+    const graph = buildIdentityGraph(this.directoryData, domainRef);
+    const resolution = resolveNestedGroups(graph, this.directoryData.groups);
+    const privileged = privilegedPrincipals(this.directoryData, graph, resolution);
+    return { nodes: graph.nodes.size, edges: graph.edges.length, privileged: privileged.size, drift: this.adDrift.length };
+  }
+
+  /** ATTACK_PATH_ANALYSIS (§34–§37): model defensive paths over the
+   *  fixture graph — analysis results only, never executed, never
+   *  labelled COMPROMISED. */
+  async analyzeAttackPaths(): Promise<{ paths: number; findings: number } | null> {
+    if (this.targetType !== "ACTIVE_DIRECTORY_DOMAIN" || this.directoryData.relationships.length === 0) return null;
+    const domainRef = this.directoryFixtures.domainRef ?? "corp.example";
+    const graph = buildIdentityGraph(this.directoryData, domainRef);
+    const resolution = resolveNestedGroups(graph, this.directoryData.groups);
+    const paths = findAttackPaths(this.directoryData, graph, resolution, {}, domainRef);
+    for (const p of paths) {
+      if (!this.attackPaths.some((x) => x.title === p.title)) {
+        this.attackPaths.push({ title: p.title, status: p.status, riskScore: p.riskScore });
+      }
+    }
+    return { paths: this.attackPaths.length, findings: 0 };
   }
   async recordDeadLetter(entry: unknown): Promise<void> { this.deadLetters.push(entry); }
 }

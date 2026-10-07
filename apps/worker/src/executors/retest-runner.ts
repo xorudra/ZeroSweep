@@ -15,13 +15,17 @@ import type { StageExecutor } from "./stage-executor";
  * absence of evidence is not evidence of absence.
  */
 export interface RetestStore {
-  prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string; cloudAnalysisSection?: string } | null>;
+  prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string; cloudAnalysisSection?: string; directoryAnalysisSection?: string } | null>;
   retestScanFingerprints(scanId: string): Promise<string[]>;
   completeRetest(retestId: string, outcome: "RESOLVED" | "REOPENED" | "FAILED", detail: string): Promise<void>;
   /** Prompt 14 §73: after a cloud retest's inventory stage succeeds,
    *  the store runs the ONE targeted analysis section so the child
    *  scan holds the section evidence the judgement compares. */
   analyzeCloudSection?(scanId: string, section: string): Promise<{ findings: number; assessments: number } | null>;
+  /** Prompt 15 §84: after a directory retest's collection stage
+   *  succeeds, the store re-evaluates the dedicated LDAP posture
+   *  section over the fresh inventory before judgement. */
+  analyzeDirectoryLdapPosture?(scanId: string): Promise<{ findings: number; assessments: number } | null>;
 }
 
 export class RetestRunner {
@@ -57,6 +61,21 @@ export class RetestRunner {
       const section = await this.store.analyzeCloudSection(prepared.scanId, prepared.cloudAnalysisSection).catch(() => null);
       if (!section) {
         await this.store.completeRetest(retestId, "FAILED", "cloud analysis section produced no evidence — the issue was NOT verified fixed");
+        return { status: "FAILED" };
+      }
+    }
+    // Prompt 15 §84: directory retests judge on fresh SECTION evidence
+    // too — re-evaluate the LDAP posture section over the child scan's
+    // fresh collection. A section that cannot run is inconclusive →
+    // FAILED, never a silent pass.
+    if (prepared.directoryAnalysisSection) {
+      if (!this.store.analyzeDirectoryLdapPosture) {
+        await this.store.completeRetest(retestId, "FAILED", "directory analysis hook unavailable — the issue was NOT verified fixed");
+        return { status: "FAILED" };
+      }
+      const section = await this.store.analyzeDirectoryLdapPosture(prepared.scanId).catch(() => null);
+      if (!section) {
+        await this.store.completeRetest(retestId, "FAILED", "directory analysis section produced no evidence — the issue was NOT verified fixed");
         return { status: "FAILED" };
       }
     }

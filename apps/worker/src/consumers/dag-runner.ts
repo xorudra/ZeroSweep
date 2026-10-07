@@ -78,6 +78,15 @@ export interface ScanRunStore extends ExecutionStore {
   /** Prompt 14: the provider of the scan's registered cloud account —
    *  the CLOUD_INVENTORY stage narrows its connector candidates to it. */
   cloudScanProvider?(scanId: string): Promise<string | null>;
+  /** Prompt 15 platform-stage hooks (same optional pattern): domain
+   *  authorization (§9/§12 — null fails the scan honestly as
+   *  NOT_CONFIGURED), LDAP posture analysis over persisted inventory
+   *  (§70/§71), identity-graph construction (§32/§65) and defensive
+   *  attack-path modeling (§34–§37). */
+  validateDirectoryDomain?(scanId: string): Promise<{ status: string; domainRef?: string } | null>;
+  analyzeDirectoryLdapPosture?(scanId: string): Promise<{ findings: number; assessments: number } | null>;
+  buildDirectoryGraph?(scanId: string): Promise<{ nodes: number; edges: number; privileged: number; drift: number } | null>;
+  analyzeAttackPaths?(scanId: string): Promise<{ paths: number; findings: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -268,6 +277,9 @@ export class DagRunner {
     if (plan.stages.some((s) => s.type === "CLOUD_AUTH")) {
       await emit("cloud.scan_completed", { finalStatus });
     }
+    if (plan.stages.some((s) => s.type === "DOMAIN_DISCOVERY")) {
+      await emit("ad.scan_completed", { finalStatus });
+    }
     return { status: finalStatus };
   }
 
@@ -450,6 +462,40 @@ export class DagRunner {
     if (stageId === "QUALITY_GATE" && this.store.evaluateCloudQualityGate) {
       const result = await this.store.evaluateCloudQualityGate(scanId);
       if (result) await emit("cloud.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
+    }
+    // Prompt 15 platform stages (§86): DOMAIN_DISCOVERY validates the
+    // registered domain (missing hook or NOT_CONFIGURED fails the scan
+    // honestly — FAIL_SCAN strategy); LDAP_POSTURE runs the DC/LDAP
+    // analyzers over persisted inventory; GRAPH_COLLECTION builds the
+    // identity graph (+ annotations + drift); ATTACK_PATH_ANALYSIS
+    // models defensive paths over the graph — never executes them.
+    if (stageId === "DOMAIN_DISCOVERY") {
+      if (!this.store.validateDirectoryDomain) return "FAILED";
+      const result = await this.store.validateDirectoryDomain(scanId);
+      if (!result || result.status !== "VALIDATED") {
+        await emit("policy.denied", { stageId, reasonCode: "AD_NOT_CONFIGURED" });
+        return "FAILED";
+      }
+      await emit("ad.domain_validated", { stageId, domainRef: result.domainRef ?? null });
+    }
+    if (stageId === "LDAP_POSTURE" && this.store.analyzeDirectoryLdapPosture) {
+      const result = await this.store.analyzeDirectoryLdapPosture(scanId);
+      if (result) await emit("ad.ldap_posture_completed", { stageId, findings: result.findings, assessments: result.assessments });
+    }
+    if (stageId === "GRAPH_COLLECTION" && this.store.buildDirectoryGraph) {
+      const result = await this.store.buildDirectoryGraph(scanId);
+      if (result) {
+        await emit("ad.graph_built", { stageId, nodes: result.nodes, edges: result.edges, privileged: result.privileged });
+        if (result.privileged > 0) await emit("ad.privileged_identity_detected", { stageId, count: result.privileged });
+        if (result.drift > 0) await emit("ad.drift_detected", { stageId, count: result.drift });
+      }
+    }
+    if (stageId === "ATTACK_PATH_ANALYSIS" && this.store.analyzeAttackPaths) {
+      const result = await this.store.analyzeAttackPaths(scanId);
+      if (result) {
+        await emit("ad.attack_paths_analyzed", { stageId, paths: result.paths });
+        if (result.paths > 0) await emit("ad.attack_path_detected", { stageId, count: result.paths });
+      }
     }
     return "COMPLETED";
   }

@@ -208,6 +208,13 @@ export interface ProcessedFinding {
   cloudResourceType?: string;
   cloudRegion?: string;
   exposureClass?: string;
+  /** Prompt 15 §61/§67: Active Directory identity — the registered
+   *  domain, the domain ref (fingerprint component) and the directory
+   *  object the finding concerns. Identity metadata only. */
+  directoryDomainId?: string;
+  directoryDomainRef?: string;
+  directoryObjectId?: string;
+  directoryObjectType?: string;
 }
 
 /** Prompt 12 §45: component inventory passthrough (PURL identity). */
@@ -312,6 +319,9 @@ export interface ProcessedResult {
     riskPaths: import("@dsrclone/security-sdk").NormalizedCloudRiskPath[];
     snapshot?: import("@dsrclone/security-sdk").NormalizedCloudSnapshot;
   };
+  /** Prompt 15: Active Directory inventory + identity-graph payload
+   *  passthrough — the stores persist it into the directory tables. */
+  directory: import("@dsrclone/security-sdk").NormalizedDirectoryData;
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -620,6 +630,11 @@ export function processNormalizedResult(
       ...(f.cloudResourceType ? { cloudResourceType: f.cloudResourceType } : {}),
       ...(f.cloudRegion ? { cloudRegion: f.cloudRegion } : {}),
       ...(f.exposureClass ? { exposureClass: f.exposureClass } : {}),
+      // Prompt 15 passthrough (§61/§67): directory identity fields.
+      ...(f.directoryDomainId ? { directoryDomainId: f.directoryDomainId } : {}),
+      ...(f.directoryDomainRef ? { directoryDomainRef: f.directoryDomainRef } : {}),
+      ...(f.directoryObjectId ? { directoryObjectId: f.directoryObjectId } : {}),
+      ...(f.directoryObjectType ? { directoryObjectType: f.directoryObjectType } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -769,7 +784,16 @@ export function processNormalizedResult(
     ...(result.cloud?.snapshot ? { snapshot: result.cloud.snapshot } : {}),
   };
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, suppressedEndpoints, isMock: result.mock };
+  // --- Active Directory payload (Prompt 15): directory inventory +
+  //     identity relationships pass through with provenance intact;
+  //     the stores persist them into the directory tables.
+  const directory: ProcessedResult["directory"] = result.directory ?? {
+    domainControllers: [], users: [], groups: [], computers: [], organizationalUnits: [],
+    groupPolicies: [], trusts: [], relationships: [], smbShares: [],
+    certificateAuthorities: [], certificateTemplates: [],
+  };
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original
@@ -913,12 +937,78 @@ function correlateCloudProcessed(
   };
 }
 
+/** Prompt 15 §61: a processed finding is a DIRECTORY finding when it
+ *  carries directory identity. Directory findings correlate in their
+ *  own partition: the merge key is the canonical directory fingerprint
+ *  (domain + rule + object) — a native analyzer observation, a
+ *  PingCastle rule mapped to the same canonical rule and a re-scan all
+ *  converge on ONE canonical finding, every source's evidence row
+ *  preserved. The host/endpoint vuln engine never touches them (its
+ *  canonicalization would destroy directory identity). */
+export function isDirectoryFinding(f: ProcessedFinding): boolean {
+  return f.directoryDomainRef !== undefined || f.directoryObjectId !== undefined;
+}
+
+function correlateDirectoryProcessed(
+  findings: ProcessedFinding[],
+): { findings: ProcessedFinding[]; stats: CorrelationStats } {
+  const groups = new Map<string, ProcessedFinding[]>();
+  for (const f of findings) groups.set(f.fingerprint, [...(groups.get(f.fingerprint) ?? []), f]);
+  const out: ProcessedFinding[] = [...groups.values()].map((members) => {
+    const primary = members[0]!;
+    const sources = [...new Set(members.flatMap((m) => m.sources))];
+    const risk = computeRisk({
+      severity: primary.severity as NormalizedFinding["severity"],
+      ...(primary.cvssScore !== undefined ? { cvssScore: primary.cvssScore } : {}),
+      confidence: primary.confidence,
+      verificationStatus: "UNVERIFIED",
+    });
+    return {
+      ...primary,
+      sources,
+      evidenceRows: members.flatMap((m) => m.evidenceRows),
+      evidenceSummary: members.map((m) => m.evidenceSummary).filter(Boolean).join("\n"),
+      riskScore: risk.score,
+      riskBand: risk.band,
+      riskExplanation: [
+        ...risk.explanation,
+        ...(sources.length > 1 ? [`CORROBORATED_BY: ${sources.join(", ")}`] : []),
+      ],
+      confidenceBand: primary.confidence >= 0.8 ? "HIGH" : primary.confidence >= 0.5 ? "MEDIUM" : "LOW",
+      verificationStatus: "UNVERIFIED",
+    } as ProcessedFinding;
+  });
+  const byTool: CorrelationStats["byTool"] = {};
+  for (const f of findings) {
+    const entry = byTool[f.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.total += 1;
+    byTool[f.sourceTool] = entry;
+  }
+  for (const o of out) {
+    const entry = byTool[o.sourceTool] ?? { total: 0, unique: 0, corroborated: 0 };
+    entry.unique += 1;
+    if (o.sources.length > 1) entry.corroborated += 1;
+    byTool[o.sourceTool] = entry;
+  }
+  return {
+    findings: out,
+    stats: {
+      total: findings.length,
+      unique: out.length,
+      duplicatesMerged: findings.length - out.length,
+      corroborated: out.filter((f) => f.sources.length > 1).length,
+      byTool,
+    },
+  };
+}
+
 export function correlateProcessedFindings(
   findings: ProcessedFinding[],
   opts: { assetCriticality?: string; maxFindings?: number } = {},
 ): { findings: ProcessedFinding[]; stats: CorrelationStats } {
   const cloudFindings = findings.filter(isCloudNativeFinding);
-  const rest = findings.filter((f) => !isCloudNativeFinding(f));
+  const directoryFindings = findings.filter((f) => !isCloudNativeFinding(f) && isDirectoryFinding(f));
+  const rest = findings.filter((f) => !isCloudNativeFinding(f) && !isDirectoryFinding(f));
   const mergeStats = (parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[]) => {
     const byTool: CorrelationStats["byTool"] = {};
     for (const part of parts) {
@@ -940,6 +1030,7 @@ export function correlateProcessedFindings(
   };
   const parts: { findings: ProcessedFinding[]; stats: CorrelationStats }[] = [];
   if (cloudFindings.length > 0) parts.push(correlateCloudProcessed(cloudFindings));
+  if (directoryFindings.length > 0) parts.push(correlateDirectoryProcessed(directoryFindings));
   const sourceFindings = rest.filter(isSourceFinding);
   const otherFindings = rest.filter((f) => !isSourceFinding(f));
   if (otherFindings.length > 0) parts.push(correlateVulnProcessed(otherFindings, opts));

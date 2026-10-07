@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  apiHealthBySlug, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -96,9 +96,17 @@ export class OrchestrationService {
       // Pacu has NO adapter (§34): its health is a governed DISABLED
       // constant in cloudSecHealthBySlug, never a probe.
       registerCloudSecAdapters(registry);
+      // Prompt 15: directory adapters (connectors with inert deps /
+      // governed AD CLI tools) join plan-time selection for the AD
+      // profiles. Connectors report NOT_CONFIGURED at plan time —
+      // per-domain configuration resolves in the DIRECTORY_ANALYSIS
+      // worker (§15). Offensive tools have NO adapter (§51–§56):
+      // their health is a governed DISABLED constant in
+      // directoryHealthRecord, never a probe.
+      registerDirectoryAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()), ...directoryHealthRecord(registry.list()) } };
     }
     return this.registryCache.registry;
   }

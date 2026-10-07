@@ -100,6 +100,11 @@ export const PLATFORM_STAGE_TYPES = new Set([
   // (§9/§36–§57/§68).
   "CLOUD_AUTH", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS",
   "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_COMPLIANCE",
+  // Prompt 15: domain validation, LDAP posture, graph construction
+  // and attack-path modeling are engine/store hooks over persisted
+  // directory inventory — deterministic analysis, no adapter executes
+  // (§70/§32/§34).
+  "DOMAIN_DISCOVERY", "LDAP_POSTURE", "GRAPH_COLLECTION", "ATTACK_PATH_ANALYSIS",
 ]);
 
 export class InvalidPlanError extends Error {

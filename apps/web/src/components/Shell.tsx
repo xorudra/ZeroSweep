@@ -19,6 +19,7 @@ export const NAV = [
   { href: "/compliance", label: "Compliance" },
   { href: "/runtime-events", label: "Runtime Events" },
   { href: "/cloud-security", label: "Cloud Security" },
+  { href: "/active-directory", label: "Active Directory" },
   { href: "/assessments", label: "Assessments" },
   { href: "/scans", label: "Scans" },
   { href: "/findings", label: "Findings" },

@@ -48,6 +48,12 @@ enum TargetType {
   KUBERNETES_CLUSTER
   KUBERNETES_MANIFEST
   HELM_CHART
+  // Prompt 15 §3: Active Directory target kinds. ACTIVE_DIRECTORY above
+  // remains as the legacy alias for ACTIVE_DIRECTORY_DOMAIN.
+  ACTIVE_DIRECTORY_DOMAIN
+  ACTIVE_DIRECTORY_FOREST
+  DOMAIN_CONTROLLER
+  LDAP_DIRECTORY
 }
 
 enum TargetStatus {
@@ -116,6 +122,16 @@ enum AssessmentProfile {
   PUBLIC_EXPOSURE_REVIEW
   COMPLIANCE_ASSESSMENT
   IAC_TO_CLOUD_CORRELATION
+  // Prompt 15 §85: Active Directory assessment profiles. No profile —
+  // including AD_COMPREHENSIVE — performs credential attacks (§120):
+  // the offensive capabilities are DISABLED descriptors only.
+  AD_INVENTORY
+  AD_BASELINE
+  AD_COMPREHENSIVE
+  ADCS_POSTURE
+  SMB_POSTURE
+  IDENTITY_GRAPH
+  ATTACK_PATH_ANALYSIS
 }
 
 enum AssessmentStatus {
@@ -201,6 +217,19 @@ enum ScanStageType {
   LOGGING_ANALYSIS
   CLOUD_CSPM
   CLOUD_COMPLIANCE
+  // Prompt 15 §86/§99: Active Directory pipeline stages. DOMAIN_DISCOVERY,
+  // LDAP_POSTURE, GRAPH_COLLECTION and ATTACK_PATH_ANALYSIS are PLATFORM
+  // stages (engine analysis over persisted directory inventory);
+  // DIRECTORY_INVENTORY, SMB_POSTURE, PINGCASTLE_POSTURE and ADCS_POSTURE
+  // are tool/connector stages on DIRECTORY_ANALYSIS workers only.
+  DOMAIN_DISCOVERY
+  DIRECTORY_INVENTORY
+  LDAP_POSTURE
+  SMB_POSTURE
+  GRAPH_COLLECTION
+  PINGCASTLE_POSTURE
+  ADCS_POSTURE
+  ATTACK_PATH_ANALYSIS
   QUALITY_GATE
   NORMALIZATION
   CORRELATION
@@ -477,6 +506,20 @@ enum AuditAction {
   CLOUD_DRIFT_DETECTED
   CLOUD_COMPLIANCE_ASSESSED
   CLOUD_ARTIFACT_ACCESSED
+  // Prompt 15 §117: Active Directory audit actions. Metadata for these
+  // actions NEVER contains credentials (§113) — directory credentials
+  // exist only as secret references (§7/§9).
+  AD_DOMAIN_REGISTERED
+  AD_SCAN_STARTED
+  AD_SCAN_COMPLETED
+  DIRECTORY_SNAPSHOT_CREATED
+  PRIVILEGED_IDENTITY_DETECTED
+  AD_ATTACK_PATH_DETECTED
+  AD_TRUST_DISCOVERED
+  ADCS_RISK_DETECTED
+  AD_DRIFT_DETECTED
+  DIRECTORY_ARTIFACT_ACCESSED
+  AD_OFFENSIVE_ACTION_BLOCKED
 }
 
 enum NotificationType {
@@ -1108,6 +1151,12 @@ model Finding {
   providerResourceId      String?
   cloudRegion             String?
   findingClass            String?
+  // Prompt 15 §61/§67: Active Directory finding identity — the domain
+  // row the finding belongs to and the directory object (SID / object
+  // id) it concerns. Identity metadata only: no credential material,
+  // no password hashes (§19) can ever be stored on a finding.
+  directoryDomainId       String?
+  directoryObjectId       String?
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1145,6 +1194,8 @@ model Finding {
   @@index([cloudAccountId])
   @@index([cloudResourceId])
   @@index([providerResourceId])
+  @@index([directoryDomainId])
+  @@index([directoryObjectId])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -2625,19 +2676,473 @@ model CloudDriftEvent {
 // carries the reference NAME and lifecycle only — credential material
 // never appears here, in queue payloads, or in logs (§100).
 model CredentialLease {
-  id                  String       @id @default(uuid())
+  id                  String                 @id @default(uuid())
   workspaceId         String
-  cloudAccountId      String
+  cloudAccountId      String?
+  // Prompt 15 §9: the same lease architecture serves directory
+  // assessments — exactly one of cloudAccountId / directoryDomainId
+  // is set per lease; the record carries the reference NAME and
+  // lifecycle only, never credential material.
+  directoryDomainId   String?
   scanId              String?
   credentialReference String // reference name only — never a value
-  purpose             String       @default("CLOUD_ASSESSMENT")
-  status              String       @default("ISSUED") // ISSUED | CONSUMED | EXPIRED | RELEASED
-  issuedAt            DateTime     @default(now())
+  purpose             String                 @default("CLOUD_ASSESSMENT")
+  status              String                 @default("ISSUED") // ISSUED | CONSUMED | EXPIRED | RELEASED
+  issuedAt            DateTime               @default(now())
   expiresAt           DateTime
   releasedAt          DateTime?
-  account             CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  account             CloudAccount?          @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  domain              ActiveDirectoryDomain? @relation(fields: [directoryDomainId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([cloudAccountId])
+  @@index([directoryDomainId])
   @@index([scanId])
+}
+
+// ===================== Prompt 15 — Active Directory Security =====================
+// Defensive assessment ONLY (§120): inventory, configuration review,
+// identity relationships, privilege analysis, exposure analysis and
+// attack-PATH MODELING over collected data. No model here can hold
+// credential material: directory credentials exist exclusively as
+// secret REFERENCES on DirectoryCredentialProfile (§7), password
+// hashes are never stored (§19), and attack paths are analysis
+// results — they are never executed and never labelled COMPROMISED (§35).
+
+// An AD forest (§5): root domain + functional level + assessment state.
+model ActiveDirectoryForest {
+  id              String                  @id @default(uuid())
+  workspaceId     String
+  name            String
+  rootDomain      String // DNS name of the forest root domain
+  functionalLevel String?
+  assessmentState String                  @default("REGISTERED") // REGISTERED | ASSESSED | NOT_CONFIGURED
+  createdBy       String
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  domains         ActiveDirectoryDomain[]
+
+  @@unique([workspaceId, rootDomain])
+  @@index([workspaceId])
+}
+
+// A registered AD domain (§4): a verified internal target. The domain's
+// own identity (DNS/NetBIOS/SID) is inventory metadata — never a
+// credential. Assessments require the approved internal engagement
+// context and run only on DIRECTORY_ANALYSIS workers (§10/§11).
+model ActiveDirectoryDomain {
+  id                     String                        @id @default(uuid())
+  workspaceId            String
+  targetId               String?
+  forestId               String?
+  dnsName                String
+  netbiosName            String?
+  domainSid              String?
+  functionalLevel        String?
+  environment            String                        @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | LAB | UNKNOWN
+  criticality            String                        @default("HIGH") // identity infrastructure is high-value by default (§73)
+  status                 String                        @default("REGISTERED") // REGISTERED | VALIDATED | NOT_CONFIGURED | VALIDATION_FAILED
+  credentialProfileId    String?
+  firstSeen              DateTime                      @default(now())
+  lastSeen               DateTime                      @updatedAt
+  lastAssessmentAt       DateTime?
+  createdBy              String
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  forest                 ActiveDirectoryForest?        @relation(fields: [forestId], references: [id], onDelete: SetNull)
+  credentialProfile      DirectoryCredentialProfile?   @relation(fields: [credentialProfileId], references: [id], onDelete: SetNull)
+  controllers            DomainController[]
+  snapshots              DirectorySnapshot[]
+  users                  DirectoryUser[]
+  groups                 DirectoryGroup[]
+  computers              DirectoryComputer[]
+  organizationalUnits    DirectoryOrganizationalUnit[]
+  groupPolicies          GroupPolicyObject[]
+  trusts                 DirectoryTrust[]
+  relationships          DirectoryRelationship[]
+  attackPaths            AdAttackPath[]
+  smbShares              SmbShare[]
+  certificateAuthorities CertificateAuthority[]
+  certificateTemplates   CertificateTemplate[]
+  driftEvents            AdDriftEvent[]
+  artifacts              DirectoryArtifact[]
+  leases                 CredentialLease[]
+
+  @@unique([workspaceId, dnsName])
+  @@index([workspaceId])
+  @@index([forestId])
+}
+
+// An assessment identity for a domain (§7): READ_ONLY_DOMAIN or
+// APPROVED_DIRECTORY_AUDITOR. The credential itself lives in the
+// secret manager — this row holds the REFERENCE NAME only. Default
+// assessments never require Domain Admin (§8).
+model DirectoryCredentialProfile {
+  id                  String                  @id @default(uuid())
+  workspaceId         String
+  name                String
+  identityKind        String                  @default("READ_ONLY_DOMAIN") // READ_ONLY_DOMAIN | APPROVED_DIRECTORY_AUDITOR
+  credentialReference String? // secret reference name only — never a value
+  status              String                  @default("REGISTERED") // REGISTERED | VALIDATED | NOT_CONFIGURED
+  createdBy           String
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  domains             ActiveDirectoryDomain[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// A domain controller (§6), linked to the network Asset that P10
+// discovered for the same host — DCs are never duplicated as hosts.
+model DomainController {
+  id          String                @id @default(uuid())
+  workspaceId String
+  domainId    String
+  assetId     String? // network Asset/Host correlation (§72)
+  hostname    String
+  dnsName     String?
+  ipAddresses String[]              @default([])
+  osName      String?
+  osVersion   String?
+  // Service metadata (§6): LDAP / LDAPS / SMB / Kerberos / DNS / GC
+  // presence + posture facts (signing, channel binding) — metadata
+  // only, collected read-only.
+  services    Json                  @default("{}")
+  firstSeen   DateTime              @default(now())
+  lastSeen    DateTime              @updatedAt
+  domain      ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, hostname])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// One directory collection (§18): what was collected, by which profile
+// and collector versions, and a content hash — the drift baseline (§79).
+model DirectorySnapshot {
+  id                String                @id @default(uuid())
+  workspaceId       String
+  domainId          String
+  scanId            String?
+  collectionProfile String // e.g. AD_BASELINE / SHARPHOUND_SAFE / BLOODHOUND_IMPORT
+  collectorVersions Json                  @default("{}")
+  objectCounts      Json                  @default("{}")
+  relationshipCount Int                   @default(0)
+  snapshotHash      String
+  capturedAt        DateTime              @default(now())
+  domain            ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([domainId])
+  @@index([scanId])
+}
+
+// A directory user (§19): security-relevant METADATA only. There is
+// deliberately no field that could hold a password or a hash.
+model DirectoryUser {
+  id                   String                @id @default(uuid())
+  workspaceId          String
+  domainId             String
+  objectId             String // SID / objectGUID — directory identity, not a secret
+  samAccountName       String
+  displayName          String?
+  userPrincipalName    String?
+  enabled              Boolean               @default(true)
+  isServiceAccount     Boolean               @default(false)
+  passwordNeverExpires Boolean               @default(false)
+  passwordNotRequired  Boolean               @default(false)
+  preauthNotRequired   Boolean               @default(false) // DONT_REQUIRE_PREAUTH — posture metadata (§57)
+  spnPresent           Boolean               @default(false) // SPN presence is inventory (§58), not a finding by itself
+  spns                 String[]              @default([])
+  delegationType       String                @default("NONE") // NONE | UNCONSTRAINED | CONSTRAINED | RESOURCE_BASED (§59)
+  delegationTargets    String[]              @default([])
+  privileged           Boolean               @default(false) // evidence-backed (§64): direct or nested privileged membership / high-impact ACL
+  privilegeEvidence    Json?
+  riskScore            Float? // explainable IdentityRiskScore (§77) — inputs recorded in riskFactors
+  riskFactors          Json?
+  lastLogonAt          DateTime?
+  passwordLastSetAt    DateTime?
+  metadata             Json                  @default("{}")
+  firstSeen            DateTime              @default(now())
+  lastSeen             DateTime              @updatedAt
+  domain               ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, objectId])
+  @@index([workspaceId])
+  @@index([domainId, privileged])
+}
+
+// A directory computer (§20), linked to the network Asset where the
+// host was also discovered by network scans (§72/§93).
+model DirectoryComputer {
+  id                      String                @id @default(uuid())
+  workspaceId             String
+  domainId                String
+  assetId                 String?
+  objectId                String
+  hostname                String
+  dnsName                 String?
+  osName                  String?
+  osVersion               String?
+  enabled                 Boolean               @default(true)
+  isDomainController      Boolean               @default(false)
+  delegationType          String                @default("NONE") // NONE | UNCONSTRAINED | CONSTRAINED | RESOURCE_BASED (§59)
+  delegationTargets       String[]              @default([])
+  unconstrainedDelegation Boolean               @default(false)
+  riskScore               Float? // ComputerRiskScore (§78)
+  riskFactors             Json?
+  metadata                Json                  @default("{}")
+  firstSeen               DateTime              @default(now())
+  lastSeen                DateTime              @updatedAt
+  domain                  ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, objectId])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// A directory group (§21) with SID-based privilege classification (§22).
+model DirectoryGroup {
+  id             String                @id @default(uuid())
+  workspaceId    String
+  domainId       String
+  objectId       String // SID — classification keys off the SID RID, not the localized name (§22)
+  name           String
+  groupScope     String                @default("GLOBAL") // GLOBAL | UNIVERSAL | DOMAIN_LOCAL
+  groupType      String                @default("SECURITY") // SECURITY | DISTRIBUTION
+  privilegeClass String                @default("STANDARD") // PRIVILEGED | HIGH_IMPACT | STANDARD (§22)
+  memberCount    Int                   @default(0)
+  metadata       Json                  @default("{}")
+  firstSeen      DateTime              @default(now())
+  lastSeen       DateTime              @updatedAt
+  domain         ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, objectId])
+  @@index([workspaceId])
+  @@index([domainId, privilegeClass])
+}
+
+// An organizational unit (§23): hierarchy + linked policy metadata.
+model DirectoryOrganizationalUnit {
+  id                String                @id @default(uuid())
+  workspaceId       String
+  domainId          String
+  objectId          String
+  name              String
+  distinguishedName String
+  parentRef         String? // parent OU objectId (or the domain ref)
+  linkedGpoIds      String[]              @default([])
+  firstSeen         DateTime              @default(now())
+  lastSeen          DateTime              @updatedAt
+  domain            ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, objectId])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// A Group Policy Object (§24): metadata + security-relevant
+// configuration summary. The platform NEVER modifies a GPO (§83).
+model GroupPolicyObject {
+  id                 String                @id @default(uuid())
+  workspaceId        String
+  domainId           String
+  objectId           String // GPO GUID
+  name               String
+  linkedTo           String[]              @default([]) // OU / domain refs the GPO is linked to
+  securityMetadata   Json                  @default("{}")
+  delegationMetadata Json                  @default("{}")
+  lastModifiedAt     DateTime?
+  firstSeen          DateTime              @default(now())
+  lastSeen           DateTime              @updatedAt
+  domain             ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, objectId])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// A directory trust (§25): direction/type/transitivity + SID-filtering
+// and selective-authentication metadata where the collection exposes it.
+model DirectoryTrust {
+  id                      String                @id @default(uuid())
+  workspaceId             String
+  domainId                String // source domain (the registered domain)
+  targetDomainName        String
+  targetDomainId          String? // registered domain row when the target is also assessed
+  direction               String // INBOUND | OUTBOUND | BIDIRECTIONAL
+  trustType               String // FOREST | EXTERNAL | PARENT_CHILD | SHORTCUT | UNKNOWN
+  transitive              Boolean               @default(true)
+  sidFilteringEnabled     Boolean?
+  selectiveAuthentication Boolean?
+  firstSeen               DateTime              @default(now())
+  lastSeen                DateTime              @updatedAt
+  domain                  ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, targetDomainName])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// An identity-graph edge (§32/§33): ONLY relationships the collected
+// evidence supports. Every edge retains provenance — source tool,
+// snapshot, collection time and confidence. Sessions (§69) ride this
+// same shape with restricted retention, never as movement instructions.
+model DirectoryRelationship {
+  id           String                @id @default(uuid())
+  workspaceId  String
+  domainId     String
+  snapshotId   String?
+  fromType     String // USER | GROUP | COMPUTER | DOMAIN | OU | GPO | CERTIFICATE_AUTHORITY | CERTIFICATE_TEMPLATE | SERVICE_ACCOUNT
+  fromRef      String // objectId / SID of the source node
+  toType       String
+  toRef        String
+  relationship String // MEMBER_OF | ADMIN_TO | HAS_SESSION | CAN_RDP | CAN_REMOTE_MANAGE | OWNS | GENERIC_ALL | GENERIC_WRITE | WRITE_DACL | WRITE_OWNER | GPO_LINK | TRUST | DELEGATION
+  source       String // adapter slug / collector that reported the edge
+  confidence   String                @default("MEDIUM") // LOW | MEDIUM | HIGH (§36)
+  evidenceRef  String?
+  firstSeen    DateTime              @default(now())
+  lastSeen     DateTime              @updatedAt
+  domain       ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, fromType, fromRef, relationship, toType, toRef])
+  @@index([workspaceId])
+  @@index([domainId])
+  @@index([domainId, relationship])
+}
+
+// A defensive attack path (§34–§37): a graph computation over
+// collected evidence. Status is THEORETICAL / EVIDENCE_BACKED /
+// REVIEWED / MITIGATED — NEVER COMPROMISED without incident evidence,
+// and no step of a path is ever executed.
+model AdAttackPath {
+  id          String                @id @default(uuid())
+  workspaceId String
+  domainId    String
+  scanId      String?
+  title       String
+  steps       Json                  @default("[]") // [{ kind, ref, label, via }] — evidence-backed nodes/edges only
+  status      String                @default("THEORETICAL") // THEORETICAL | EVIDENCE_BACKED | REVIEWED | MITIGATED
+  confidence  String                @default("LOW") // LOW | MEDIUM | HIGH (§36)
+  riskScore   Float                 @default(0) // §37 factors — never "shortest = worst" alone
+  riskFactors Json                  @default("{}") // the explanation of the score (§36/§37)
+  findingIds  String[]              @default([])
+  createdAt   DateTime              @default(now())
+  domain      ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([domainId])
+  @@index([scanId])
+}
+
+// An SMB share observation (§42): inventory + access classification
+// only. Share CONTENTS are never downloaded by normal assessment (§97).
+model SmbShare {
+  id              String                 @id @default(uuid())
+  workspaceId     String
+  domainId        String?
+  assetId         String?
+  host            String // hostname / IP of the file server
+  shareName       String
+  accessLevel     String                 @default("UNKNOWN") // NONE | READ | READ_WRITE | ADMIN | UNKNOWN — only where safely determined (§42)
+  anonymousAccess Boolean?
+  smbDialect      String? // e.g. SMB1 / SMB2 / SMB3 (§45)
+  signingRequired Boolean?
+  source          String // adapter slug that reported the share
+  firstSeen       DateTime               @default(now())
+  lastSeen        DateTime               @updatedAt
+  domain          ActiveDirectoryDomain? @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, host, shareName])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// An AD CS certificate authority (§46).
+model CertificateAuthority {
+  id                 String                @id @default(uuid())
+  workspaceId        String
+  domainId           String
+  name               String
+  dnsName            String?
+  enrollmentServices Json                  @default("[]") // enrollment endpoint metadata (names/URLs as data)
+  metadata           Json                  @default("{}") // posture metadata (e.g. EDITF flag observations)
+  firstSeen          DateTime              @default(now())
+  lastSeen           DateTime              @updatedAt
+  domain             ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  templates          CertificateTemplate[]
+
+  @@unique([domainId, name])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// A certificate template (§46/§49): security-relevant configuration
+// metadata + deterministic risk classes (§50). Templates are analyzed,
+// never modified, and no certificate is ever requested (§48/§83).
+model CertificateTemplate {
+  id                           String                @id @default(uuid())
+  workspaceId                  String
+  domainId                     String
+  caId                         String?
+  name                         String
+  objectId                     String?
+  enabled                      Boolean               @default(true)
+  enrollmentPermissions        Json                  @default("{}")
+  subjectConfig                Json                  @default("{}") // e.g. enrolleeSuppliesSubject (§49)
+  authenticationEkus           String[]              @default([])
+  managerApprovalRequired      Boolean               @default(false)
+  authorizedSignaturesRequired Int                   @default(0)
+  issuanceRequirements         Json                  @default("{}")
+  riskClasses                  String[]              @default([]) // governed ESC-style class labels — analysis labels only (§50)
+  firstSeen                    DateTime              @default(now())
+  lastSeen                     DateTime              @updatedAt
+  domain                       ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  ca                           CertificateAuthority? @relation(fields: [caId], references: [id], onDelete: SetNull)
+
+  @@unique([domainId, name])
+  @@index([workspaceId])
+  @@index([domainId])
+}
+
+// A directory drift observation (§79/§80): snapshot-vs-snapshot change.
+// High-risk kinds are REVIEW signals — a change is never automatically
+// classified malicious.
+model AdDriftEvent {
+  id          String                @id @default(uuid())
+  workspaceId String
+  domainId    String
+  scanId      String?
+  snapshotId  String?
+  kind        String // NEW_PRIVILEGED_MEMBER | PRIVILEGED_MEMBERSHIP_REMOVED | NEW_PRIVILEGED_USER | NEW_TRUST | TRUST_CHANGED | GPO_CHANGED | DELEGATION_CHANGED | NEW_RISKY_ACL | CERTIFICATE_TEMPLATE_CHANGED
+  objectRef   String?
+  detail      String                @default("")
+  detectedAt  DateTime              @default(now())
+  domain      ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([domainId])
+  @@index([kind])
+}
+
+// Raw directory dataset artifact metadata (§30): BloodHound/SharpHound
+// exports, PingCastle reports and ADExplorer snapshots are HIGHLY
+// sensitive. Only the reference + hash live here; raw access requires
+// VIEW_RAW_DIRECTORY_GRAPH and is audited on every access (§117).
+model DirectoryArtifact {
+  id           String                @id @default(uuid())
+  workspaceId  String
+  domainId     String
+  scanId       String?
+  artifactKind String // BLOODHOUND_EXPORT | SHARPHOUND_OUTPUT | PINGCASTLE_REPORT | ADEXPLORER_SNAPSHOT | LDAP_EXPORT
+  storageKey   String
+  sha256       String
+  sizeBytes    Int                   @default(0)
+  sensitivity  String                @default("HIGH")
+  createdAt    DateTime              @default(now())
+  domain       ActiveDirectoryDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([domainId])
 }

@@ -353,3 +353,46 @@ export const startCloudScanSchema = z.object({
   ]).default("CLOUD_BASELINE"),
 }).strict();
 export type StartCloudScanInput = z.input<typeof startCloudScanSchema>;
+
+/**
+ * Prompt 15 — Active Directory domain registration (§4/§7). Directory
+ * credentials are secret REFERENCES only, under the same reference
+ * discipline as cloud (§6 there): a value-shaped string is refused by
+ * the shape here and again at the service boundary. The domain's DNS
+ * name is the target value; registration records identity metadata
+ * only — never a password, never a hash.
+ */
+const directoryCredentialReferenceSchema = z.string().min(1).max(300).regex(/^[A-Za-z0-9_.:/-]+$/, "credentialReference is a reference NAME (e.g. vault:prod/ad/assessment-account), never a secret value");
+
+const dnsNameSchema = z.string().min(3).max(253).regex(/^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/, "dnsName must be a DNS domain name (e.g. corp.example)");
+
+export const registerAdDomainSchema = z.object({
+  name: z.string().min(1).max(200),
+  dnsName: dnsNameSchema,
+  netbiosName: z.string().min(1).max(64).optional(),
+  domainSid: z.string().min(1).max(128).regex(/^S-1-5-21(-[0-9]+)+$/, "domainSid must be a domain SID (S-1-5-21-…)").optional(),
+  functionalLevel: z.string().min(1).max(64).optional(),
+  forestName: z.string().min(1).max(200).optional(),
+  forestRootDomain: dnsNameSchema.optional(),
+  environment: z.enum(["PRODUCTION", "STAGING", "DEVELOPMENT", "LAB", "UNKNOWN"]).default("UNKNOWN"),
+  criticality: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("HIGH"),
+  // §7: the assessment identity profile — least privilege by default;
+  // Domain Admin is never requested (§8).
+  credentialProfileName: z.string().min(1).max(200).optional(),
+  identityKind: z.enum(["READ_ONLY_DOMAIN", "APPROVED_DIRECTORY_AUDITOR"]).default("READ_ONLY_DOMAIN"),
+  credentialReference: directoryCredentialReferenceSchema.optional(),
+  // §11: explicitly approved domain controllers for this domain.
+  domainControllers: z.array(z.object({
+    hostname: z.string().min(1).max(253),
+    ipAddresses: z.array(z.string().min(1).max(64)).max(16).default([]),
+  }).strict()).max(64).default([]),
+}).strict();
+export type RegisterAdDomainInput = z.input<typeof registerAdDomainSchema>;
+
+export const startAdScanSchema = z.object({
+  profile: z.enum([
+    "AD_INVENTORY", "AD_BASELINE", "AD_COMPREHENSIVE", "ADCS_POSTURE",
+    "SMB_POSTURE", "IDENTITY_GRAPH", "ATTACK_PATH_ANALYSIS",
+  ]).default("AD_BASELINE"),
+}).strict();
+export type StartAdScanInput = z.input<typeof startAdScanSchema>;

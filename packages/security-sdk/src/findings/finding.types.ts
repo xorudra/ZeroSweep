@@ -88,6 +88,17 @@ export interface NormalizedFinding {
   cloudRegion?: string;
   /** Evidence-based exposure verdict for the resource (§47). */
   exposureClass?: CloudExposureClass;
+  // ── Prompt 15 — Active Directory finding extensions (§61/§67). All
+  // optional; populated only by directory analyzers/parsers. Identity
+  // metadata only — no credential material can ride on a finding (§19).
+  /** Registered ActiveDirectoryDomain id (platform identity). */
+  directoryDomainId?: string;
+  /** Domain DNS name the finding belongs to (fingerprint component). */
+  directoryDomainRef?: string;
+  /** Directory object the finding concerns (SID / object id). */
+  directoryObjectId?: string;
+  /** Directory object kind: USER | GROUP | COMPUTER | GPO | CA | TEMPLATE | DOMAIN | DC. */
+  directoryObjectType?: string;
 }
 
 /** Prompt 14 §58: cloud finding classes — kept distinguishable end to end. */
@@ -173,6 +184,182 @@ export interface NormalizedCloudData {
   /** Resources the account scope excluded (§15): recorded with an
    *  OUT_OF_SCOPE verdict, never analyzed, never promoted. */
   outOfScopeResources?: NormalizedCloudResource[];
+}
+
+/** Prompt 15 §19: a directory user — security-relevant METADATA only.
+ *  There is deliberately no field that could hold a password or hash. */
+export interface NormalizedDirectoryUser {
+  objectId: string; // SID / objectGUID
+  samAccountName: string;
+  displayName?: string;
+  userPrincipalName?: string;
+  enabled: boolean;
+  isServiceAccount?: boolean;
+  passwordNeverExpires?: boolean;
+  passwordNotRequired?: boolean;
+  /** DONT_REQUIRE_PREAUTH — Kerberos posture METADATA (§57). The
+   *  platform analyzes the flag; it never requests roastable material. */
+  preauthNotRequired?: boolean;
+  spnPresent?: boolean;
+  spns?: string[];
+  delegationType?: "NONE" | "UNCONSTRAINED" | "CONSTRAINED" | "RESOURCE_BASED";
+  delegationTargets?: string[];
+  lastLogonAt?: string;
+  passwordLastSetAt?: string;
+}
+
+/** Prompt 15 §20: a directory computer, linkable to a network Asset. */
+export interface NormalizedDirectoryComputer {
+  objectId: string;
+  hostname: string;
+  dnsName?: string;
+  osName?: string;
+  osVersion?: string;
+  enabled: boolean;
+  isDomainController?: boolean;
+  delegationType?: "NONE" | "UNCONSTRAINED" | "CONSTRAINED" | "RESOURCE_BASED";
+  delegationTargets?: string[];
+  ipAddresses?: string[];
+}
+
+/** Prompt 15 §6: a domain controller + its service posture metadata. */
+export interface NormalizedDomainController {
+  hostname: string;
+  dnsName?: string;
+  ipAddresses: string[];
+  osName?: string;
+  osVersion?: string;
+  objectId?: string;
+  /** LDAP/LDAPS/SMB/Kerberos/DNS/GC presence + posture facts (§70/§71):
+   *  ldapPresent, ldapsPresent, ldapSigningRequired, channelBinding,
+   *  smbSigningRequired, smb1Enabled — metadata only. */
+  services: Record<string, unknown>;
+}
+
+/** Prompt 15 §21/§22: a directory group with SID-based privilege class. */
+export interface NormalizedDirectoryGroup {
+  objectId: string; // SID
+  name: string;
+  groupScope?: "GLOBAL" | "UNIVERSAL" | "DOMAIN_LOCAL";
+  groupType?: "SECURITY" | "DISTRIBUTION";
+  privilegeClass: "PRIVILEGED" | "HIGH_IMPACT" | "STANDARD";
+  memberCount?: number;
+}
+
+/** Prompt 15 §23: an organizational unit. */
+export interface NormalizedDirectoryOU {
+  objectId: string;
+  name: string;
+  distinguishedName: string;
+  parentRef?: string;
+  linkedGpoIds: string[];
+}
+
+/** Prompt 15 §24: a Group Policy Object — metadata only, never modified. */
+export interface NormalizedDirectoryGpo {
+  objectId: string;
+  name: string;
+  linkedTo: string[];
+  securityMetadata: Record<string, unknown>;
+  delegationMetadata: Record<string, unknown>;
+  lastModifiedAt?: string;
+}
+
+/** Prompt 15 §25: a directory trust. */
+export interface NormalizedDirectoryTrust {
+  targetDomainName: string;
+  targetDomainSid?: string;
+  direction: "INBOUND" | "OUTBOUND" | "BIDIRECTIONAL";
+  trustType: "FOREST" | "EXTERNAL" | "PARENT_CHILD" | "SHORTCUT" | "UNKNOWN";
+  transitive: boolean;
+  sidFilteringEnabled?: boolean;
+  selectiveAuthentication?: boolean;
+}
+
+/** Prompt 15 §32/§33: an identity-graph edge. Only edges the collected
+ *  evidence supports exist; every edge carries provenance. */
+export interface NormalizedDirectoryRelationship {
+  fromType: string; // USER | GROUP | COMPUTER | DOMAIN | OU | GPO | CERTIFICATE_AUTHORITY | CERTIFICATE_TEMPLATE | SERVICE_ACCOUNT
+  fromRef: string;
+  toType: string;
+  toRef: string;
+  relationship: string; // MEMBER_OF | ADMIN_TO | HAS_SESSION | CAN_RDP | CAN_REMOTE_MANAGE | OWNS | GENERIC_ALL | GENERIC_WRITE | WRITE_DACL | WRITE_OWNER | GPO_LINK | TRUST | DELEGATION
+  source: string; // adapter slug that reported the edge
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  evidenceRef?: string;
+}
+
+/** Prompt 15 §42: an SMB share observation — inventory only, contents
+ *  are never downloaded. */
+export interface NormalizedSmbShare {
+  host: string;
+  shareName: string;
+  accessLevel: "NONE" | "READ" | "READ_WRITE" | "ADMIN" | "UNKNOWN";
+  anonymousAccess?: boolean;
+  smbDialect?: string;
+  signingRequired?: boolean;
+  source: string;
+}
+
+/** Prompt 15 §46: an AD CS certificate authority. */
+export interface NormalizedCertificateAuthority {
+  name: string;
+  dnsName?: string;
+  enrollmentServices: string[];
+  metadata: Record<string, unknown>;
+}
+
+/** Prompt 15 §46/§49: a certificate template + its governed risk
+ *  classes (§50) — analysis labels only, never exploited. */
+export interface NormalizedCertificateTemplate {
+  name: string;
+  objectId?: string;
+  caName?: string;
+  enabled?: boolean;
+  enrollmentPermissions: Record<string, unknown>;
+  subjectConfig: Record<string, unknown>;
+  authenticationEkus: string[];
+  managerApprovalRequired?: boolean;
+  authorizedSignaturesRequired?: number;
+  issuanceRequirements: Record<string, unknown>;
+  riskClasses: string[];
+}
+
+/** Prompt 15 §18: a directory snapshot descriptor — the drift baseline. */
+export interface NormalizedDirectorySnapshot {
+  collectionProfile: string;
+  collectorVersions: Record<string, string>;
+  objectCounts: Record<string, number>;
+  relationshipCount: number;
+  snapshotHash: string;
+}
+
+/** Prompt 15 §4/§5: the domain/forest identity of a collection. */
+export interface NormalizedDirectoryDomainInfo {
+  dnsName: string;
+  netbiosName?: string;
+  domainSid?: string;
+  functionalLevel?: string;
+  forestRootDomain?: string;
+}
+
+/** The Active Directory payload of a normalized result (Prompt 15). */
+export interface NormalizedDirectoryData {
+  domain?: NormalizedDirectoryDomainInfo;
+  domainControllers: NormalizedDomainController[];
+  users: NormalizedDirectoryUser[];
+  groups: NormalizedDirectoryGroup[];
+  computers: NormalizedDirectoryComputer[];
+  organizationalUnits: NormalizedDirectoryOU[];
+  groupPolicies: NormalizedDirectoryGpo[];
+  trusts: NormalizedDirectoryTrust[];
+  relationships: NormalizedDirectoryRelationship[];
+  smbShares: NormalizedSmbShare[];
+  certificateAuthorities: NormalizedCertificateAuthority[];
+  certificateTemplates: NormalizedCertificateTemplate[];
+  snapshot?: NormalizedDirectorySnapshot;
+  /** Domain password-policy metadata (§60) for the posture analyzers. */
+  passwordPolicy?: Record<string, unknown>;
 }
 
 /** A container image observed by an image/SBOM scan (Prompt 13 §5/§13):
@@ -614,6 +801,8 @@ export interface NormalizedSecurityResult {
   cloudNative?: NormalizedCloudNativeData;
   /** Multi-cloud inventory + IAM + posture payload (Prompt 14). */
   cloud?: NormalizedCloudData;
+  /** Active Directory inventory + identity graph payload (Prompt 15). */
+  directory?: NormalizedDirectoryData;
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

@@ -11,6 +11,7 @@ import { PrismaWorkerStore } from "./store/prisma-store";
 import { prismaScannerDeps } from "./store/scanner-deps";
 import { prismaKubernetesDeps } from "./store/kubernetes-deps";
 import { prismaCloudDeps } from "./store/cloud-deps";
+import { prismaDirectoryDeps } from "./store/directory-deps";
 import { RetestRunner } from "./executors/retest-runner";
 import type { RetestJobData } from "./jobs";
 import { DagRunner } from "./consumers/dag-runner";

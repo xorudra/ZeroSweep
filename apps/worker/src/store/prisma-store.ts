@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, type CvssRecord, type NormalizedCloudIdentity, type NormalizedCloudResource,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, type CvssRecord, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
@@ -101,6 +101,11 @@ export class PrismaWorkerStore implements ScanRunStore {
       // registered CloudAccount row — the credential REFERENCE name
       // only; the value is resolved inside the CLOUD_ANALYSIS worker.
       cloud: await this.loadCloudAccountContext(graph.workspaceId, target.id, target.type),
+      // Prompt 15 (§7/§11): Active Directory context resolved from the
+      // registered ActiveDirectoryDomain row — the credential
+      // REFERENCE name only; the value is resolved inside the
+      // DIRECTORY_ANALYSIS worker.
+      directory: await this.loadDirectoryContext(graph.workspaceId, target.id, target.type),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -190,6 +195,28 @@ export class PrismaWorkerStore implements ScanRunStore {
       regions: scope?.includeRegions ?? [],
       excludeRegions: scope?.excludeRegions ?? [],
       environment: account.environment,
+    };
+  }
+
+  /** Prompt 15: Active Directory context for a scan's target — the
+   *  registered ActiveDirectoryDomain (id, DNS ref, forest, credential
+   *  REFERENCE name from its credential profile, approved DC hosts).
+   *  An unregistered domain yields an empty context and the executor
+   *  denies directory connectors as NOT_CONFIGURED (§15). */
+  private async loadDirectoryContext(workspaceId: string, targetId: string, targetType: string): Promise<ExecutionContextRecord["directory"]> {
+    if (!["ACTIVE_DIRECTORY", "ACTIVE_DIRECTORY_DOMAIN", "ACTIVE_DIRECTORY_FOREST", "DOMAIN_CONTROLLER", "LDAP_DIRECTORY"].includes(targetType)) return undefined;
+    const domain = await prisma.activeDirectoryDomain.findFirst({
+      where: { workspaceId, targetId },
+      include: { credentialProfile: true, controllers: { select: { hostname: true, dnsName: true } } },
+    });
+    if (!domain) return {};
+    return {
+      domainId: domain.id,
+      domainRef: domain.dnsName,
+      ...(domain.forestId ? { forestId: domain.forestId } : {}),
+      ...(domain.credentialProfile?.credentialReference ? { credentialReference: domain.credentialProfile.credentialReference } : {}),
+      ...(domain.credentialProfile?.identityKind ? { identityKind: domain.credentialProfile.identityKind } : {}),
+      dcHosts: domain.controllers.map((c) => c.dnsName ?? c.hostname),
     };
   }
 
@@ -295,7 +322,7 @@ export class PrismaWorkerStore implements ScanRunStore {
     });
   }
 
-  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number }> {
+  async persistResult(scanId: string, executionId: string, processed: ProcessedResult): Promise<{ assets: number; findings: number; endpoints: number; services: number; technologies: number; parameters: number; forms: number; transactions: number; webSockets: number; apiServices: number; graphqlServices: number; jwtProfiles: number; packetCaptures: number; components: number; directoryUsers?: number; directoryGroups?: number; directoryComputers?: number; directoryRelationships?: number }> {
     const scan = await prisma.scan.findUnique({ where: { id: scanId }, include: { assessment: true } });
     if (!scan) return { assets: 0, findings: 0, endpoints: 0, services: 0, technologies: 0, parameters: 0, forms: 0, transactions: 0, webSockets: 0, apiServices: 0, graphqlServices: 0, jwtProfiles: 0, packetCaptures: 0, components: 0 };
     const assetIdByHost = new Map<string, string>();
@@ -658,6 +685,9 @@ export class PrismaWorkerStore implements ScanRunStore {
           cloudResourceId: f.providerResourceId ? cloudResourceRowByProviderId.get(f.providerResourceId) : undefined,
           providerResourceId: f.providerResourceId, cloudRegion: f.cloudRegion,
           findingClass: f.findingClass,
+          // Prompt 15 (§61/§67): directory identity — domain row +
+          // directory object the finding concerns.
+          directoryDomainId: f.directoryDomainId, directoryObjectId: f.directoryObjectId,
           ...(f.secret ? {
             secretMetadata: {
               create: {
@@ -924,7 +954,351 @@ export class PrismaWorkerStore implements ScanRunStore {
         },
       });
     }
-    return { assets: processed.assets.length, findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components };
+    // ── Prompt 15 Active Directory payload (§13–§19/§79) ──
+    // Directory inventory persists into the dedicated directory
+    // tables (upserts keyed by domain + object id); the posture
+    // analysis runs over the persisted inventory and its findings
+    // join the scan deduped by canonical fingerprint (§61). Drift is
+    // diffed against the pre-collection persisted state (§79/§80).
+    const directoryCounts = await this.persistDirectoryPayload(scan, processed);
+    return { assets: processed.assets.length, findings: findings + directoryCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
+  }
+
+  /** Reconstruct the normalized directory inventory for a domain from
+   *  its persisted rows — the single read path every AD platform hook
+   *  and the persistence analysis share. */
+  private async loadDirectoryInventory(domainId: string): Promise<NormalizedDirectoryData> {
+    const [domain, dcs, users, groups, computers, ous, gpos, trusts, rels, shares, cas, templates] = await Promise.all([
+      prisma.activeDirectoryDomain.findUnique({ where: { id: domainId } }),
+      prisma.domainController.findMany({ where: { domainId } }),
+      prisma.directoryUser.findMany({ where: { domainId } }),
+      prisma.directoryGroup.findMany({ where: { domainId } }),
+      prisma.directoryComputer.findMany({ where: { domainId } }),
+      prisma.directoryOrganizationalUnit.findMany({ where: { domainId } }),
+      prisma.groupPolicyObject.findMany({ where: { domainId } }),
+      prisma.directoryTrust.findMany({ where: { domainId } }),
+      prisma.directoryRelationship.findMany({ where: { domainId } }),
+      prisma.smbShare.findMany({ where: { domainId } }),
+      prisma.certificateAuthority.findMany({ where: { domainId } }),
+      prisma.certificateTemplate.findMany({ where: { domainId } }),
+    ]);
+    return {
+      ...(domain ? { domain: { dnsName: domain.dnsName, ...(domain.netbiosName ? { netbiosName: domain.netbiosName } : {}), ...(domain.domainSid ? { domainSid: domain.domainSid } : {}), ...(domain.functionalLevel ? { functionalLevel: domain.functionalLevel } : {}) } } : {}),
+      domainControllers: dcs.map((d) => ({ hostname: d.hostname, ...(d.dnsName ? { dnsName: d.dnsName } : {}), ipAddresses: d.ipAddresses, ...(d.osName ? { osName: d.osName } : {}), ...(d.osVersion ? { osVersion: d.osVersion } : {}), services: (d.services ?? {}) as Record<string, unknown> })),
+      users: users.map((u) => ({
+        objectId: u.objectId, samAccountName: u.samAccountName, ...(u.displayName ? { displayName: u.displayName } : {}),
+        ...(u.userPrincipalName ? { userPrincipalName: u.userPrincipalName } : {}), enabled: u.enabled,
+        isServiceAccount: u.isServiceAccount, passwordNeverExpires: u.passwordNeverExpires,
+        passwordNotRequired: u.passwordNotRequired, preauthNotRequired: u.preauthNotRequired,
+        spnPresent: u.spnPresent, spns: u.spns, delegationType: u.delegationType as never, delegationTargets: u.delegationTargets,
+        ...(u.lastLogonAt ? { lastLogonAt: u.lastLogonAt.toISOString() } : {}),
+        ...(u.passwordLastSetAt ? { passwordLastSetAt: u.passwordLastSetAt.toISOString() } : {}),
+      })),
+      groups: groups.map((g) => ({ objectId: g.objectId, name: g.name, groupScope: g.groupScope as never, groupType: g.groupType as never, privilegeClass: g.privilegeClass as never, memberCount: g.memberCount })),
+      computers: computers.map((c) => ({
+        objectId: c.objectId, hostname: c.hostname, ...(c.dnsName ? { dnsName: c.dnsName } : {}),
+        ...(c.osName ? { osName: c.osName } : {}), ...(c.osVersion ? { osVersion: c.osVersion } : {}),
+        enabled: c.enabled, isDomainController: c.isDomainController,
+        delegationType: c.delegationType as never, delegationTargets: c.delegationTargets,
+      })),
+      organizationalUnits: ous.map((o) => ({ objectId: o.objectId, name: o.name, distinguishedName: o.distinguishedName, ...(o.parentRef ? { parentRef: o.parentRef } : {}), linkedGpoIds: o.linkedGpoIds })),
+      groupPolicies: gpos.map((g) => ({ objectId: g.objectId, name: g.name, linkedTo: g.linkedTo, securityMetadata: (g.securityMetadata ?? {}) as Record<string, unknown>, delegationMetadata: (g.delegationMetadata ?? {}) as Record<string, unknown>, ...(g.lastModifiedAt ? { lastModifiedAt: g.lastModifiedAt.toISOString() } : {}) })),
+      trusts: trusts.map((t) => ({
+        targetDomainName: t.targetDomainName, direction: t.direction as never, trustType: t.trustType as never,
+        transitive: t.transitive, ...(t.sidFilteringEnabled !== null ? { sidFilteringEnabled: t.sidFilteringEnabled } : {}),
+        ...(t.selectiveAuthentication !== null ? { selectiveAuthentication: t.selectiveAuthentication } : {}),
+      })),
+      relationships: rels.map((r) => ({
+        fromType: r.fromType, fromRef: r.fromRef, toType: r.toType, toRef: r.toRef, relationship: r.relationship,
+        source: r.source, confidence: r.confidence as never, ...(r.evidenceRef ? { evidenceRef: r.evidenceRef } : {}),
+      })),
+      smbShares: shares.map((s) => ({
+        host: s.host, shareName: s.shareName, accessLevel: s.accessLevel as never,
+        ...(s.anonymousAccess !== null ? { anonymousAccess: s.anonymousAccess } : {}),
+        ...(s.smbDialect ? { smbDialect: s.smbDialect } : {}),
+        ...(s.signingRequired !== null ? { signingRequired: s.signingRequired } : {}), source: s.source,
+      })),
+      certificateAuthorities: cas.map((c) => ({ name: c.name, ...(c.dnsName ? { dnsName: c.dnsName } : {}), enrollmentServices: (c.enrollmentServices ?? []) as string[], metadata: (c.metadata ?? {}) as Record<string, unknown> })),
+      certificateTemplates: templates.map((t) => ({
+        name: t.name, ...(t.objectId ? { objectId: t.objectId } : {}), enabled: t.enabled,
+        enrollmentPermissions: (t.enrollmentPermissions ?? {}) as Record<string, unknown>,
+        subjectConfig: (t.subjectConfig ?? {}) as Record<string, unknown>,
+        authenticationEkus: t.authenticationEkus, managerApprovalRequired: t.managerApprovalRequired,
+        authorizedSignaturesRequired: t.authorizedSignaturesRequired,
+        issuanceRequirements: (t.issuanceRequirements ?? {}) as Record<string, unknown>,
+        riskClasses: t.riskClasses,
+      })),
+    };
+  }
+
+  /** Persist one result's directory payload + run the posture analysis
+   *  over the persisted inventory (§57–§78). Returns row counts. */
+  private async persistDirectoryPayload(
+    scan: { id: string; workspaceId: string; requestedBy: string; assessment: { targetId: string } },
+    processed: ProcessedResult,
+  ): Promise<{ users: number; groups: number; computers: number; relationships: number; findings: number }> {
+    const workspaceRow = await prisma.workspace.findUnique({ where: { id: scan.workspaceId } });
+    const orgId = workspaceRow?.organizationId ?? "";
+    const empty = { users: 0, groups: 0, computers: 0, relationships: 0, findings: 0 };
+    const payload = processed.directory;
+    const hasPayload = payload.users.length + payload.groups.length + payload.computers.length
+      + payload.domainControllers.length + payload.relationships.length + payload.smbShares.length
+      + payload.certificateAuthorities.length + payload.certificateTemplates.length > 0 || !!payload.snapshot;
+    if (!hasPayload) return empty;
+    const domain = await prisma.activeDirectoryDomain.findFirst({ where: { workspaceId: scan.workspaceId, targetId: scan.assessment.targetId } });
+    if (!domain) return empty;
+    const scanId = scan.id;
+    const previous = await this.loadDirectoryInventory(domain.id);
+    const hasPrevious = previous.users.length + previous.groups.length + previous.computers.length > 0;
+
+    // Domain controllers first (computers reference them by identity).
+    for (const dc of payload.domainControllers) {
+      const asset = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: dc.dnsName ?? dc.hostname } });
+      await prisma.domainController.upsert({
+        where: { domainId_hostname: { domainId: domain.id, hostname: dc.hostname } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, assetId: asset?.id, hostname: dc.hostname,
+          dnsName: dc.dnsName, ipAddresses: dc.ipAddresses, osName: dc.osName, osVersion: dc.osVersion,
+          services: dc.services as never,
+        },
+        update: { dnsName: dc.dnsName, ipAddresses: dc.ipAddresses, osName: dc.osName, osVersion: dc.osVersion, services: dc.services as never, lastSeen: new Date() },
+      });
+    }
+    for (const u of payload.users) {
+      await prisma.directoryUser.upsert({
+        where: { domainId_objectId: { domainId: domain.id, objectId: u.objectId } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, objectId: u.objectId, samAccountName: u.samAccountName,
+          displayName: u.displayName, userPrincipalName: u.userPrincipalName, enabled: u.enabled,
+          isServiceAccount: u.isServiceAccount ?? false, passwordNeverExpires: u.passwordNeverExpires ?? false,
+          passwordNotRequired: u.passwordNotRequired ?? false, preauthNotRequired: u.preauthNotRequired ?? false,
+          spnPresent: u.spnPresent ?? (u.spns?.length ?? 0) > 0, spns: u.spns ?? [],
+          delegationType: u.delegationType ?? "NONE", delegationTargets: u.delegationTargets ?? [],
+          ...(u.lastLogonAt ? { lastLogonAt: new Date(u.lastLogonAt) } : {}),
+          ...(u.passwordLastSetAt ? { passwordLastSetAt: new Date(u.passwordLastSetAt) } : {}),
+        },
+        update: {
+          samAccountName: u.samAccountName, displayName: u.displayName, userPrincipalName: u.userPrincipalName,
+          enabled: u.enabled, isServiceAccount: u.isServiceAccount ?? false,
+          passwordNeverExpires: u.passwordNeverExpires ?? false, passwordNotRequired: u.passwordNotRequired ?? false,
+          preauthNotRequired: u.preauthNotRequired ?? false, spnPresent: u.spnPresent ?? (u.spns?.length ?? 0) > 0,
+          spns: u.spns ?? [], delegationType: u.delegationType ?? "NONE", delegationTargets: u.delegationTargets ?? [],
+          ...(u.lastLogonAt ? { lastLogonAt: new Date(u.lastLogonAt) } : {}),
+          ...(u.passwordLastSetAt ? { passwordLastSetAt: new Date(u.passwordLastSetAt) } : {}),
+          lastSeen: new Date(),
+        },
+      });
+    }
+    for (const g of payload.groups) {
+      await prisma.directoryGroup.upsert({
+        where: { domainId_objectId: { domainId: domain.id, objectId: g.objectId } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, objectId: g.objectId, name: g.name,
+          groupScope: g.groupScope ?? "GLOBAL", groupType: g.groupType ?? "SECURITY",
+          privilegeClass: g.privilegeClass, memberCount: g.memberCount ?? 0,
+        },
+        update: { name: g.name, privilegeClass: g.privilegeClass, ...(g.memberCount !== undefined ? { memberCount: g.memberCount } : {}), lastSeen: new Date() },
+      });
+    }
+    for (const c of payload.computers) {
+      const asset = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: c.dnsName ?? c.hostname } });
+      await prisma.directoryComputer.upsert({
+        where: { domainId_objectId: { domainId: domain.id, objectId: c.objectId } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, assetId: asset?.id, objectId: c.objectId,
+          hostname: c.hostname, dnsName: c.dnsName, osName: c.osName, osVersion: c.osVersion, enabled: c.enabled,
+          isDomainController: c.isDomainController ?? false, delegationType: c.delegationType ?? "NONE",
+          delegationTargets: c.delegationTargets ?? [], unconstrainedDelegation: c.delegationType === "UNCONSTRAINED",
+        },
+        update: {
+          hostname: c.hostname, dnsName: c.dnsName, osName: c.osName, osVersion: c.osVersion, enabled: c.enabled,
+          isDomainController: c.isDomainController ?? false, delegationType: c.delegationType ?? "NONE",
+          delegationTargets: c.delegationTargets ?? [], unconstrainedDelegation: c.delegationType === "UNCONSTRAINED", lastSeen: new Date(),
+        },
+      });
+    }
+    for (const o of payload.organizationalUnits) {
+      await prisma.directoryOrganizationalUnit.upsert({
+        where: { domainId_objectId: { domainId: domain.id, objectId: o.objectId } },
+        create: { workspaceId: scan.workspaceId, domainId: domain.id, objectId: o.objectId, name: o.name, distinguishedName: o.distinguishedName, parentRef: o.parentRef, linkedGpoIds: o.linkedGpoIds },
+        update: { name: o.name, distinguishedName: o.distinguishedName, parentRef: o.parentRef, linkedGpoIds: o.linkedGpoIds, lastSeen: new Date() },
+      });
+    }
+    for (const g of payload.groupPolicies) {
+      await prisma.groupPolicyObject.upsert({
+        where: { domainId_objectId: { domainId: domain.id, objectId: g.objectId } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, objectId: g.objectId, name: g.name, linkedTo: g.linkedTo,
+          securityMetadata: g.securityMetadata as never, delegationMetadata: g.delegationMetadata as never,
+          ...(g.lastModifiedAt ? { lastModifiedAt: new Date(g.lastModifiedAt) } : {}),
+        },
+        update: { name: g.name, linkedTo: g.linkedTo, securityMetadata: g.securityMetadata as never, delegationMetadata: g.delegationMetadata as never, lastSeen: new Date() },
+      });
+    }
+    for (const t of payload.trusts) {
+      await prisma.directoryTrust.upsert({
+        where: { domainId_targetDomainName: { domainId: domain.id, targetDomainName: t.targetDomainName } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, targetDomainName: t.targetDomainName,
+          direction: t.direction, trustType: t.trustType, transitive: t.transitive,
+          sidFilteringEnabled: t.sidFilteringEnabled, selectiveAuthentication: t.selectiveAuthentication,
+        },
+        update: { direction: t.direction, trustType: t.trustType, transitive: t.transitive, sidFilteringEnabled: t.sidFilteringEnabled, selectiveAuthentication: t.selectiveAuthentication, lastSeen: new Date() },
+      });
+    }
+    let snapshotId: string | undefined;
+    if (payload.snapshot) {
+      const snap = await prisma.directorySnapshot.create({
+        data: {
+          workspaceId: scan.workspaceId, domainId: domain.id, scanId,
+          collectionProfile: payload.snapshot.collectionProfile,
+          collectorVersions: payload.snapshot.collectorVersions as never,
+          objectCounts: payload.snapshot.objectCounts as never,
+          relationshipCount: payload.snapshot.relationshipCount,
+          snapshotHash: payload.snapshot.snapshotHash,
+        },
+      });
+      snapshotId = snap.id;
+      await prisma.auditLog.create({
+        data: {
+          actorId: scan.requestedBy, organizationId: orgId, workspaceId: scan.workspaceId,
+          action: "DIRECTORY_SNAPSHOT_CREATED" as never, resourceType: "ACTIVE_DIRECTORY_DOMAIN", resourceId: domain.id,
+          metadata: { scanId, snapshotHash: payload.snapshot.snapshotHash } as never,
+        },
+      });
+    }
+    for (const r of payload.relationships) {
+      await prisma.directoryRelationship.upsert({
+        where: {
+          domainId_fromType_fromRef_relationship_toType_toRef: {
+            domainId: domain.id, fromType: r.fromType, fromRef: r.fromRef,
+            relationship: r.relationship, toType: r.toType, toRef: r.toRef,
+          },
+        },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, snapshotId,
+          fromType: r.fromType, fromRef: r.fromRef, toType: r.toType, toRef: r.toRef,
+          relationship: r.relationship, source: r.source, confidence: r.confidence, evidenceRef: r.evidenceRef,
+        },
+        update: { source: r.source, confidence: r.confidence, lastSeen: new Date() },
+      });
+    }
+    for (const s of payload.smbShares) {
+      await prisma.smbShare.upsert({
+        where: { domainId_host_shareName: { domainId: domain.id, host: s.host, shareName: s.shareName } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, host: s.host, shareName: s.shareName,
+          accessLevel: s.accessLevel, anonymousAccess: s.anonymousAccess, smbDialect: s.smbDialect,
+          signingRequired: s.signingRequired, source: s.source,
+        },
+        update: { accessLevel: s.accessLevel, anonymousAccess: s.anonymousAccess, smbDialect: s.smbDialect, signingRequired: s.signingRequired, source: s.source, lastSeen: new Date() },
+      });
+    }
+    const caRowByName = new Map<string, string>();
+    for (const ca of payload.certificateAuthorities) {
+      const row = await prisma.certificateAuthority.upsert({
+        where: { domainId_name: { domainId: domain.id, name: ca.name } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, name: ca.name, dnsName: ca.dnsName,
+          enrollmentServices: ca.enrollmentServices as never, metadata: ca.metadata as never,
+        },
+        update: { dnsName: ca.dnsName, enrollmentServices: ca.enrollmentServices as never, metadata: ca.metadata as never, lastSeen: new Date() },
+      });
+      caRowByName.set(ca.name, row.id);
+    }
+    for (const t of payload.certificateTemplates) {
+      await prisma.certificateTemplate.upsert({
+        where: { domainId_name: { domainId: domain.id, name: t.name } },
+        create: {
+          workspaceId: scan.workspaceId, domainId: domain.id, caId: t.caName ? caRowByName.get(t.caName) : undefined,
+          name: t.name, objectId: t.objectId, enabled: t.enabled ?? true,
+          enrollmentPermissions: t.enrollmentPermissions as never, subjectConfig: t.subjectConfig as never,
+          authenticationEkus: t.authenticationEkus, managerApprovalRequired: t.managerApprovalRequired ?? false,
+          authorizedSignaturesRequired: t.authorizedSignaturesRequired ?? 0,
+          issuanceRequirements: t.issuanceRequirements as never, riskClasses: t.riskClasses ?? [],
+        },
+        update: {
+          objectId: t.objectId, enabled: t.enabled ?? true,
+          enrollmentPermissions: t.enrollmentPermissions as never, subjectConfig: t.subjectConfig as never,
+          authenticationEkus: t.authenticationEkus, managerApprovalRequired: t.managerApprovalRequired ?? false,
+          authorizedSignaturesRequired: t.authorizedSignaturesRequired ?? 0,
+          issuanceRequirements: t.issuanceRequirements as never, riskClasses: t.riskClasses ?? [], lastSeen: new Date(),
+        },
+      });
+    }
+    await prisma.activeDirectoryDomain.update({ where: { id: domain.id }, data: { lastSeen: new Date(), lastAssessmentAt: new Date() } });
+
+    // Drift (§79/§80): diff the pre-collection persisted state against
+    // the new persisted state; events are review signals.
+    const current = await this.loadDirectoryInventory(domain.id);
+    if (hasPrevious) {
+      const events = diffDirectorySnapshots(previous, current, domain.dnsName);
+      for (const e of events) {
+        await prisma.adDriftEvent.create({
+          data: { workspaceId: scan.workspaceId, domainId: domain.id, scanId, snapshotId, kind: e.kind, objectRef: e.objectRef, detail: e.detail },
+        });
+      }
+      if (events.length > 0) {
+        await prisma.auditLog.create({
+          data: {
+            actorId: scan.requestedBy, organizationId: orgId, workspaceId: scan.workspaceId,
+            action: "AD_DRIFT_DETECTED" as never, resourceType: "ACTIVE_DIRECTORY_DOMAIN", resourceId: domain.id,
+            metadata: { scanId, events: events.length } as never,
+          },
+        });
+      }
+    }
+
+    // Posture analysis (§57–§78) over the persisted inventory: new
+    // findings persist deduped by canonical fingerprint; annotations
+    // (privileged flags, explainable risk scores) land on the rows.
+    const posture = analyzeDirectoryPosture(current, {
+      domainId: domain.id, domainRef: domain.dnsName, toolSlug: "directory-platform-analysis",
+    });
+    let created = 0;
+    for (const f of posture.findings) {
+      const existing = await prisma.finding.findFirst({ where: { scanId, fingerprint: f.sourceFingerprint } });
+      if (existing) continue;
+      await prisma.finding.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId,
+          title: f.title, description: f.description, severity: f.severity as never, confidence: f.confidence,
+          fingerprint: f.sourceFingerprint, isMock: false, status: "OPEN", verificationStatus: "UNVERIFIED",
+          sources: [f.sourceTool], ruleId: f.ruleId, controlId: f.controlId, remediation: f.remediation,
+          host: f.host, directoryDomainId: domain.id, directoryObjectId: f.directoryObjectId,
+          evidence: { create: { sourceTool: f.sourceTool, evidenceType: "TEXT", summary: f.evidence ?? "", fingerprint: f.sourceFingerprint } },
+          history: { create: { workspaceId: scan.workspaceId, event: "CREATED", metadata: { sourceTool: f.sourceTool, stage: "DIRECTORY_ANALYSIS" } as never } },
+        },
+      });
+      created++;
+    }
+    for (const a of posture.controlAssessments) {
+      const dup = await prisma.controlAssessment.findFirst({ where: { scanId, frameworkKey: a.frameworkKey, controlId: a.controlId, subjectRef: a.subjectRef } });
+      if (dup) continue;
+      await prisma.controlAssessment.create({
+        data: {
+          workspaceId: scan.workspaceId, scanId, frameworkKey: a.frameworkKey, controlId: a.controlId,
+          subjectRef: a.subjectRef, status: a.status as never, evidence: a.evidence,
+        },
+      });
+    }
+    for (const [objectId, ann] of posture.userAnnotations) {
+      await prisma.directoryUser.updateMany({
+        where: { domainId: domain.id, objectId },
+        data: { privileged: ann.privileged, privilegeEvidence: { via: ann.privilegeEvidence } as never, riskScore: ann.riskScore, riskFactors: ann.riskFactors as never },
+      });
+    }
+    for (const [objectId, ann] of posture.computerAnnotations) {
+      await prisma.directoryComputer.updateMany({
+        where: { domainId: domain.id, objectId },
+        data: { riskScore: ann.riskScore, riskFactors: ann.riskFactors as never },
+      });
+    }
+    return {
+      users: payload.users.length, groups: payload.groups.length,
+      computers: payload.computers.length, relationships: payload.relationships.length,
+      findings: created,
+    };
   }
 
   /** Prompt 10 platform hook (§5/§25/§62): canonicalize the scan's CIDR
@@ -1485,6 +1859,137 @@ export class PrismaWorkerStore implements ScanRunStore {
     return account?.provider ?? null;
   }
 
+  // ── Prompt 15 platform hooks (§9/§32/§34/§70) ──────────────────────
+
+  /** DOMAIN_DISCOVERY (§9/§12): validate the registered domain + issue
+   *  the job-scoped credential lease (reference only, TTL ≤ 3600s). An
+   *  unregistered domain or a profile without a credential reference
+   *  is honestly NOT_CONFIGURED — the DAG fails the scan, never fakes. */
+  async validateDirectoryDomain(scanId: string): Promise<{ status: string; domainRef?: string } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    if (!["ACTIVE_DIRECTORY", "ACTIVE_DIRECTORY_DOMAIN", "ACTIVE_DIRECTORY_FOREST", "DOMAIN_CONTROLLER", "LDAP_DIRECTORY"].includes(graph.assessment.target.type)) return null;
+    const domain = await prisma.activeDirectoryDomain.findFirst({
+      where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId },
+      include: { credentialProfile: true },
+    });
+    if (!domain) return null;
+    const reference = domain.credentialProfile?.credentialReference;
+    if (!reference) {
+      await prisma.activeDirectoryDomain.update({ where: { id: domain.id }, data: { status: "NOT_CONFIGURED" } });
+      return { status: "NOT_CONFIGURED", domainRef: domain.dnsName };
+    }
+    await prisma.credentialLease.create({
+      data: {
+        workspaceId: graph.workspaceId, directoryDomainId: domain.id, scanId,
+        credentialReference: reference, purpose: "DIRECTORY_ASSESSMENT",
+        status: "ISSUED", expiresAt: new Date(Date.now() + 3600 * 1000),
+      },
+    });
+    await prisma.activeDirectoryDomain.update({ where: { id: domain.id }, data: { status: "VALIDATED" } });
+    return { status: "VALIDATED", domainRef: domain.dnsName };
+  }
+
+  /** The scan's registered domain row (shared by the AD hooks). */
+  private async directoryDomainForScan(scanId: string) {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const domain = await prisma.activeDirectoryDomain.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    return domain ? { graph, domain } : null;
+  }
+
+  /** LDAP_POSTURE (§70/§71): run the LDAP/DC analyzer slice over the
+   *  persisted inventory and report the section's findings. The full
+   *  posture findings were persisted at collection time (deduped by
+   *  fingerprint); this hook counts the LDAP-family evidence. */
+  async analyzeDirectoryLdapPosture(scanId: string): Promise<{ findings: number; assessments: number } | null> {
+    const ctx = await this.directoryDomainForScan(scanId);
+    if (!ctx) return null;
+    const data = await this.loadDirectoryInventory(ctx.domain.id);
+    if (data.domainControllers.length === 0) return null;
+    const findings = analyzeLdapPosture(data, { domainId: ctx.domain.id, domainRef: ctx.domain.dnsName, toolSlug: "directory-platform-analysis" });
+    let present = 0;
+    for (const f of findings) {
+      const existing = await prisma.finding.findFirst({ where: { scanId, fingerprint: f.sourceFingerprint } });
+      if (existing) { present++; continue; }
+      await prisma.finding.create({
+        data: {
+          workspaceId: ctx.graph.workspaceId, scanId,
+          title: f.title, description: f.description, severity: f.severity as never, confidence: f.confidence,
+          fingerprint: f.sourceFingerprint, isMock: false, status: "OPEN", verificationStatus: "UNVERIFIED",
+          sources: [f.sourceTool], ruleId: f.ruleId, controlId: f.controlId, remediation: f.remediation,
+          host: f.host, directoryDomainId: ctx.domain.id, directoryObjectId: f.directoryObjectId,
+          evidence: { create: { sourceTool: f.sourceTool, evidenceType: "TEXT", summary: f.evidence ?? "", fingerprint: f.sourceFingerprint } },
+          history: { create: { workspaceId: ctx.graph.workspaceId, event: "CREATED", metadata: { sourceTool: f.sourceTool, stage: "LDAP_POSTURE" } as never } },
+        },
+      });
+      present++;
+    }
+    const assessments = await prisma.controlAssessment.count({ where: { scanId } });
+    return { findings: present, assessments };
+  }
+
+  /** GRAPH_COLLECTION (§32/§65): build the identity graph over the
+   *  persisted inventory — counts + privileged principals + the drift
+   *  events this scan recorded at collection time. */
+  async buildDirectoryGraph(scanId: string): Promise<{ nodes: number; edges: number; privileged: number; drift: number } | null> {
+    const ctx = await this.directoryDomainForScan(scanId);
+    if (!ctx) return null;
+    const data = await this.loadDirectoryInventory(ctx.domain.id);
+    if (data.users.length + data.groups.length + data.computers.length === 0) return null;
+    const graph = buildIdentityGraph(data, ctx.domain.dnsName);
+    const resolution = resolveNestedGroups(graph, data.groups);
+    const privileged = privilegedPrincipals(data, graph, resolution);
+    const drift = await prisma.adDriftEvent.count({ where: { domainId: ctx.domain.id, scanId } });
+    if (privileged.size > 0) {
+      await prisma.auditLog.create({
+        data: {
+          actorId: ctx.graph.requestedBy, organizationId: ctx.graph.workspace.organizationId, workspaceId: ctx.graph.workspaceId,
+          action: "PRIVILEGED_IDENTITY_DETECTED" as never, resourceType: "ACTIVE_DIRECTORY_DOMAIN", resourceId: ctx.domain.id,
+          metadata: { scanId, privileged: privileged.size } as never,
+        },
+      });
+    }
+    return { nodes: graph.nodes.size, edges: graph.edges.length, privileged: privileged.size, drift };
+  }
+
+  /** ATTACK_PATH_ANALYSIS (§34–§37): model defensive attack paths over
+   *  the persisted graph and record them as analysis results. Paths
+   *  are NEVER executed and never labelled COMPROMISED (§35). */
+  async analyzeAttackPaths(scanId: string): Promise<{ paths: number; findings: number } | null> {
+    const ctx = await this.directoryDomainForScan(scanId);
+    if (!ctx) return null;
+    const data = await this.loadDirectoryInventory(ctx.domain.id);
+    if (data.relationships.length === 0) return null;
+    const graph = buildIdentityGraph(data, ctx.domain.dnsName);
+    const resolution = resolveNestedGroups(graph, data.groups);
+    const paths = findAttackPaths(data, graph, resolution, {}, ctx.domain.dnsName);
+    let created = 0;
+    for (const p of paths) {
+      const existing = await prisma.adAttackPath.findFirst({ where: { domainId: ctx.domain.id, scanId, title: p.title } });
+      if (existing) continue;
+      await prisma.adAttackPath.create({
+        data: {
+          workspaceId: ctx.graph.workspaceId, domainId: ctx.domain.id, scanId,
+          title: p.title, steps: p.steps as never, status: p.status, confidence: p.confidence,
+          riskScore: p.riskScore, riskFactors: p.riskFactors as never,
+        },
+      });
+      created++;
+    }
+    if (created > 0) {
+      await prisma.auditLog.create({
+        data: {
+          actorId: ctx.graph.requestedBy, organizationId: ctx.graph.workspace.organizationId, workspaceId: ctx.graph.workspaceId,
+          action: "AD_ATTACK_PATH_DETECTED" as never, resourceType: "ACTIVE_DIRECTORY_DOMAIN", resourceId: ctx.domain.id,
+          metadata: { scanId, paths: created } as never,
+        },
+      });
+    }
+    const total = await prisma.adAttackPath.count({ where: { domainId: ctx.domain.id, scanId } });
+    return { paths: total, findings: 0 };
+  }
+
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
   async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
     const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
@@ -1696,7 +2201,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    * the ordinary StageExecutor, so authorization, scope, policy and
    * budget gates are re-evaluated by construction (§57).
    */
-  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string; cloudAnalysisSection?: string } | null> {
+  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string; cloudAnalysisSection?: string; directoryAnalysisSection?: string } | null> {
     const retest = await prisma.retestRequest.findUnique({ where: { id: retestId } });
     if (!retest || retest.status !== "QUEUED") return null;
     const finding = await prisma.finding.findUnique({ where: { id: retest.findingId } });
@@ -1761,6 +2266,54 @@ export class PrismaWorkerStore implements ScanRunStore {
         executionId: execution.id, scanId: childCloud.id,
         canonicalFingerprint: finding.fingerprint, stageId: "CLOUD_INVENTORY",
         cloudAnalysisSection: cloudSecPlan.analysisSection,
+      };
+    }
+    // Prompt 15 §84: directory findings retest through a targeted
+    // READ-ONLY re-check — a fresh collection in the original stage
+    // family (or the dedicated LDAP posture section). Credentials are
+    // never involved; the judgement discipline is §58 (a failed stage
+    // is never a pass).
+    if (finding.directoryDomainId && finding.fingerprint) {
+      const adPlan = planAdRetest({ ruleId: finding.ruleId ?? undefined, sourceTool: retest.sourceTool });
+      const stageType = adPlan.section ? "DIRECTORY_INVENTORY" : adPlan.stageType;
+      const slug = adPlan.adapterSlug ?? "ldap-directory-connector";
+      const scopeParseAd = scopeRulesSchema.safeParse(graph.assessment.scope?.rules ?? {});
+      const childAd = await prisma.scan.create({
+        data: { workspaceId: finding.workspaceId, assessmentId: graph.assessmentId, requestedBy: retest.requestedBy, status: "QUEUED" },
+      });
+      const stagePlanAd = {
+        id: stageType, type: stageType, name: "Targeted AD Retest",
+        description: "Prompt 15 §84 targeted directory retest: read-only re-query of the affected object only.",
+        requiredCapabilities: [], dependencies: [] as string[],
+        selectedAdapters: [{ slug, adapterId: slug, name: slug, riskLevel: "LOW", preference: "REQUIRED", simulation: false, reason: "targeted AD retest (§84)" }],
+        weight: 100, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: false, status: "QUEUED",
+      };
+      await prisma.scanPlan.create({
+        data: {
+          scanId: childAd.id, assessmentId: graph.assessmentId, profile: "CUSTOM",
+          plan: {
+            scanId: childAd.id, assessmentId: graph.assessmentId, targetId: graph.assessment.targetId,
+            workspaceId: finding.workspaceId, organizationId: graph.workspace.organizationId,
+            profile: "CUSTOM", targetType: graph.assessment.target.type, targetValue: graph.assessment.target.value,
+            targetHost: finding.host ?? graph.assessment.target.value, scope: scopeParseAd.success ? scopeParseAd.data : {},
+            stages: [stagePlanAd], dependencies: {}, selectedTools: [slug],
+            policySnapshot: { targetVerified: graph.assessment.target.verified, assessmentApproved: graph.assessment.status === "APPROVED", executableSlugs: [slug], simulation: false },
+          } as never,
+          policySnapshot: { retest: true, retestId, adRetest: true } as never,
+        },
+      });
+      await prisma.scanStage.create({
+        data: { scanId: childAd.id, type: stageType as never, status: "QUEUED", dependencies: [], weight: 100, metadata: { retestId } as never },
+      });
+      const execution = await this.ensureExecution(childAd.id, stageType, slug, 1);
+      await prisma.retestRequest.update({
+        where: { id: retestId },
+        data: { status: "RUNNING", scanId: childAd.id, startedAt: new Date() },
+      });
+      return {
+        executionId: execution.id, scanId: childAd.id,
+        canonicalFingerprint: finding.fingerprint, stageId: stageType,
+        ...(adPlan.section ? { directoryAnalysisSection: adPlan.section } : {}),
       };
     }
     // Prompt 13 §77: cloud-native findings retest in their original

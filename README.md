@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 14 complete (Prompts 1–14).** Production monorepo, backend and
+> **Status — Phase 15 complete (Prompts 1–15).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -216,10 +216,32 @@ and the AI health endpoint.
 12. ✅ Source code security: SAST, secrets & SCA (Prompt 12)
 13. ✅ Container, Docker & Kubernetes security (Prompt 13)
 14. ✅ Multi-cloud security assessment: AWS, Azure & GCP (Prompt 14)
-15. Lab-only modules (AD, wireless, mobile)
+15. ✅ Active Directory security assessment, identity graph & defensive attack-path engine (Prompt 15)
+16. Lab-only modules (wireless, mobile)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 15: Active Directory Security Assessment.** AD domains
+  became verified targets (internal engagements only) with a defensive
+  READ-ONLY posture: registration stores identity and a credential
+  REFERENCE name under a least-privilege profile (Domain Admin is never
+  requested), and collection runs only on an isolated
+  `DIRECTORY_ANALYSIS` worker against explicitly approved domain
+  controllers, under job-scoped leases (≤1h). BloodHound/SharpHound
+  datasets, PingCastle reports and AD CS/SMB tool outputs import through
+  hardened parsers (credential material stripped before persistence);
+  typed LDAP queries are platform-generated only. The identity graph
+  carries evidence-backed edges with provenance; posture analysis covers
+  privileged-group hygiene (SID-based classification), nested groups
+  (cycle-safe), stale/disabled accounts, delegation, LDAP/SMB signing,
+  trusts and AD CS ESC-class template risk, mapped onto a versioned
+  MS_AD_BASELINE catalog. Attack paths are computed MODELS — never
+  executed, never labelled COMPROMISED. Offensive tooling (NetExec,
+  Impacket, Kerbrute, Responder, PowerView, offensive Certipy) exists
+  only as DISABLED registrations with no adapter; requesting one is
+  refused and audited. Live directory transports are deliberately
+  unwired in this build, so registered domains honestly report
+  NOT_CONFIGURED until an approved internal deployment wires them.
 - **2026-10-07 — Prompt 14: Multi-Cloud Security Assessment.**
   Cloud accounts (AWS/Azure/GCP) became verified targets with a
   READ_ONLY assessment posture: registration stores identity, scope
