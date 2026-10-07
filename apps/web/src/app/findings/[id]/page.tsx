@@ -51,6 +51,17 @@ export default function Page() {
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
   const [validationBusy, setValidationBusy] = useState(false);
 
+  // Prompt 20: unified finding view (ownership, exceptions, external references, correlations, timeline).
+  const [unified, setUnified] = useState<Record<string, unknown> | null>(null);
+  const loadUnified = useCallback(async () => {
+    try {
+      setUnified(await apiFetch<Record<string, unknown>>(`/vulnerability-management/findings/${params.id}`));
+    } catch {
+      setUnified(null);
+    }
+  }, [params.id]);
+  useEffect(() => { void loadUnified(); }, [loadUnified]);
+
   const load = useCallback(async () => {
     try {
       setFinding(await api.finding(params.id) as FindingDetail);
@@ -388,6 +399,49 @@ export default function Page() {
                 </li>
               ))}
             </ul>
+          )}
+        </Card>
+
+        <Card title="Unified view — ownership, exceptions, external systems (Prompt 20 §84)">
+          {!unified ? (
+            <p className="text-sm text-slate-400">Unified view unavailable.</p>
+          ) : (
+            <div className="space-y-3 text-sm text-slate-300">
+              <p>
+                Domain: <strong>{String((unified.finding as Record<string, unknown>)?.sourceDomain ?? "—")}</strong>
+                {" · "}Priority: <strong>{String((unified.finding as Record<string, unknown>)?.priority ?? "unset")}</strong>
+                {" · "}Cluster: {String((unified.finding as Record<string, unknown>)?.clusterId ?? "none")}
+              </p>
+              <p>
+                Ownership: {unified.ownership
+                  ? `${String((unified.ownership as Record<string, unknown>).ownerType)} ${String((unified.ownership as Record<string, unknown>).ownerRef)} (${String((unified.ownership as Record<string, unknown>).source)})`
+                  : "unassigned"}
+              </p>
+              <div>
+                <p className="font-medium text-slate-100">Risk exceptions</p>
+                {(unified.exceptions as Record<string, unknown>[]).length === 0 ? (
+                  <p className="text-slate-400">None recorded.</p>
+                ) : (unified.exceptions as Record<string, unknown>[]).map((e, i) => (
+                  <p key={i}>{String(e.type)} — {String(e.status)}{e.expiresAt ? ` · expires ${new Date(String(e.expiresAt)).toLocaleDateString()}` : ""}</p>
+                ))}
+              </div>
+              <div>
+                <p className="font-medium text-slate-100">External references</p>
+                {(unified.externalReferences as Record<string, unknown>[]).length === 0 ? (
+                  <p className="text-slate-400">Not linked to any external platform (DefectDojo/Faraday/Dradis/PlexTrac/Serpico).</p>
+                ) : (unified.externalReferences as Record<string, unknown>[]).map((r, i) => (
+                  <p key={i}>{String(r.externalSystem)} #{String(r.externalId)} — {String(r.externalStatus ?? "—")}</p>
+                ))}
+              </div>
+              <div>
+                <p className="font-medium text-slate-100">Correlations</p>
+                {(unified.correlations as Record<string, unknown>[]).length === 0 ? (
+                  <p className="text-slate-400">No cross-domain correlations recorded.</p>
+                ) : (unified.correlations as Record<string, unknown>[]).map((c, i) => (
+                  <p key={i}>{String(c.kind)} → {String(c.toFindingId)} ({String(c.basis)})</p>
+                ))}
+              </div>
+            </div>
           )}
         </Card>
       </div>

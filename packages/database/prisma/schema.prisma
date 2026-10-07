@@ -417,6 +417,13 @@ enum VmLifecycleStatus {
   RESOLVED
   FALSE_POSITIVE
   ACCEPTED_RISK
+  // Prompt 20 §8: standardized lifecycle completion — a finding that was
+  // resolved and recurred is REOPENED; an observation merged into a
+  // canonical finding is DUPLICATE; risk reduced without full remediation
+  // is MITIGATED. Existing values are untouched.
+  REOPENED
+  DUPLICATE
+  MITIGATED
 }
 
 enum FindingVerificationStatus {
@@ -650,6 +657,25 @@ enum AuditAction {
   WIRELESS_POLICY_VIOLATION_DETECTED
   WIRELESS_ACTIVE_TOOL_BLOCKED
   WIRELESS_LAB_VALIDATION_REQUESTED
+  // Prompt 20 §91: unified vulnerability-management, SLA, exception,
+  // reporting and external-integration audit actions. Metadata for these
+  // actions NEVER contains raw evidence or secrets (§63/§70).
+  FINDING_TRIAGED
+  FINDING_ASSIGNED
+  FINDING_STATUS_CHANGED
+  FINDING_PRIORITY_CHANGED
+  FINDING_BULK_UPDATED
+  SLA_POLICY_CHANGED
+  SLA_BREACHED
+  RISK_EXCEPTION_REQUESTED
+  RISK_EXCEPTION_APPROVED
+  RISK_EXCEPTION_EXPIRED
+  REPORT_APPROVED
+  REPORT_DOWNLOADED
+  EXTERNAL_IMPORT_STARTED
+  EXTERNAL_IMPORT_COMPLETED
+  EXTERNAL_EXPORT_COMPLETED
+  INTEGRATION_SYNC_COMPLETED
 }
 
 enum NotificationType {
@@ -1174,14 +1200,14 @@ model ToolExecution {
 
 // ------------------------------- Findings -------------------------------
 model Finding {
-  id                      String                    @id @default(uuid())
+  id                      String                     @id @default(uuid())
   workspaceId             String
   scanId                  String
   assetId                 String?
   title                   String
   description             String
   severity                Severity
-  confidence              Float                     @default(0.5)
+  confidence              Float                      @default(0.5)
   cvssScore               Float?
   cvssVector              String?
   cve                     String?
@@ -1195,8 +1221,8 @@ model Finding {
   technicalImpact         String?
   businessImpact          String?
   remediation             String?
-  status                  FindingStatus             @default(OPEN)
-  verificationStatus      FindingVerificationStatus @default(UNVERIFIED)
+  status                  FindingStatus              @default(OPEN)
+  verificationStatus      FindingVerificationStatus  @default(UNVERIFIED)
   duplicateOfId           String?
   fingerprint             String?
   // Prompt 7: curated vulnerability class + cross-tool correlation state.
@@ -1204,7 +1230,7 @@ model Finding {
   // Contributing tool slugs after correlation (§18/§21): one canonical
   // finding, many sources; duplicates point at it via duplicateOfId and
   // their evidence rows are re-homed here, never deleted (§20).
-  sources                 String[]                  @default([])
+  sources                 String[]                   @default([])
   // Deterministic risk engine output (§34/§35): 0–100 score, band and the
   // explained inputs (JSON: base/confidence/criticality/exposure factors).
   riskScore               Float?
@@ -1219,12 +1245,12 @@ model Finding {
   reviewNotes             String?
   // Provenance (Prompt 4 §35): fixture findings are permanently flagged so
   // they can never be presented as real security results.
-  isMock                  Boolean                   @default(false)
+  isMock                  Boolean                    @default(false)
   toolExecutionId         String?
   // Prompt 11: vulnerability-management layer (§47 lifecycle, §39/§40
   // priority separate from severity, §41–§43 SLA, §44 ownership, §46 tags).
-  lifecycleStatus         VmLifecycleStatus         @default(NEW)
-  detectionKind           String                    @default("DETECTED_VULNERABILITY") // DETECTED_VULNERABILITY | POTENTIAL_EXPOSURE (§34)
+  lifecycleStatus         VmLifecycleStatus          @default(NEW)
+  detectionKind           String                     @default("DETECTED_VULNERABILITY") // DETECTED_VULNERABILITY | POTENTIAL_EXPOSURE (§34)
   cpe                     String?
   priority                String? // P0..P4 remediation priority (§40)
   riskFactors             Json? // Risk Engine V2 factor breakdown (§38)
@@ -1233,18 +1259,18 @@ model Finding {
   intelCvssScore          Float? // intelligence CVSS — preserved separately from the scanner score (§32)
   epssScore               Float?
   epssPercentile          Float?
-  kevListed               Boolean                   @default(false)
-  exploitRefExists        Boolean                   @default(false)
+  kevListed               Boolean                    @default(false)
+  exploitRefExists        Boolean                    @default(false)
   assignedToId            String?
   assignedToTeam          String?
   assignedBy              String?
   assignedAt              DateTime?
-  tags                    String[]                  @default([])
+  tags                    String[]                   @default([])
   slaPolicyId             String?
   dueAt                   DateTime?
   resolvedAt              DateTime?
   reopenedAt              DateTime?
-  recurrenceCount         Int                       @default(0)
+  recurrenceCount         Int                        @default(0)
   riskAcceptanceReason    String?
   riskAcceptedBy          String?
   riskAcceptanceExpiresAt DateTime?
@@ -1316,7 +1342,7 @@ model Finding {
   owaspMobile             String? // OWASP Mobile Top 10 category (§46)
   masvsControl            String? // OWASP MASVS control id (§47)
   crossBuildFingerprint   String?
-  dynamicConfirmed        Boolean                   @default(false)
+  dynamicConfirmed        Boolean                    @default(false)
   // Prompt 18 (§50–§63): binary extension block — the registered
   // binary artifact (identity = SHA-256), §56 finding type, concerned
   // function/library/section, §62 reachability evidence state (never
@@ -1329,7 +1355,7 @@ model Finding {
   binaryReachability      String?
   binaryFingerprint       String?
   staticConfidence        String?
-  binaryArtifact          BinaryArtifact?           @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
+  binaryArtifact          BinaryArtifact?            @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
   // Prompt 19 (§52/§53): wireless extension block — the registered
   // wireless environment, the AP identity (BSSID, §5), the §52
   // finding type and the §53 canonical fingerprint (environment +
@@ -1339,8 +1365,37 @@ model Finding {
   wirelessBssid           String?
   wirelessFindingType     String?
   wirelessFingerprint     String?
-  wirelessEnvironment     WirelessEnvironment?      @relation(fields: [wirelessEnvironmentId], references: [id], onDelete: SetNull)
-  wirelessAccessPoint     WirelessAccessPoint?      @relation(fields: [wirelessAccessPointId], references: [id], onDelete: SetNull)
+  wirelessEnvironment     WirelessEnvironment?       @relation(fields: [wirelessEnvironmentId], references: [id], onDelete: SetNull)
+  wirelessAccessPoint     WirelessAccessPoint?       @relation(fields: [wirelessAccessPointId], references: [id], onDelete: SetNull)
+  // Prompt 20 §5/§6: unified finding source domain + category so every
+  // engine's findings are queryable in one architecture without
+  // flattening domain identity. sourceDomain: WEB | NETWORK | API |
+  // RECON | SAST | SCA | SECRET | CONTAINER | KUBERNETES | CLOUD |
+  // IDENTITY | MOBILE | BINARY | WIRELESS | MANUAL | EXTERNAL_IMPORT.
+  // category: VULNERABILITY | MISCONFIGURATION | SECRET | IAM_RISK |
+  // PUBLIC_EXPOSURE | COMPLIANCE_FAILURE | CODE_FINDING |
+  // DEPENDENCY_VULNERABILITY | RUNTIME_EVENT | WIRELESS_FINDING |
+  // BINARY_FINDING | MOBILE_FINDING (§6).
+  sourceDomain            String?
+  category                String?
+  // Prompt 20 §18: non-destructive grouping of related findings.
+  clusterId               String?
+  // Prompt 20 §21: risk context signals consumed by Risk Engine V3.
+  dataSensitivity         String? // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED (asset-owner classified)
+  environment             String? // PRODUCTION | STAGING | DEVELOPMENT | LAB (as recorded, never inferred)
+  // Prompt 20 §28–§30: SLA timer deadlines (triage/remediation/retest)
+  // + auditable pause state. dueAt above remains the remediation
+  // deadline written by the Prompt 11 engine.
+  triageDueAt             DateTime?
+  retestDueAt             DateTime?
+  slaPausedAt             DateTime?
+  slaPauseReason          String?
+  cluster                 FindingCluster?            @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  ownership               FindingOwnership?
+  riskExceptions          RiskException[]
+  correlationsFrom        FindingCorrelation[]       @relation("CorrelationFrom")
+  correlationsTo          FindingCorrelation[]       @relation("CorrelationTo")
+  externalReferences      ExternalFindingReference[]
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1348,17 +1403,17 @@ model Finding {
   retests                 RetestRequest[]
   validationRequests      ValidationRequest[]
   manualValidations       ManualValidationRecord[]
-  firstSeen               DateTime                  @default(now())
-  lastSeen                DateTime                  @updatedAt
-  scan                    Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  asset                   Asset?                    @relation(fields: [assetId], references: [id])
-  duplicateOf             Finding?                  @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
-  duplicates              Finding[]                 @relation("FindingDuplicates")
+  firstSeen               DateTime                   @default(now())
+  lastSeen                DateTime                   @updatedAt
+  scan                    Scan                       @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  asset                   Asset?                     @relation(fields: [assetId], references: [id])
+  duplicateOf             Finding?                   @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates              Finding[]                  @relation("FindingDuplicates")
   evidence                FindingEvidence[]
   references              FindingReference[]
   history                 FindingHistory[]
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
 
   @@index([workspaceId])
   @@index([scanId])
@@ -1390,6 +1445,10 @@ model Finding {
   @@index([wirelessEnvironmentId])
   @@index([wirelessAccessPointId])
   @@index([wirelessFingerprint])
+  @@index([workspaceId, sourceDomain])
+  @@index([workspaceId, category])
+  @@index([workspaceId, environment])
+  @@index([clusterId])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -1562,16 +1621,34 @@ model ExploitReference {
 
 // One canonical vulnerability, many scan-specific observations (§62).
 model FindingObservation {
-  id                String   @id @default(uuid())
-  findingId         String
-  workspaceId       String
-  scanId            String?
-  sourceTool        String
-  sourceFingerprint String   @default("")
-  severity          String
-  summary           String?
-  observedAt        DateTime @default(now())
-  finding           Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(uuid())
+  findingId          String
+  workspaceId        String
+  scanId             String?
+  sourceTool         String
+  sourceFingerprint  String   @default("")
+  severity           String
+  summary            String?
+  observedAt         DateTime @default(now())
+  // Prompt 20 §4: the complete observation contract — tool version,
+  // scanner instance, target/asset identity, raw vs normalized severity,
+  // rule/check id, location, evidence + raw-artifact references,
+  // confidence and verification state at observation time. Every field
+  // is metadata: raw evidence lives behind the artifact reference and
+  // inherits the platform redaction discipline.
+  toolVersion        String?
+  scannerInstanceId  String?
+  assetId            String?
+  targetRef          String?
+  rawSeverity        String?
+  normalizedSeverity String?
+  ruleId             String?
+  location           String?
+  evidenceRef        String?
+  confidence         Float?
+  verificationState  String?
+  rawArtifactRef     String?
+  finding            Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@unique([findingId, sourceTool, sourceFingerprint])
   @@index([findingId])
@@ -4535,4 +4612,337 @@ model WirelessScanSession {
   @@index([workspaceId])
   @@index([environmentId])
   @@index([scanId])
+}
+
+// ------------------------------- Unified vulnerability management, reporting & dashboards (Prompt 20) -------------------------------
+// Prompt 20 unifies every engine (Prompts 5–19) into ONE canonical
+// vulnerability-management architecture: observations → fingerprint →
+// canonical finding → risk → ownership → SLA → exception → retest →
+// immutable report snapshots → dashboards, plus governed connectors to
+// external vulnerability platforms. Nothing here creates a parallel
+// finding system: Finding/FindingObservation remain the only records.
+
+// §18: non-destructive grouping of related findings (same CVE across
+// workloads, same cloud policy across accounts). Membership never merges
+// or deletes findings.
+model FindingCluster {
+  id          String    @id @default(uuid())
+  workspaceId String
+  key         String // deterministic cluster key (see SDK correlation engine)
+  kind        String // CVE | CWE | COMPONENT | CLOUD_POLICY | CONFIG_CLASS
+  label       String
+  findings    Finding[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+}
+
+// §14–§16: semantic + cross-domain correlation relationships between
+// canonical findings. Relationships are evidence links, never merges.
+model FindingCorrelation {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  fromFindingId String
+  toFindingId   String
+  relationship  String // SAME_ROOT_CAUSE | RELATED | PARENT_CHILD | CAUSES | EXPOSES | DUPLICATE | POTENTIAL_DUPLICATE
+  rationale     String?
+  createdBy     String?
+  fromFinding   Finding  @relation("CorrelationFrom", fields: [fromFindingId], references: [id], onDelete: Cascade)
+  toFinding     Finding  @relation("CorrelationTo", fields: [toFindingId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([fromFindingId, toFindingId, relationship])
+  @@index([workspaceId])
+  @@index([fromFindingId])
+  @@index([toFindingId])
+}
+
+// §26: current ownership of a finding. One row per finding — the current
+// owner; the assignment history lives in FindingHistory. Auto-assignment
+// (§27) creates source=RULE rows and NEVER overwrites a MANUAL row.
+model FindingOwnership {
+  id          String   @id @default(uuid())
+  findingId   String   @unique
+  workspaceId String
+  ownerType   String // USER | TEAM | APPLICATION | BUSINESS_UNIT | ASSET_OWNER
+  ownerRef    String // user id / team name / application name / business unit — an identifier, never a credential
+  source      String   @default("MANUAL") // MANUAL | RULE
+  ruleId      String?
+  assignedBy  String?
+  finding     Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([workspaceId, ownerRef])
+}
+
+// §27: configurable auto-assignment rules, evaluated in priority order.
+model OwnershipRule {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  matchKind   String // SOURCE_DOMAIN | REPOSITORY | CLOUD_ACCOUNT | ASSET_GROUP | MOBILE_APP
+  matchValue  String
+  ownerType   String // USER | TEAM | APPLICATION | BUSINESS_UNIT | ASSET_OWNER
+  ownerRef    String
+  priority    Int      @default(100)
+  enabled     Boolean  @default(true)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// §28: SLA policy V2 — deadlines for triage, remediation AND retest,
+// keyed by severity/priority with environment, asset-criticality and
+// finding-type modifiers, all expressed as data (rules JSON), never as
+// a hardcoded organization's policy. The Prompt 11 RemediationSlaPolicy
+// remains for the original engine; this is its unified successor.
+model VmSlaPolicy {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  rules       Json // { triageHours?, remediationHours?, retestHours? } each { byPriority?, bySeverity? } + modifiers
+  isDefault   Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// §31–§33: risk exceptions. High-risk exceptions require a SEPARATE
+// approver (requestedBy != approvedBy) — enforced in the service layer.
+// Expired exceptions return the finding to review; they never silently
+// stay active.
+model RiskException {
+  id          String    @id @default(uuid())
+  workspaceId String
+  findingId   String
+  type        String // ACCEPTED_RISK | FALSE_POSITIVE | COMPENSATING_CONTROL | TEMPORARY_EXCEPTION
+  status      String    @default("PENDING") // PENDING | ACTIVE | REJECTED | EXPIRED
+  requestedBy String
+  approvedBy  String?
+  reason      String
+  scope       Json? // what the exception covers (finding-scoped by default)
+  expiresAt   DateTime?
+  finding     Finding   @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([findingId])
+  @@index([expiresAt])
+}
+
+// §44: identity of a local finding inside an external platform. The
+// external system is NEVER authoritative over local analyst decisions
+// (§43/§114) — the last-synced external status/severity are kept for
+// conflict detection only.
+model ExternalFindingReference {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  integrationId    String
+  findingId        String?
+  externalSystem   String // DEFECTDOJO | FARADAY | DRADIS | PLEXTRAC | SERPICO
+  externalId       String
+  externalUrl      String?
+  externalStatus   String?
+  externalSeverity String?
+  syncVersion      Int      @default(1)
+  lastSyncedAt     DateTime @default(now())
+  finding          Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+
+  @@unique([integrationId, externalId])
+  @@index([workspaceId])
+  @@index([findingId])
+}
+
+// §43: a sync disagreement between DSRclone and an external platform.
+// Conflicts are surfaced and resolved explicitly — never by silently
+// overwriting the local analyst decision.
+model IntegrationConflict {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  integrationId       String
+  findingId           String?
+  externalReferenceId String?
+  field               String // status | severity | ownership | external_closed
+  localValue          String?
+  externalValue       String?
+  status              String    @default("OPEN") // OPEN | RESOLVED_KEEP_LOCAL | RESOLVED_TAKE_EXTERNAL
+  resolvedBy          String?
+  resolvedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([workspaceId, status])
+  @@index([integrationId])
+}
+
+// §96: bounded background jobs for imports/exports/syncs. Large work
+// never runs inside an API request.
+model IntegrationJob {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  integrationId String
+  kind          String // IMPORT | EXPORT | SYNC
+  mode          String? // PULL | PUSH | BIDIRECTIONAL (sync)
+  status        String    @default("QUEUED") // QUEUED | RUNNING | COMPLETED | FAILED
+  summary       Json      @default("{}")
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([workspaceId, status])
+  @@index([integrationId])
+}
+
+// §68: report templates. Branding + structure ONLY — templates contain
+// no executable code and are validated as such at write time.
+model ReportTemplate {
+  id                  String   @id @default(uuid())
+  workspaceId         String
+  name                String
+  organizationName    String?
+  logoRef             String? // object-storage reference name — never an embedded binary
+  sections            Json     @default("[]") // ordered section keys from the governed catalog
+  severityDefinitions Json     @default("{}")
+  footer              String?
+  classification      String   @default("CONFIDENTIAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED (§64)
+  customBlocks        Json     @default("[]") // static text blocks only
+  createdBy           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// §57: a unified security report over ANY set of engines. scope is a
+// filter document (domains, period, environment) — generating a report
+// never runs a scan; it reads stored records only.
+model SecurityReport {
+  id             String          @id @default(uuid())
+  workspaceId    String
+  title          String
+  type           String // EXECUTIVE | TECHNICAL_VAPT | WEB | NETWORK | API | CLOUD | CONTAINER_KUBERNETES | SOURCE_SCA | IDENTITY | MOBILE | BINARY | WIRELESS | COMPLIANCE | REMEDIATION | RETEST (§55)
+  scope          Json            @default("{}")
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  generatedBy    String
+  templateId     String?
+  version        String          @default("v1") // §66: v1, v1.1, v2 …
+  status         String          @default("DRAFT") // DRAFT | GENERATING | READY | FAILED | ARCHIVED (§58)
+  approvalStatus String          @default("DRAFT") // DRAFT | REVIEW | APPROVED | ISSUED (§67)
+  classification String          @default("CONFIDENTIAL")
+  changeNotes    String?
+  approvedBy     String?
+  snapshot       ReportSnapshot?
+  exports        ReportExport[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, type])
+}
+
+// §56: the immutable point-in-time content of a report. Once written a
+// snapshot is NEVER updated — later finding changes produce a new
+// report version with its own snapshot, never a silent edit.
+model ReportSnapshot {
+  id           String         @id @default(uuid())
+  reportId     String         @unique
+  workspaceId  String
+  data         Json // full normalized report document (sanitized + redacted at build time)
+  contentHash  String // SHA-256 over the canonical snapshot document
+  findingCount Int            @default(0)
+  report       SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+
+  @@index([workspaceId])
+}
+
+// §59/§70: one rendered artifact per format, stored via the object-store
+// interface with checksum + size; downloads are authorization-checked
+// and audited (REPORT_DOWNLOADED).
+model ReportExport {
+  id              String         @id @default(uuid())
+  reportId        String
+  workspaceId     String
+  format          String // PDF | HTML | JSON | CSV
+  status          String         @default("READY") // READY | FAILED
+  storageLocation String?
+  checksum        String?
+  sizeBytes       Int?
+  createdBy       String
+  report          SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+
+  @@index([reportId])
+  @@index([workspaceId])
+}
+
+// Report scheduling DEFINITIONS (§55 companion). Stored now; execution
+// is owned by the Prompt 22 scheduler — no cron machinery is invented
+// in this phase.
+model ReportSchedule {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  name           String
+  reportType     String
+  templateId     String?
+  cronExpression String
+  recipients     Json     @default("[]")
+  formats        Json     @default("[]")
+  enabled        Boolean  @default(false)
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// §81: periodic executive risk snapshots. Historical trend charts read
+// THESE rows — they are never recomputed from current state.
+model RiskSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  metrics     Json // overall risk score, severity counts, KEV, SLA posture at capture time
+  capturedAt  DateTime @default(now())
+
+  @@index([workspaceId, capturedAt])
+}
+
+// §88: notification EVENT model. Events are recorded here; delivery
+// providers are deliberately not hard-coded in this phase.
+model VmNotificationEvent {
+  id          String    @id @default(uuid())
+  workspaceId String
+  type        String // CRITICAL_FINDING_CREATED | KEV_DETECTED | SLA_DUE_SOON | SLA_OVERDUE | FINDING_REOPENED | RETEST_COMPLETED | REPORT_READY
+  findingId   String?
+  payload     Json      @default("{}")
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, type])
+  @@index([workspaceId, createdAt])
+}
+
+// §87: reusable tag vocabulary for findings and assets (finding rows
+// keep their tags array; this table is the governed vocabulary).
+model VmTag {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  kind        String   @default("FINDING") // FINDING | ASSET
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, kind, name])
+  @@index([workspaceId])
 }

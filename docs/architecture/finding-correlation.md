@@ -20,3 +20,15 @@ the same issue:
 Report imports (Nessus/Greenbone) flow through the same correlation, so
 an imported issue that a live scan also finds corroborates instead of
 duplicating.
+
+## Prompt 20 extension (§14–§18): typed links and clusters
+
+The unified correlation engine derives typed links from stored
+evidence only: EXPOSES (an exposure finding points at a service
+finding on the same host), RELATED (same CVE across assets),
+SAME_ROOT_CAUSE (shared repository + category), POTENTIAL_DUPLICATE.
+A shared CWE alone never correlates (too weak), and neither does
+title similarity. Connected components over strong links become
+`FindingCluster` rows (e.g. one CVE across many assets). Chains are
+explanatory — correlation never changes a finding's stored severity
+or risk score.

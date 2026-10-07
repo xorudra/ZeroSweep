@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 19 complete (Prompts 1–19).** Production monorepo, backend and
+> **Status — Phase 20 complete (Prompts 1–20).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -221,9 +221,38 @@ and the AI health endpoint.
 17. ✅ Mobile application VAPT — Android & iOS (Prompt 17)
 18. ✅ Reverse engineering & binary analysis (Prompt 18)
 19. ✅ Wireless security assessment — passive only (Prompt 19)
+20. ✅ Unified vulnerability management, reporting & executive dashboard (Prompt 20)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 20: Unified Vulnerability Management, Reporting
+  & Executive Dashboard.** All engines from Prompts 3–19 converge on
+  one canonical finding model: standardized lifecycle (now with
+  REOPENED/DUPLICATE/MITIGATED), priority P0–P4 kept separate from
+  severity, domain-prefixed fingerprint deduplication V2, a
+  correlation engine (EXPOSES/RELATED/SAME_ROOT_CAUSE chains and
+  clusters — a shared CWE alone never correlates), explainable Risk
+  Engine V3 (signed signals + what information is missing), ownership
+  rules that never override a manual assignment, a full SLA engine
+  (triage/remediation/retest timers, pausable only with a reason),
+  risk exceptions with separation-of-duties approval and automatic
+  expiry, and a RetestRouter that sends each domain to its own safe
+  retest path (no evidence = INCONCLUSIVE, never resolved).
+  DefectDojo/Faraday/Dradis/PlexTrac/Serpico connectors import with
+  preview → idempotent commit; disagreements become conflicts, never
+  silent overwrites (external platforms are never authoritative).
+  Reporting renders fifteen report types from an IMMUTABLE,
+  content-hashed snapshot built from stored findings only — PDF/
+  HTML/JSON/CSV rendered asynchronously by the worker into object
+  storage; snapshots are redacted once at build time so no
+  secret-shaped value reaches any export; approvals flow DRAFT →
+  REVIEW → APPROVED → ISSUED and an issued report can never be
+  regenerated in place; downloads are permission-checked and
+  audited. Executive/security/remediation/asset dashboards aggregate
+  stored records only — unknown coverage is shown as unknown, never
+  as 100%. Connector HTTP transports are not wired in this build:
+  health and push-sync honestly report NOT_CONFIGURED, and imports
+  run from administrator-supplied payloads.
 - **2026-10-08 — Prompt 19: Wireless Security Assessment.** Wireless
   environments, dedicated sensors and uploaded captures became a
   first-class passive assessment domain. **Nothing transmits**: AP and
