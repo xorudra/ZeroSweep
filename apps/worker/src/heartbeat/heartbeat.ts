@@ -27,7 +27,7 @@ export const WORKER_CAPABILITIES = [
 /** Prompt 10 §23/§24: worker types. The type + privileged capabilities
  *  come from the worker's OWN deployment environment — a general worker
  *  cannot promote itself, and job payloads never carry them. */
-export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST"] as const;
+export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNAL", "PACKET_ANALYSIS", "CONTAINER_ANALYSIS", "PRIVILEGED_HOST", "CLOUD_ANALYSIS"] as const;
 export type WorkerTypeName = (typeof WORKER_TYPES)[number];
 
 export function workerTypeFromEnv(env: NodeJS.ProcessEnv = process.env): WorkerTypeName {
@@ -60,6 +60,11 @@ export function privilegedCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.e
   }
   if (type === "PRIVILEGED_HOST" && declared.includes("PRIVILEGED_HOST_ASSESSMENT")) {
     allowed.add("PRIVILEGED_HOST_ASSESSMENT");
+  }
+  // Prompt 14 §10: cloud credentials are issued ONLY to CLOUD_ANALYSIS
+  // workers — the env of any other worker type cannot grant it.
+  if (type === "CLOUD_ANALYSIS" && declared.includes("CLOUD_ANALYSIS")) {
+    allowed.add("CLOUD_ANALYSIS");
   }
   return [...allowed];
 }

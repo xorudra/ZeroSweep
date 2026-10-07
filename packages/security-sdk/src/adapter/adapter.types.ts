@@ -69,6 +69,17 @@ export const CAPABILITIES = [
   "IAC_SECURITY", "KUBERNETES_MANIFEST_SECURITY", "HELM_SECURITY",
   "CLUSTER_INVENTORY", "RESOURCE_INVENTORY", "POSTURE_ASSESSMENT",
   "RUNTIME_SECURITY_EVENTS",
+  // Prompt 14: multi-cloud security capabilities. CLOUD_OFFENSIVE_TESTING
+  // exists ONLY so the policy/registry can name Pacu and keep it
+  // DISABLED (§34/§106) — no adapter is ever selected for it and no
+  // stage requires it. There is deliberately NO cloud-mutation,
+  // privilege-escalation, secret-extraction or resource-modification
+  // capability anywhere in this list.
+  "CSPM", "CLOUD_POSTURE", "CLOUD_INVENTORY", "CLOUD_CONFIGURATION_ASSESSMENT",
+  "CLOUD_QUERY", "COMPLIANCE_QUERY",
+  "IDENTITY_INVENTORY", "DIRECTORY_ANALYSIS", "RELATIONSHIP_ANALYSIS",
+  "AWS_NETWORK_ANALYSIS", "AWS_ACCOUNT_VISUALIZATION", "PUBLIC_EXPOSURE_ANALYSIS",
+  "CLOUD_OFFENSIVE_TESTING",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

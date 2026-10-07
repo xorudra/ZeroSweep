@@ -18,6 +18,7 @@ export const NAV = [
   { href: "/kubernetes", label: "Kubernetes" },
   { href: "/compliance", label: "Compliance" },
   { href: "/runtime-events", label: "Runtime Events" },
+  { href: "/cloud-security", label: "Cloud Security" },
   { href: "/assessments", label: "Assessments" },
   { href: "/scans", label: "Scans" },
   { href: "/findings", label: "Findings" },

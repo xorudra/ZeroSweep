@@ -114,12 +114,15 @@ const TOOLS: CatalogTool[] = [
   { slug: "jadx", name: "JADX", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Android decompiler for static analysis." },
   { slug: "apktool", name: "apktool", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "APK resource decoding for static analysis." },
   { slug: "adb", name: "ADB", category: "MOBILE", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["MOBILE_STATIC_ANALYSIS"], supportedTargets: ["APK"], requiresCredentials: [], description: "Android Debug Bridge for authorized test devices only." },
-  { slug: "prowler", name: "Prowler", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Cloud security assessment with read-only credentials." },
-  { slug: "scoutsuite", name: "ScoutSuite", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Multi-cloud security auditing tool." },
-  { slug: "cloudmapper", name: "CloudMapper", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Cloud environment visualization and analysis." },
-  { slug: "roadtools", name: "ROADtools", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AZURE"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "Azure AD exploration framework for authorized tenants." },
-  { slug: "pacu", name: "Pacu", category: "CLOUD", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "AWS exploitation framework — approved cloud engagements only." },
-  { slug: "steampipe", name: "Steampipe", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_CONFIGURATION_AUDIT"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["CLOUD_CREDENTIAL"], description: "SQL queries over cloud APIs for posture checks." },
+  { slug: "prowler", name: "Prowler", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CSPM", "CLOUD_POSTURE", "COMPLIANCE_QUERY"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["credentialReference"], description: "Prowler CSPM (Prompt 14 §23): multi-cloud CIS/posture checks over read-only credential references. FAIL results become findings on canonical cloud rules; PASS is posture evidence only." },
+  { slug: "scoutsuite", name: "ScoutSuite", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CSPM", "CLOUD_POSTURE"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["credentialReference"], description: "ScoutSuite multi-cloud auditing (Prompt 14 §26): rule results land on the canonical cloud rules and merge with Prowler/native observations of the same issue." },
+  { slug: "cloudmapper", name: "CloudMapper", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["AWS_NETWORK_ANALYSIS", "AWS_ACCOUNT_VISUALIZATION", "PUBLIC_EXPOSURE_ANALYSIS"], supportedTargets: ["AWS"], requiresCredentials: ["credentialReference"], description: "CloudMapper (AWS) account-graph import (Prompt 14 §27): public nodes and network structure from recorded exports become exposure evidence in the asset graph." },
+  { slug: "roadtools", name: "ROADtools", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["DIRECTORY_ANALYSIS", "IDENTITY_INVENTORY"], supportedTargets: ["AZURE"], requiresCredentials: ["credentialReference"], description: "ROADtools (Entra ID) DEFENSIVE analysis (Prompt 14 §29): role assignments and application permissions from recorded exports. Offensive directory operations are never invoked." },
+  { slug: "pacu", name: "Pacu", category: "CLOUD", riskLevel: "INTRUSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_OFFENSIVE_TESTING"], supportedTargets: ["AWS"], requiresCredentials: ["credentialReference"], description: "DISABLED by policy (Prompt 14 §34): Pacu is offensive cloud exploitation tooling. DSRclone performs read-only assessment only — no adapter exists, it is never enabled and no stage can select it." },
+  { slug: "steampipe", name: "Steampipe", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: true, capabilities: ["CLOUD_QUERY", "CSPM"], supportedTargets: ["AWS", "AZURE", "GCP"], requiresCredentials: ["credentialReference"], description: "Steampipe governed query packs (Prompt 14 §32): approved CIS/exposure packs only — arbitrary SQL from users or repositories is refused." },
+  { slug: "aws-inventory", name: "AWS Inventory Connector", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CLOUD_INVENTORY", "CLOUD_POSTURE", "IDENTITY_INVENTORY", "RELATIONSHIP_ANALYSIS"], supportedTargets: ["AWS"], requiresCredentials: ["credentialReference"], description: "Read-only AWS inventory (Prompt 14 §16): account structure, IAM, network, storage, encryption and logging metadata. No data-plane access, no mutations (§7/§13)." },
+  { slug: "azure-inventory", name: "Azure Inventory Connector", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CLOUD_INVENTORY", "CLOUD_POSTURE", "IDENTITY_INVENTORY", "RELATIONSHIP_ANALYSIS"], supportedTargets: ["AZURE"], requiresCredentials: ["credentialReference"], description: "Read-only Azure inventory (Prompt 14 §17): subscriptions, resource groups, NSGs, storage, RBAC metadata. No data-plane access, no mutations (§7/§13)." },
+  { slug: "gcp-inventory", name: "GCP Inventory Connector", category: "CLOUD", riskLevel: "PASSIVE", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CLOUD_INVENTORY", "CLOUD_POSTURE", "IDENTITY_INVENTORY", "RELATIONSHIP_ANALYSIS"], supportedTargets: ["GCP"], requiresCredentials: ["credentialReference"], description: "Read-only GCP inventory (Prompt 14 §18): organization/folder/project structure, firewall, storage, IAM metadata. No data-plane access, no mutations (§7/§13)." },
   { slug: "checkov", name: "Checkov", category: "CLOUD", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["IAC_SECURITY", "KUBERNETES_MANIFEST_SECURITY", "DOCKERFILE_SECURITY", "HELM_SECURITY"], supportedTargets: ["SOURCE_REPOSITORY", "CONTAINER_IMAGE", "KUBERNETES_MANIFEST", "HELM_CHART", "KUBERNETES_CLUSTER"], requiresCredentials: [], description: "Infrastructure-as-code, Kubernetes manifest, Helm and Dockerfile static analysis (Prompt 13 §46) — IaC is never executed." },
   { slug: "trivy", name: "Trivy", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["IMAGE_VULNERABILITY_SCANNING", "MISCONFIGURATION_SCANNING", "SECRET_SCANNING", "IMAGE_ANALYSIS"], supportedTargets: ["CONTAINER_IMAGE", "CONTAINER_REGISTRY", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Static container image analysis: vulnerabilities, misconfigurations and secret metadata (Prompt 13 §15–§18). Images are never executed." },
   { slug: "grype", name: "Grype", category: "CONTAINER", riskLevel: "LOW", licenseType: "OPEN_SOURCE", requiresApproval: false, capabilities: ["CONTAINER_SCANNING", "SCA", "PACKAGE_VULNERABILITY_ANALYSIS", "SBOM_ANALYSIS", "IMAGE_VULNERABILITY_SCANNING"], supportedTargets: ["CONTAINER_IMAGE", "SOURCE_REPOSITORY"], requiresCredentials: [], description: "Vulnerability scanner for container images, filesystems and source snapshots (Prompt 12 §51 for source use; Prompt 13 §19 for image use — one adapter, two input kinds)." },
@@ -375,6 +378,32 @@ async function main(): Promise<void> {
       create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 13)", implementedPhase: 13 } },
     });
   }
+  // Prompt 14: the multi-cloud security adapters. Provider inventory
+  // connectors + import connectors are EXTERNAL_API (per-account
+  // configuration; unconfigured they report NOT_CONFIGURED, §9); the
+  // CSPM CLIs run on the isolated CLOUD_ANALYSIS worker with egress
+  // limited to provider APIs (CUSTOM_ALLOWLIST). Pacu is deliberately
+  // ABSENT: it stays a disabled catalog row with no adapter (§34).
+  const IMPLEMENTED_CLOUD_SEC: Array<{ slug: string; executionMode: "CONTAINER" | "EXTERNAL_API"; outputFormat: string; parser: string; defaultTimeout: number; networkPolicy: string }> = [
+    { slug: "aws-inventory", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "aws-inventory", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "azure-inventory", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "azure-inventory", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "gcp-inventory", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "gcp-inventory", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "prowler", executionMode: "CONTAINER", outputFormat: "JSON", parser: "prowler-json", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "scoutsuite", executionMode: "CONTAINER", outputFormat: "JSON", parser: "scoutsuite-json", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "steampipe", executionMode: "CONTAINER", outputFormat: "JSON", parser: "steampipe-json", defaultTimeout: 1800, networkPolicy: "CUSTOM_ALLOWLIST" },
+    { slug: "cloudmapper", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "cloudmapper-import", defaultTimeout: 900, networkPolicy: "NO_NETWORK" },
+    { slug: "roadtools", executionMode: "EXTERNAL_API", outputFormat: "JSON", parser: "roadtools-import", defaultTimeout: 900, networkPolicy: "NO_NETWORK" },
+  ];
+  for (const impl of IMPLEMENTED_CLOUD_SEC) {
+    const tool = await prisma.tool.findUnique({ where: { slug: impl.slug } });
+    const catalog = TOOLS.find((x) => x.slug === impl.slug);
+    if (!tool || !catalog) continue;
+    await prisma.toolAdapter.upsert({
+      where: { toolId_adapterVersion: { toolId: tool.id, adapterVersion: "1.0.0" } },
+      update: { enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 14) — read-only assessment only; credentials are secret references resolved inside the CLOUD_ANALYSIS worker; no remediation actions exist", implementedPhase: 14 } },
+      create: { toolId: tool.id, adapterVersion: "1.0.0", enabled: true, executionMode: impl.executionMode, outputFormat: impl.outputFormat, parser: impl.parser, defaultTimeout: impl.defaultTimeout, networkPolicy: impl.networkPolicy, supportedTargets: catalog.supportedTargets, capabilities: catalog.capabilities, inputSchema: { note: "Implemented adapter (Prompt 14)", implementedPhase: 14 } },
+    });
+  }
   // Prompt 13 §55: the compliance framework catalog. Control titles are
   // the governed checks' own descriptions (posture engine + benchmark
   // tools) — posture evidence catalog, NEVER a certification (§88).
@@ -414,18 +443,66 @@ async function main(): Promise<void> {
         { controlId: "C-0057", title: "Privileged container (Kubescape control)", severityDefault: "CRITICAL" },
       ],
     },
+    // Prompt 14 §68/§69: CIS cloud foundations — control ids are exactly
+    // the analyzer's governed rule→control mapping; framework mappings
+    // to NIST/PCI DSS/SOC 2/ISO 27001 are mapping-only, never a
+    // certification claim (§84).
+    {
+      key: "CIS_AWS", name: "CIS Amazon Web Services Foundations Benchmark", version: "1.5.0",
+      controls: [
+        { controlId: "1.10", title: "MFA enabled for IAM users (mfa-not-enabled)", severityDefault: "MEDIUM" },
+        { controlId: "1.16", title: "No admin-equivalent IAM policies attached (iam-admin-equivalent)", severityDefault: "CRITICAL" },
+        { controlId: "2.1.1", title: "S3 bucket encryption with SSE (storage-encryption)", severityDefault: "MEDIUM" },
+        { controlId: "2.1.2", title: "S3 Block Public Access enabled (storage-public-access)", severityDefault: "HIGH" },
+        { controlId: "2.1.3", title: "S3 bucket access logging enabled (storage-logging)", severityDefault: "LOW" },
+        { controlId: "2.2.1", title: "RDS instance encryption enabled (database-encryption)", severityDefault: "HIGH" },
+        { controlId: "2.2.2", title: "RDS instance not publicly accessible (database-public-access)", severityDefault: "HIGH" },
+        { controlId: "3.1", title: "CloudTrail enabled in all regions (audit-logging-disabled)", severityDefault: "HIGH" },
+        { controlId: "3.8", title: "KMS key rotation enabled (kms-rotation-disabled)", severityDefault: "MEDIUM" },
+        { controlId: "5.2", title: "No security group allows ingress from 0.0.0.0/0 to remote server administration ports (firewall-sensitive-port-world)", severityDefault: "HIGH" },
+      ],
+    },
+    {
+      key: "CIS_AZURE", name: "CIS Microsoft Azure Foundations Benchmark", version: "2.1.0",
+      controls: [
+        { controlId: "1.1", title: "MFA enabled for Entra ID users (mfa-not-enabled)", severityDefault: "MEDIUM" },
+        { controlId: "1.23", title: "No subscription owner-equivalent role assignments beyond need (iam-admin-equivalent)", severityDefault: "CRITICAL" },
+        { controlId: "3.1", title: "Storage account encryption with customer-managed keys where required (storage-encryption)", severityDefault: "MEDIUM" },
+        { controlId: "3.6", title: "Public network access to storage accounts restricted (storage-public-access)", severityDefault: "HIGH" },
+        { controlId: "4.1", title: "Azure SQL transparent data encryption enabled (database-encryption)", severityDefault: "HIGH" },
+        { controlId: "5.1.2", title: "Activity log export / diagnostic settings configured (audit-logging-disabled)", severityDefault: "HIGH" },
+        { controlId: "6.1", title: "No NSG allows ingress from the internet to remote administration ports (firewall-sensitive-port-world)", severityDefault: "HIGH" },
+      ],
+    },
+    {
+      key: "CIS_GCP", name: "CIS Google Cloud Platform Foundation Benchmark", version: "1.6.0",
+      controls: [
+        { controlId: "1.1", title: "MFA enabled for user accounts (mfa-not-enabled)", severityDefault: "MEDIUM" },
+        { controlId: "1.5", title: "No owner-equivalent IAM roles beyond need (iam-admin-equivalent)", severityDefault: "CRITICAL" },
+        { controlId: "1.9", title: "KMS key rotation within the governed period (kms-rotation-disabled)", severityDefault: "MEDIUM" },
+        { controlId: "2.1", title: "Cloud Audit Logs enabled (audit-logging-disabled)", severityDefault: "HIGH" },
+        { controlId: "3.6", title: "No firewall rule allows ingress from 0.0.0.0/0 to administration ports (firewall-sensitive-port-world)", severityDefault: "HIGH" },
+        { controlId: "4.1", title: "Cloud Storage buckets not publicly accessible (storage-public-access)", severityDefault: "HIGH" },
+        { controlId: "4.2", title: "Cloud Storage bucket access logging enabled (storage-logging)", severityDefault: "LOW" },
+        { controlId: "4.3", title: "Cloud Storage encryption with customer-managed keys where required (storage-encryption)", severityDefault: "MEDIUM" },
+      ],
+    },
   ];
   for (const fw of COMPLIANCE_CATALOG) {
+    // The catalog rows carry severityDefault as seed-local metadata;
+    // the schema stores it in the control's description (no dedicated
+    // column) and requires a framework description.
+    const frameworkDescription = `${fw.name} ${fw.version} — governed posture-evidence catalog; assessments are evidence, never a certification.`;
     const framework = await prisma.complianceFramework.upsert({
       where: { key: fw.key },
-      update: { name: fw.name, version: fw.version },
-      create: { key: fw.key, name: fw.name, version: fw.version },
+      update: { name: fw.name, version: fw.version, description: frameworkDescription },
+      create: { key: fw.key, name: fw.name, version: fw.version, description: frameworkDescription },
     });
     for (const c of fw.controls) {
       await prisma.complianceControl.upsert({
         where: { frameworkId_controlId: { frameworkId: framework.id, controlId: c.controlId } },
-        update: { title: c.title, severityDefault: c.severityDefault },
-        create: { frameworkId: framework.id, controlId: c.controlId, title: c.title, severityDefault: c.severityDefault },
+        update: { title: c.title, description: `Default severity: ${c.severityDefault}` },
+        create: { frameworkId: framework.id, controlId: c.controlId, title: c.title, description: `Default severity: ${c.severityDefault}` },
       });
     }
   }

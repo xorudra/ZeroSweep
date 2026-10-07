@@ -129,6 +129,27 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  # Prompt 14 §10/§11: multi-cloud assessment runs on an isolated worker
+  # type — the ONLY worker that may resolve cloud credential references
+  # (under job-scoped leases) and run cloud adapters. Assessment is
+  # read-only: provider transports call Describe/Get/List APIs only,
+  # and no remediation capability exists in this service.
+  worker-cloud-analysis:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: http://minio:9000
+      DSRCLONE_WORKER_TYPE: CLOUD_ANALYSIS
+      DSRCLONE_WORKER_CAPABILITIES: CLOUD_ANALYSIS
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   # Prompt 13 §28/§39: the ONLY worker that may run the INTERNAL_PRIVILEGED
   # CIS benchmark adapters (Docker Bench / kube-bench), and only against
   # explicitly approved hosts/clusters. Deployed on the assessed host's

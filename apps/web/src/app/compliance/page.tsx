@@ -16,7 +16,7 @@ interface AssessmentRow {
   status: string; evidence?: string | null; assessedAt?: string;
 }
 
-const FRAMEWORKS = ["", "CIS_DOCKER", "CIS_KUBERNETES", "NSA_CISA_KUBERNETES"] as const;
+const FRAMEWORKS = ["", "CIS_DOCKER", "CIS_KUBERNETES", "NSA_CISA_KUBERNETES", "CIS_AWS", "CIS_AZURE", "CIS_GCP"] as const;
 
 export default function Page() {
   const [items, setItems] = useState<AssessmentRow[]>([]);
@@ -42,7 +42,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Cloud-Native Compliance" title="Compliance" body="Control assessments from governed container and Kubernetes checks (CIS Docker, CIS Kubernetes, NSA/CISA hardening guidance)." />
+      <PageHeader eyebrow="Compliance" title="Compliance" body="Control assessments from governed container, Kubernetes and multi-cloud checks (CIS Docker, CIS Kubernetes, NSA/CISA hardening guidance, CIS AWS / Azure / GCP Foundations). Framework mappings (NIST, PCI DSS, SOC 2, ISO 27001) are mapping-only — never a certification." />
       <p className="rounded bg-amber-950/60 px-3 py-2 text-sm text-amber-200">{disclaimer || "Control assessments are posture evidence from governed checks; they are not a compliance certification."}</p>
       {error && <p className="rounded bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>}
 

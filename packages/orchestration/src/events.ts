@@ -42,6 +42,11 @@ export const SCAN_EVENT_TYPES = [
   "container.scan_completed", "kubernetes.inventory_recorded", "kubernetes.posture_assessed",
   "docker.posture_assessed", "compliance.assessed", "runtime.event_ingested",
   "container.quality_gate_evaluated",
+  // Prompt 14 — multi-cloud events (§103-adjacent scan events).
+  // Counts/ids/verdicts only; never credentials or secret values.
+  "cloud.account_validated", "cloud.inventory_recorded", "cloud.public_exposure_detected",
+  "cloud.iam_risk_detected", "cloud.drift_detected", "cloud.compliance_assessed",
+  "cloud.analysis_completed", "cloud.quality_gate_evaluated", "cloud.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

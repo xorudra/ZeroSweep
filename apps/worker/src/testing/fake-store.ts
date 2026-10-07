@@ -1,15 +1,15 @@
 import {
   CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, FIXTURE_MANIFEST_CONTENTS, FIXTURE_SOURCE_FILES,
-  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, buildCycloneDxSbom, classifyBaseline,
-  detectRepository, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, parseManifests, summarizeForQualityGate,
-  type SourceFileEntry,
+  JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline,
+  detectRepository, diffCloudInventories, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, parseManifests, summarizeForQualityGate,
+  type NormalizedCloudIdentity, type NormalizedCloudResource, type SourceFileEntry,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
 import type { ScopeRules } from "@dsrclone/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
-import { correlateProcessedFindings, processNormalizedResult, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
+import { correlateProcessedFindings, processNormalizedResult, type ProcessedCloudResource, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -32,7 +32,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -73,6 +73,23 @@ export interface FakeStoreOptions {
     hostRef?: string;
     kevCves?: string[];
   };
+  /** Prompt 14: the fixture cloud account the store resolves for a
+   *  cloud-account (AWS/AZURE/GCP target) scan — registered account identity + credential
+   *  REFERENCE (never a value), scope regions, and the PREVIOUS
+   *  inventory for drift comparison (§64). Absent accountId = the
+   *  account is not registered (NOT_CONFIGURED). */
+  cloudSecFixtures?: {
+    accountId?: string;
+    accountRef?: string;
+    provider?: "AWS" | "AZURE" | "GCP";
+    credentialReference?: string;
+    regions?: string[];
+    excludeRegions?: string[];
+    environment?: string;
+    queryPack?: string;
+    previousResources?: NormalizedCloudResource[];
+    previousIdentities?: NormalizedCloudIdentity[];
+  };
 }
 
 export class FakeStore implements ScanRunStore {
@@ -104,6 +121,16 @@ export class FakeStore implements ScanRunStore {
   imageSnapshots: Array<{ imageRef: string; digest?: string; previousDigest?: string; drift: boolean }> = [];
   containerQualityGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
   cloudFixtures: NonNullable<FakeStoreOptions["cloudFixtures"]> = {};
+  /** Prompt 14 multi-cloud state mirroring the Prisma store's rows. */
+  cloudResources: ProcessedCloudResource[] = [];
+  cloudIdentities: NormalizedCloudIdentity[] = [];
+  cloudRelationships: ProcessedResult["cloud"]["relationships"] = [];
+  cloudSnapshots: Array<{ snapshotHash: string; regions: string[]; resourceCounts: Record<string, number> }> = [];
+  cloudDrift: Array<{ kind: string; resourceRef?: string; detail: string }> = [];
+  cloudRiskPaths: ProcessedResult["cloud"]["riskPaths"] = [];
+  cloudGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
+  cloudAccountStatus = "REGISTERED";
+  cloudSecFixtures: NonNullable<FakeStoreOptions["cloudSecFixtures"]> = {};
   /** Prompt 12 source state mirroring the Prisma store's snapshot rows. */
   sourceSnapshot: { id: string; repositoryId: string; hash: string; files: SourceFileEntry[]; manifests: Record<string, string> } | null = null;
   sourceLanguages: string[] = [];
@@ -120,16 +147,17 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
     this.sourceFixtures = opts.sourceFixtures ?? {};
     this.cloudFixtures = opts.cloudFixtures ?? {};
+    this.cloudSecFixtures = opts.cloudSecFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -208,6 +236,19 @@ export class FakeStore implements ScanRunStore {
         ...(this.cloudFixtures.clusterId ? { clusterId: this.cloudFixtures.clusterId } : {}),
         ...(this.cloudFixtures.clusterRef ? { clusterRef: this.cloudFixtures.clusterRef } : {}),
         ...(this.cloudFixtures.hostRef ? { hostRef: this.cloudFixtures.hostRef } : {}),
+      } : undefined,
+      // Prompt 14: the scan's cloud account context (§10) — resolved
+      // from the registered-account fixture, mirroring the Prisma
+      // store's CloudAccount lookup. No accountId = NOT_CONFIGURED.
+      cloud: ["AWS", "AZURE", "GCP"].includes(this.targetType) ? {
+        ...(this.cloudSecFixtures.accountId ? { accountId: this.cloudSecFixtures.accountId } : {}),
+        ...(this.cloudSecFixtures.accountRef ? { accountRef: this.cloudSecFixtures.accountRef } : {}),
+        ...(this.cloudSecFixtures.provider ? { provider: this.cloudSecFixtures.provider } : {}),
+        ...(this.cloudSecFixtures.credentialReference ? { credentialReference: this.cloudSecFixtures.credentialReference } : {}),
+        ...(this.cloudSecFixtures.regions ? { regions: this.cloudSecFixtures.regions } : {}),
+        ...(this.cloudSecFixtures.excludeRegions ? { excludeRegions: this.cloudSecFixtures.excludeRegions } : {}),
+        ...(this.cloudSecFixtures.environment ? { environment: this.cloudSecFixtures.environment } : {}),
+        ...(this.cloudSecFixtures.queryPack ? { queryPack: this.cloudSecFixtures.queryPack } : {}),
       } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
@@ -327,6 +368,39 @@ export class FakeStore implements ScanRunStore {
     }
     this.controlAssessments.push(...processed.cloudNative.controlAssessments);
     this.runtimeEvents.push(...processed.cloudNative.runtimeEvents);
+    // Prompt 14 multi-cloud payloads: resources merge by provider
+    // resource id (mirrors the Prisma upsert), identities by provider
+    // identity id, relationships append unique, cloud control
+    // assessments share the compliance record, and a full-inventory
+    // result drives drift against the previous inventory (§64).
+    if (processed.cloud.snapshot) {
+      const previousResources = this.cloudResources.length > 0
+        ? this.cloudResources.filter((r) => r.scopeStatus === "IN_SCOPE").map(({ scopeStatus: _s, ...r }) => r)
+        : (this.cloudSecFixtures.previousResources ?? []);
+      const previousIdentities = this.cloudIdentities.length > 0 ? this.cloudIdentities : (this.cloudSecFixtures.previousIdentities ?? []);
+      const currentInScope = processed.cloud.resources.filter((r) => r.scopeStatus === "IN_SCOPE").map(({ scopeStatus: _s, ...r }) => r);
+      this.cloudDrift.push(...diffCloudInventories(
+        { resources: previousResources, identities: previousIdentities },
+        { resources: currentInScope, identities: processed.cloud.identities },
+      ));
+      this.cloudSnapshots.push({ snapshotHash: processed.cloud.snapshot.snapshotHash, regions: processed.cloud.snapshot.regions, resourceCounts: processed.cloud.snapshot.resourceCounts });
+    }
+    for (const r of processed.cloud.resources) {
+      const existing = this.cloudResources.find((x) => x.providerResourceId === r.providerResourceId);
+      if (existing) Object.assign(existing, r);
+      else this.cloudResources.push(r);
+    }
+    for (const i of processed.cloud.identities) {
+      const existing = this.cloudIdentities.find((x) => x.providerIdentityId === i.providerIdentityId);
+      if (existing) Object.assign(existing, i);
+      else this.cloudIdentities.push(i);
+    }
+    for (const rel of processed.cloud.relationships) {
+      const key = `${rel.fromType}|${rel.fromRef}|${rel.relationship}|${rel.toType}|${rel.toRef}`;
+      if (!this.cloudRelationships.some((x) => `${x.fromType}|${x.fromRef}|${x.relationship}|${x.toType}|${x.toRef}` === key)) this.cloudRelationships.push(rel);
+    }
+    this.controlAssessments.push(...processed.cloud.controlAssessments);
+    this.cloudRiskPaths.push(...processed.cloud.riskPaths);
     return { assets: processed.assets.length, findings: processed.findings.length, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length };
   }
 
@@ -410,6 +484,90 @@ export class FakeStore implements ScanRunStore {
     });
     this.containerQualityGateRecord = { status: result.status, failedRules: result.failedRules, warningRules: result.warningRules };
     return { status: result.status, failedRules: result.failedRules.length, warningRules: result.warningRules.length };
+  }
+
+  /** Prompt 14 platform hooks mirroring the Prisma store (§9/§36–§70). */
+  async validateCloudAccount(): Promise<{ status: string; provider?: string } | null> {
+    if (!["AWS", "AZURE", "GCP"].includes(this.targetType)) return null;
+    if (!this.cloudSecFixtures.accountId) return null;
+    if (!this.cloudSecFixtures.credentialReference) {
+      this.cloudAccountStatus = "NOT_CONFIGURED";
+      return { status: "NOT_CONFIGURED", provider: this.cloudSecFixtures.provider };
+    }
+    this.cloudAccountStatus = "VALIDATED";
+    return { status: "VALIDATED", provider: this.cloudSecFixtures.provider };
+  }
+
+  async analyzeCloudSection(_scanId: string, section: string): Promise<{ findings: number; assessments: number } | null> {
+    if (!["AWS", "AZURE", "GCP"].includes(this.targetType) || !this.cloudSecFixtures.accountId) return null;
+    const resources = this.cloudResources.filter((r) => r.scopeStatus === "IN_SCOPE").map(({ scopeStatus: _s, ...r }) => r);
+    const identities = this.cloudIdentities;
+    if (resources.length === 0 && identities.length === 0) return null;
+    const ctx = {
+      provider: (this.cloudSecFixtures.provider ?? "AWS") as "AWS" | "AZURE" | "GCP",
+      accountId: this.cloudSecFixtures.accountId,
+      accountRef: this.cloudSecFixtures.accountRef ?? "",
+      ...(this.cloudSecFixtures.environment ? { environment: this.cloudSecFixtures.environment } : {}),
+      toolSlug: "cloud-platform-analysis",
+    };
+    let result: { findings: import("@dsrclone/security-sdk").NormalizedFinding[]; controlAssessments: import("@dsrclone/security-sdk").NormalizedControlAssessment[] } | null = null;
+    if (section === "IAM_ANALYSIS") result = analyzeIam(identities, ctx);
+    else if (section === "STORAGE_ANALYSIS") {
+      const a = analyzeStorage(resources, ctx);
+      const b = analyzeDatabases(resources, ctx);
+      result = { findings: [...a.findings, ...b.findings], controlAssessments: [...a.controlAssessments, ...b.controlAssessments] };
+    }
+    else if (section === "NETWORK_ANALYSIS") result = analyzeNetwork(resources, ctx);
+    else if (section === "ENCRYPTION_ANALYSIS") result = analyzeEncryption(resources, ctx);
+    else if (section === "LOGGING_ANALYSIS") result = analyzeLogging(resources, ctx);
+    if (!result) return null;
+    const fresh = result.findings.filter((f) => !this.findings.some((x) => x.fingerprint === f.sourceFingerprint));
+    if (fresh.length > 0) {
+      const processed = processNormalizedResult({
+        assets: [], services: [], endpoints: [], technologies: [], findings: fresh,
+        artifacts: [], metrics: {}, mock: false,
+      }, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-cloud-analysis", toolSlug: "cloud-platform-analysis" });
+      this.findings.push(...processed.findings);
+    }
+    this.controlAssessments.push(...result.controlAssessments.map((a) => ({ ...a })));
+    return { findings: fresh.length, assessments: result.controlAssessments.length };
+  }
+
+  async assessCloudCompliance(): Promise<{ assessed: number; failed: number; drift: number; riskPaths: number } | null> {
+    if (!["AWS", "AZURE", "GCP"].includes(this.targetType) || !this.cloudSecFixtures.accountId) return null;
+    const resources = this.cloudResources.filter((r) => r.scopeStatus === "IN_SCOPE").map(({ scopeStatus: _s, ...r }) => r);
+    const paths = buildCloudRiskPaths({
+      resources, relationships: this.cloudRelationships,
+      findings: (this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings) as never,
+    });
+    for (const p of paths) if (!this.cloudRiskPaths.some((x) => x.title === p.title)) this.cloudRiskPaths.push(p);
+    return {
+      assessed: this.controlAssessments.length,
+      failed: this.controlAssessments.filter((a) => a.status === "FAIL").length,
+      drift: this.cloudDrift.length, riskPaths: paths.length,
+    };
+  }
+
+  async evaluateCloudQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    if (!["AWS", "AZURE", "GCP"].includes(this.targetType)) return null;
+    const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
+    const resources = this.cloudResources.filter((r) => r.scopeStatus === "IN_SCOPE").map(({ scopeStatus: _s, ...r }) => r);
+    const byProviderId = new Map(resources.map((r) => [r.providerResourceId, r]));
+    const result = evaluateCloudSecurityGate({
+      findings: canonical.map((f) => ({
+        severity: f.severity, findingClass: f.findingClass,
+        exposureClass: f.providerResourceId ? byProviderId.get(f.providerResourceId)?.exposure : undefined,
+        resourceType: f.providerResourceId ? byProviderId.get(f.providerResourceId)?.resourceType : f.cloudResourceType,
+        kevListed: false,
+      })),
+      auditLoggingEnabled: auditLoggingEnabled(resources),
+    });
+    this.cloudGateRecord = { status: result.status, failedRules: result.failedRules, warningRules: result.warningRules };
+    return { status: result.status, failedRules: result.failedRules.length, warningRules: result.warningRules.length };
+  }
+
+  async cloudScanProvider(): Promise<string | null> {
+    return this.cloudSecFixtures.provider ?? null;
   }
 
   /** Prompt 10 platform hook mirroring the Prisma store: bounded target

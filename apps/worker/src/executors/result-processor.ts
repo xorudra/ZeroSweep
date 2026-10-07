@@ -1,7 +1,7 @@
 import {
   canonicalizeHostname, canonicalizeUrl, classifyApiKind, classifyEndpointType, computeRisk, correlateFindings as sdkCorrelateFindings,
   correlateSourceFindings, detectCrawlerTrap, detectWildcardGroups,
-  endpointIdentityKey, extractParameterNames, findingFingerprint, redactUrl, sameConfigurationIdentity, sensitiveRouteLabel,
+  endpointIdentityKey, extractParameterNames, findingFingerprint, iacLiveMatchKey, liveMatchKey, redactUrl, sameConfigurationIdentity, sensitiveRouteLabel,
   sourceRiskFactors,
   ScopeMatcher, type CorrelationStats, type DnsRecordSet, type NormalizedFinding,
   type NormalizedSecurityResult, type NormalizedSoftwareComponent, type NormalizedVulnFinding,
@@ -198,10 +198,26 @@ export interface ProcessedFinding {
   controlId?: string;
   packageType?: string;
   layerDigest?: string;
+  /** Prompt 14 §58/§61: multi-cloud identity — provider, account,
+   *  resource and finding class ride along so cloud findings persist
+   *  with their full identity and correlate on cloud fingerprints. */
+  findingClass?: string;
+  cloudProvider?: string;
+  cloudAccountId?: string;
+  providerResourceId?: string;
+  cloudResourceType?: string;
+  cloudRegion?: string;
+  exposureClass?: string;
 }
 
 /** Prompt 12 §45: component inventory passthrough (PURL identity). */
 export type ProcessedComponent = NormalizedSoftwareComponent;
+
+/** Prompt 14 §14/§15: a normalized cloud resource plus its scope
+ *  verdict — out-of-scope resources are recorded, never analyzed. */
+export type ProcessedCloudResource = import("@dsrclone/security-sdk").NormalizedCloudResource & {
+  scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
+};
 
 /** Prompt 8 §25/§26: observed HTTP traffic — metadata, hashes, sizes,
  *  artifact references and REDACTED display copies. Raw bodies never
@@ -286,6 +302,16 @@ export interface ProcessedResult {
   components: ProcessedComponent[];
   /** Prompt 13: cloud-native inventory + posture payload passthrough. */
   cloudNative: import("@dsrclone/security-sdk").NormalizedCloudNativeData;
+  /** Prompt 14: multi-cloud inventory payload passthrough — resources
+   *  carry their scope verdict (§15); the stores persist them. */
+  cloud: {
+    resources: ProcessedCloudResource[];
+    identities: import("@dsrclone/security-sdk").NormalizedCloudIdentity[];
+    relationships: import("@dsrclone/security-sdk").NormalizedCloudRelationship[];
+    controlAssessments: import("@dsrclone/security-sdk").NormalizedControlAssessment[];
+    riskPaths: import("@dsrclone/security-sdk").NormalizedCloudRiskPath[];
+    snapshot?: import("@dsrclone/security-sdk").NormalizedCloudSnapshot;
+  };
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -586,6 +612,14 @@ export function processNormalizedResult(
       ...(f.controlId ? { controlId: f.controlId } : {}),
       ...(f.packageType ? { packageType: f.packageType } : {}),
       ...(f.layerDigest ? { layerDigest: f.layerDigest } : {}),
+      // Prompt 14 passthrough (§58/§61): cloud identity fields.
+      ...(f.findingClass ? { findingClass: f.findingClass } : {}),
+      ...(f.cloudProvider ? { cloudProvider: f.cloudProvider } : {}),
+      ...(f.cloudAccountId ? { cloudAccountId: f.cloudAccountId } : {}),
+      ...(f.providerResourceId ? { providerResourceId: f.providerResourceId } : {}),
+      ...(f.cloudResourceType ? { cloudResourceType: f.cloudResourceType } : {}),
+      ...(f.cloudRegion ? { cloudRegion: f.cloudRegion } : {}),
+      ...(f.exposureClass ? { exposureClass: f.exposureClass } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -720,7 +754,22 @@ export function processNormalizedResult(
     images: [], workloads: [], controlAssessments: [], manifests: [], runtimeEvents: [],
   };
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, suppressedEndpoints, isMock: result.mock };
+  // --- multi-cloud payload (Prompt 14 §14/§15): resources pass
+  //     through with identity + scope verdict intact; out-of-scope
+  //     resources are recorded with their verdict, never analyzed.
+  const cloud: ProcessedResult["cloud"] = {
+    resources: [
+      ...(result.cloud?.resources ?? []).map((r) => ({ ...r, scopeStatus: "IN_SCOPE" as const })),
+      ...(result.cloud?.outOfScopeResources ?? []).map((r) => ({ ...r, scopeStatus: "OUT_OF_SCOPE" as const })),
+    ],
+    identities: result.cloud?.identities ?? [],
+    relationships: result.cloud?.relationships ?? [],
+    controlAssessments: result.cloud?.controlAssessments ?? [],
+    riskPaths: result.cloud?.riskPaths ?? [],
+    ...(result.cloud?.snapshot ? { snapshot: result.cloud.snapshot } : {}),
+  };
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original
@@ -775,6 +824,20 @@ export function isCloudNativeFinding(f: ProcessedFinding): boolean {
   return f.origin !== undefined;
 }
 
+/** Prompt 14 §62: an IaC (Checkov) observation and a LIVE cloud
+ *  observation describe the same issue when the governed rule mapping
+ *  connects them AND the resource identity matches reliably (the IaC
+ *  resource name equals the deployed resource name). Unmapped rules
+ *  and unmatched names never merge — correlation stays conservative. */
+export function sameIacLiveIdentity(a: ProcessedFinding, b: ProcessedFinding): boolean {
+  const iac = a.origin === "STATIC_CONFIGURATION_FINDING" ? a : b.origin === "STATIC_CONFIGURATION_FINDING" ? b : null;
+  const live = iac === a ? b : a;
+  if (!iac || live.origin !== "CLOUD_FINDING") return false;
+  const iacKey = iacLiveMatchKey({ ruleId: iac.ruleId, resourceName: iac.resourceName });
+  const liveKey = liveMatchKey({ ruleId: live.ruleId, resourceName: live.resourceName });
+  return iacKey !== null && iacKey === liveKey;
+}
+
 function correlateCloudProcessed(
   findings: ProcessedFinding[],
 ): { findings: ProcessedFinding[]; stats: CorrelationStats } {
@@ -793,7 +856,7 @@ function correlateCloudProcessed(
       if (consumed.has(j)) continue;
       const a = group[0]!;
       const b = groupList[j]![0]!;
-      if (a.origin !== b.origin && sameConfigurationIdentity(a, b)) {
+      if (a.origin !== b.origin && (sameConfigurationIdentity(a, b) || sameIacLiveIdentity(a, b))) {
         group.push(...groupList[j]!);
         consumed.add(j);
       }

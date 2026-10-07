@@ -1,5 +1,5 @@
 import {
-  API_SLUGS, CLOUD_NATIVE_SLUGS, CODE_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  API_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
   approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
@@ -24,7 +24,12 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS] as const;
+
+/** Prompt 14 §10/§21: cloud connectors resolve a registered account
+ *  through the store context — they never take an endpoint or a
+ *  credential from anywhere else. */
+export const CLOUD_CONNECTOR_SLUGS = ["aws-inventory", "azure-inventory", "gcp-inventory", "cloudmapper", "roadtools"] as const;
 
 /** Slugs whose execution requires the worker to hold the local layer-2
  *  capability (Prompt 10 §65) — meaningless and denied anywhere else. */
@@ -105,6 +110,20 @@ export interface ExecutionContextRecord {
     clusterId?: string;
     clusterRef?: string;
     hostRef?: string;
+  };
+  /** Prompt 14: the scan's multi-cloud context, resolved by the STORE
+   *  from the registered CloudAccount row — account id, provider,
+   *  provider-side reference, credential REFERENCE name (never a
+   *  value) and the account scope's regions. Never client input (§10). */
+  cloud?: {
+    accountId?: string;
+    accountRef?: string;
+    provider?: string;
+    credentialReference?: string;
+    regions?: string[];
+    excludeRegions?: string[];
+    environment?: string;
+    queryPack?: string;
   };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
@@ -232,6 +251,23 @@ export class StageExecutor {
       if (isK8sConnector && !ctx.cloudNative?.clusterId) {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
         await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no Kubernetes cluster is registered for this scan (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      // Prompt 14 gates (§9/§10): cloud adapters run ONLY on
+      // CLOUD_ANALYSIS workers (cloud credentials are issued only
+      // there), and cloud connectors additionally require the store to
+      // have resolved a registered account for this scan — absent =
+      // NOT_CONFIGURED → TOOL_UNAVAILABLE, never a fabricated run.
+      const isCloudSecAdapter = (CLOUD_SEC_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      const isCloudConnector = (CLOUD_CONNECTOR_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      if (isCloudSecAdapter && !this.workerCapabilities.includes("CLOUD_ANALYSIS")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: cloud assessment runs only on CLOUD_ANALYSIS workers (§10) — this worker does not hold CLOUD_ANALYSIS`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (isCloudConnector && !ctx.cloud?.accountId) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no cloud account is registered for this scan (NOT_CONFIGURED)`);
         return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
       }
       if ((PRIVILEGED_CLOUD_SLUGS as readonly string[]).includes(ctx.adapterSlug)
@@ -458,6 +494,24 @@ export class StageExecutor {
           config.inventoryMode = ctx.stageId === "CLUSTER_INVENTORY" ? "CLUSTER_INVENTORY" : "POSTURE_ASSESSMENT";
         }
       }
+      // Prompt 14 derived configuration — worker-computed from the
+      // scan's cloud account context (store-resolved), never client
+      // input (§10): account id + provider-side reference + provider,
+      // the credential REFERENCE name (the value is resolved inside
+      // this worker boundary only, §6/§11), the account scope regions,
+      // and the governed Steampipe pack when the scan selected one.
+      if ((CLOUD_SEC_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        const cloudCtx = ctx.cloud;
+        if (cloudCtx) {
+          if (declared.has("cloudAccountId") && cloudCtx.accountId) config.cloudAccountId = cloudCtx.accountId;
+          if (declared.has("cloudAccountRef") && cloudCtx.accountRef) config.cloudAccountRef = cloudCtx.accountRef;
+          if (declared.has("cloudProvider") && cloudCtx.provider) config.cloudProvider = cloudCtx.provider;
+          if (declared.has("credentialReference") && cloudCtx.credentialReference) config.credentialReference = cloudCtx.credentialReference;
+          if (declared.has("regions") && (cloudCtx.regions?.length ?? 0) > 0) config.regions = cloudCtx.regions;
+          if (declared.has("excludeRegions") && (cloudCtx.excludeRegions?.length ?? 0) > 0) config.excludeRegions = cloudCtx.excludeRegions;
+          if (declared.has("queryPack") && cloudCtx.queryPack) config.queryPack = cloudCtx.queryPack;
+        }
+      }
       const plan = await adapter.buildExecutionPlan(target, config);
 
       const timeoutMs = ctx.simulation?.failWith === "TIMEOUT"
@@ -576,6 +630,16 @@ export class StageExecutor {
       if (isK8sConnector) {
         await emit("kubernetes.posture_assessed", { stageId: ctx.stageId, tool: ctx.adapterSlug, workloads: processed.cloudNative.workloads.length });
       }
+      // Prompt 14 §103-adjacent scan events — counts/ids only, never
+      // credentials, never configuration payloads.
+      if (processed.cloud.resources.length > 0) {
+        await emit("cloud.inventory_recorded", { stageId: ctx.stageId, tool: ctx.adapterSlug, resources: processed.cloud.resources.filter((r) => r.scopeStatus === "IN_SCOPE").length, identities: processed.cloud.identities.length, outOfScope: processed.cloud.resources.filter((r) => r.scopeStatus === "OUT_OF_SCOPE").length });
+        const exposed = processed.cloud.resources.filter((r) => r.exposure === "PUBLIC");
+        if (exposed.length > 0) await emit("cloud.public_exposure_detected", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: exposed.length });
+      }
+      if (processed.cloud.controlAssessments.length > 0) {
+        await emit("cloud.compliance_assessed", { stageId: ctx.stageId, tool: ctx.adapterSlug, count: processed.cloud.controlAssessments.length, failed: processed.cloud.controlAssessments.filter((a) => a.status === "FAIL").length });
+      }
 
       await this.store.updateExecution(ctx.executionId, {
         status: "COMPLETED", completedAt: new Date(), exitCode: 0,
@@ -596,6 +660,9 @@ export class StageExecutor {
           workloads: processed.cloudNative.workloads.length,
           controlAssessments: processed.cloudNative.controlAssessments.length,
           runtimeEvents: processed.cloudNative.runtimeEvents.length,
+          cloudResources: processed.cloud.resources.length,
+          cloudIdentities: processed.cloud.identities.length,
+          cloudRelationships: processed.cloud.relationships.length,
           suppressedEndpoints: processed.suppressedEndpoints,
           ...(templateSelection ? { templateSnapshot: templateSelection.snapshot, templatesSelected: templateSelection.selected } : {}),
           ...(nseSelection ? { nseSnapshot: nseSelection.snapshot, nseScriptsSelected: nseSelection.selected } : {}),

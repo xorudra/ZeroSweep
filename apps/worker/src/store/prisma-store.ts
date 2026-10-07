@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planRetest, summarizeForQualityGate, type CvssRecord,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, type CvssRecord, type NormalizedCloudIdentity, type NormalizedCloudResource,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
@@ -14,6 +14,15 @@ import { correlateProcessedFindings, type ProcessedFinding, type ProcessedResult
  * from the database (Prompt 4 §14) — queue payloads carry IDs only, so
  * nothing in Redis is ever trusted for authorization, scope or tenancy.
  */
+
+/** Prompt 14: fold several section analyzers into one result (the
+ *  STORAGE_ANALYSIS stage covers storage + database engines, §43/§45). */
+function mergeSections<T extends { findings: unknown[]; controlAssessments: unknown[] }>(parts: T[]): { findings: T["findings"]; controlAssessments: T["controlAssessments"] } {
+  return {
+    findings: parts.flatMap((p) => p.findings) as T["findings"],
+    controlAssessments: parts.flatMap((p) => p.controlAssessments) as T["controlAssessments"],
+  };
+}
 
 function hostOf(value: string): string {
   try {
@@ -88,6 +97,10 @@ export class PrismaWorkerStore implements ScanRunStore {
       // Prompt 13 (§12): cloud-native context resolved from image /
       // cluster / Docker host rows — references only, never credentials.
       cloudNative: await this.loadCloudContext(graph.workspaceId, target.id, target.type, target.value),
+      // Prompt 14 (§10): multi-cloud context resolved from the
+      // registered CloudAccount row — the credential REFERENCE name
+      // only; the value is resolved inside the CLOUD_ANALYSIS worker.
+      cloud: await this.loadCloudAccountContext(graph.workspaceId, target.id, target.type),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -154,6 +167,30 @@ export class PrismaWorkerStore implements ScanRunStore {
       return undefined;
     }
     return undefined;
+  }
+
+  /** Prompt 14: multi-cloud context for a scan's target — the
+   *  registered CloudAccount (id, provider, provider-side reference,
+   *  credential REFERENCE name, account scope regions). An account
+   *  that is not registered yields an empty context and the executor
+   *  denies cloud connectors as NOT_CONFIGURED (§9). */
+  private async loadCloudAccountContext(workspaceId: string, targetId: string, targetType: string): Promise<ExecutionContextRecord["cloud"]> {
+    if (!["AWS", "AZURE", "GCP"].includes(targetType)) return undefined;
+    const account = await prisma.cloudAccount.findFirst({
+      where: { workspaceId, targetId },
+      include: { scopes: { orderBy: { createdAt: "asc" }, take: 1 } },
+    });
+    if (!account) return {};
+    const scope = account.scopes[0];
+    return {
+      accountId: account.id,
+      accountRef: account.externalAccountId,
+      provider: account.provider,
+      ...(account.credentialReference ? { credentialReference: account.credentialReference } : {}),
+      regions: scope?.includeRegions ?? [],
+      excludeRegions: scope?.excludeRegions ?? [],
+      environment: account.environment,
+    };
   }
 
   /** Prompt 10 §45: latest packet-capture artifact reference for a scan. */
@@ -424,6 +461,155 @@ export class PrismaWorkerStore implements ScanRunStore {
       }
       forms++;
     }
+    // ── Prompt 14 multi-cloud payloads (§14/§15/§19/§20/§64) ──
+    // Resources persist as BOTH asset rows (provider resource id is
+    // the asset identity) and CloudResource rows; a full-inventory
+    // result (snapshot present) drives drift: changed exposure /
+    // encryption / logging and disappeared resources become drift
+    // events, and disappeared resources are marked NOT_SEEN — never
+    // deleted (§20). Out-of-scope resources persist with their
+    // verdict and are never analyzed (§15).
+    const cloudResourceRowByProviderId = new Map<string, string>();
+    const cloudAccountRow = (processed.cloud.resources.length > 0 || processed.cloud.identities.length > 0 || processed.cloud.snapshot)
+      ? await prisma.cloudAccount.findFirst({ where: { workspaceId: scan.workspaceId, targetId: scan.assessment.targetId } })
+      : null;
+    if (cloudAccountRow) {
+      const account = cloudAccountRow;
+      const fullInventory = !!processed.cloud.snapshot;
+      const existingResources = fullInventory ? await prisma.cloudResource.findMany({ where: { cloudAccountId: account.id } }) : [];
+      const existingByProviderId = new Map(existingResources.map((r) => [r.providerResourceId, r]));
+      const seenProviderIds = new Set<string>();
+      for (const r of processed.cloud.resources) {
+        seenProviderIds.add(r.providerResourceId);
+        let assetId = assetIdByHost.get(r.providerResourceId);
+        if (!assetId) {
+          const existingAsset = await prisma.asset.findFirst({ where: { targetId: scan.assessment.targetId, host: r.providerResourceId } });
+          const row = existingAsset
+            ? await prisma.asset.update({ where: { id: existingAsset.id }, data: { scopeStatus: r.scopeStatus, lastSeen: new Date(), sources: [...new Set([...existingAsset.sources, r.source])] } })
+            : await prisma.asset.create({
+                data: {
+                  workspaceId: scan.workspaceId, targetId: scan.assessment.targetId, host: r.providerResourceId,
+                  type: r.resourceType, scopeStatus: r.scopeStatus, sources: [r.source], discoveredByScanId: scanId,
+                },
+              });
+          assetId = row.id;
+          assetIdByHost.set(r.providerResourceId, assetId);
+        }
+        const prev = existingByProviderId.get(r.providerResourceId);
+        const row = await prisma.cloudResource.upsert({
+          where: { cloudAccountId_providerResourceId: { cloudAccountId: account.id, providerResourceId: r.providerResourceId } },
+          create: {
+            workspaceId: scan.workspaceId, cloudAccountId: account.id, provider: account.provider as never,
+            resourceType: r.resourceType, providerResourceId: r.providerResourceId, name: r.name,
+            region: r.region, zone: r.zone, tags: r.tags as never,
+            configurationMetadata: r.configuration as never, exposure: r.exposure,
+            criticality: r.criticality ?? "UNSPECIFIED", status: "ACTIVE", scopeStatus: r.scopeStatus,
+            sources: [r.source],
+          },
+          update: {
+            name: r.name, region: r.region, zone: r.zone, tags: r.tags as never,
+            configurationMetadata: r.configuration as never, exposure: r.exposure,
+            status: "ACTIVE", scopeStatus: r.scopeStatus, lastSeen: new Date(),
+            sources: [...new Set([...(prev?.sources ?? []), r.source])],
+          },
+        });
+        cloudResourceRowByProviderId.set(r.providerResourceId, row.id);
+        if (fullInventory && prev && prev.status === "ACTIVE" && r.scopeStatus === "IN_SCOPE") {
+          const prevCfg = (prev.configurationMetadata ?? {}) as Record<string, unknown>;
+          const drift = (kind: string, detail: string) => prisma.cloudDriftEvent.create({
+            data: { workspaceId: scan.workspaceId, cloudAccountId: account.id, scanId, kind, resourceRef: r.providerResourceId, detail },
+          });
+          if (prev.exposure !== r.exposure) await drift("EXPOSURE_CHANGED", `exposure ${prev.exposure} → ${r.exposure}`);
+          if (JSON.stringify(prevCfg.encryption ?? null) !== JSON.stringify(r.configuration.encryption ?? null)) await drift("ENCRYPTION_CHANGED", "encryption configuration changed");
+          if (JSON.stringify(prevCfg.logging ?? prevCfg.enabled ?? null) !== JSON.stringify(r.configuration.logging ?? r.configuration.enabled ?? null)) await drift("LOGGING_CHANGED", "logging configuration changed");
+        }
+      }
+      if (fullInventory) {
+        for (const prev of existingResources) {
+          if (prev.status === "ACTIVE" && !seenProviderIds.has(prev.providerResourceId)) {
+            await prisma.cloudResource.update({ where: { id: prev.id }, data: { status: "NOT_SEEN" } });
+            await prisma.cloudDriftEvent.create({
+              data: {
+                workspaceId: scan.workspaceId, cloudAccountId: account.id, scanId, kind: "RESOURCE_REMOVED",
+                resourceRef: prev.providerResourceId,
+                detail: `${prev.resourceType} ${prev.name} no longer in inventory — marked NOT_SEEN, history retained (§20)`,
+              },
+            });
+          }
+        }
+        await prisma.cloudAccount.update({ where: { id: account.id }, data: { lastInventoryAt: new Date(), lastAssessmentAt: new Date() } });
+        if (processed.cloud.snapshot) {
+          const existingSnap = await prisma.cloudInventorySnapshot.findFirst({ where: { cloudAccountId: account.id, scanId } });
+          if (!existingSnap) {
+            await prisma.cloudInventorySnapshot.create({
+              data: {
+                workspaceId: scan.workspaceId, cloudAccountId: account.id, scanId,
+                provider: account.provider as never, regions: processed.cloud.snapshot.regions,
+                resourceCounts: processed.cloud.snapshot.resourceCounts as never,
+                snapshotHash: processed.cloud.snapshot.snapshotHash,
+              },
+            });
+          }
+        }
+      }
+      for (const i of processed.cloud.identities) {
+        if (!i.providerIdentityId) continue;
+        const prev = fullInventory
+          ? await prisma.cloudIdentity.findUnique({ where: { cloudAccountId_providerIdentityId: { cloudAccountId: account.id, providerIdentityId: i.providerIdentityId } } })
+          : null;
+        await prisma.cloudIdentity.upsert({
+          where: { cloudAccountId_providerIdentityId: { cloudAccountId: account.id, providerIdentityId: i.providerIdentityId } },
+          create: {
+            workspaceId: scan.workspaceId, cloudAccountId: account.id, provider: account.provider as never,
+            identityType: i.identityType, providerIdentityId: i.providerIdentityId, name: i.name,
+            privileged: i.privileged ?? false, privilegeEvidence: (i.privilegeEvidence ?? undefined) as never,
+            mfaEnabled: i.mfaEnabled,
+            ...(i.lastUsedAt ? { lastUsedAt: new Date(i.lastUsedAt) } : {}),
+            ...(i.lastSignInAt ? { lastSignInAt: new Date(i.lastSignInAt) } : {}),
+            keyAgeDays: i.keyAgeDays, metadata: i.metadata as never,
+          },
+          update: {
+            name: i.name, privileged: i.privileged ?? false,
+            privilegeEvidence: (i.privilegeEvidence ?? undefined) as never, mfaEnabled: i.mfaEnabled,
+            ...(i.lastUsedAt ? { lastUsedAt: new Date(i.lastUsedAt) } : {}),
+            keyAgeDays: i.keyAgeDays, metadata: i.metadata as never, lastSeen: new Date(),
+          },
+        });
+        if (fullInventory && prev && prev.privileged !== (i.privileged ?? false)) {
+          await prisma.cloudDriftEvent.create({
+            data: {
+              workspaceId: scan.workspaceId, cloudAccountId: account.id, scanId, kind: "IAM_CHANGED",
+              resourceRef: i.providerIdentityId,
+              detail: `identity ${i.name} privilege ${String(prev.privileged)} → ${String(i.privileged ?? false)}`,
+            },
+          });
+        }
+      }
+      for (const rel of processed.cloud.relationships) {
+        await prisma.cloudRelationship.upsert({
+          where: {
+            cloudAccountId_fromType_fromRef_relationship_toType_toRef: {
+              cloudAccountId: account.id, fromType: rel.fromType, fromRef: rel.fromRef,
+              relationship: rel.relationship, toType: rel.toType, toRef: rel.toRef,
+            },
+          },
+          create: {
+            workspaceId: scan.workspaceId, cloudAccountId: account.id,
+            fromType: rel.fromType, fromRef: rel.fromRef, toType: rel.toType, toRef: rel.toRef,
+            relationship: rel.relationship, evidence: rel.evidence,
+          },
+          update: { evidence: rel.evidence, lastSeen: new Date() },
+        });
+      }
+      for (const a of processed.cloud.controlAssessments) {
+        await prisma.controlAssessment.create({
+          data: {
+            workspaceId: scan.workspaceId, scanId, frameworkKey: a.frameworkKey, controlId: a.controlId,
+            subjectRef: a.subjectRef, status: a.status as never, evidence: a.evidence,
+          },
+        });
+      }
+    }
     // Prompt 12: the scan's source context (repository + snapshot) for
     // attaching code locations, secret metadata and components.
     const sourceCtx = processed.findings.some((f) => f.filePath || f.componentPurl || f.secret) || processed.components.length > 0
@@ -465,6 +651,13 @@ export class PrismaWorkerStore implements ScanRunStore {
           clusterRef: f.clusterRef, namespace: f.namespace,
           resourceKind: f.resourceKind, resourceName: f.resourceName,
           containerName: f.containerName, controlId: f.controlId,
+          // Prompt 14 (§58/§61): multi-cloud identity — provider,
+          // account, resource row (resolved from the payload above),
+          // provider resource id, region and finding class.
+          cloudProvider: f.cloudProvider, cloudAccountId: f.cloudAccountId ?? cloudAccountRow?.id,
+          cloudResourceId: f.providerResourceId ? cloudResourceRowByProviderId.get(f.providerResourceId) : undefined,
+          providerResourceId: f.providerResourceId, cloudRegion: f.cloudRegion,
+          findingClass: f.findingClass,
           ...(f.secret ? {
             secretMetadata: {
               create: {
@@ -1070,6 +1263,228 @@ export class PrismaWorkerStore implements ScanRunStore {
     return { status: result.status, failedRules: result.failedRules.length, warningRules: result.warningRules.length };
   }
 
+  // ---------- Prompt 14 multi-cloud platform hooks (§9/§36–§70) ----------
+
+  /** CLOUD_AUTH (§9–§11): validate the scan's registered account and
+   *  issue the job-scoped credential lease. An account without a
+   *  credential reference cannot be validated against anything — it
+   *  reports NOT_CONFIGURED and the runner fails the scan honestly.
+   *  The lease records the reference NAME + lifecycle only (§100). */
+  async validateCloudAccount(scanId: string): Promise<{ status: string; provider?: string } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    if (!["AWS", "AZURE", "GCP"].includes(graph.assessment.target.type)) return null;
+    const account = await prisma.cloudAccount.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    if (!account) return null;
+    if (!account.credentialReference) {
+      await prisma.cloudAccount.update({ where: { id: account.id }, data: { status: "NOT_CONFIGURED" } });
+      return { status: "NOT_CONFIGURED", provider: account.provider };
+    }
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+    await prisma.credentialLease.create({
+      data: {
+        workspaceId: graph.workspaceId, cloudAccountId: account.id, scanId,
+        credentialReference: account.credentialReference, purpose: "CLOUD_ASSESSMENT",
+        status: "ISSUED", expiresAt,
+      },
+    });
+    await prisma.cloudAccount.update({ where: { id: account.id }, data: { status: "VALIDATED" } });
+    await prisma.auditLog.create({
+      data: {
+        actorId: graph.requestedBy, organizationId: graph.workspace.organizationId, workspaceId: graph.workspaceId,
+        action: "CLOUD_CREDENTIAL_VALIDATED" as never, resourceType: "CLOUD_ACCOUNT", resourceId: account.id,
+        metadata: { scanId, provider: account.provider } as never,
+      },
+    });
+    return { status: "VALIDATED", provider: account.provider };
+  }
+
+  /** Section analysis (§36–§57): run ONE deterministic analyzer over
+   *  the scan account's persisted IN_SCOPE inventory and persist its
+   *  findings + control assessments. Findings already present in this
+   *  scan (same cloud fingerprint — e.g. produced by a CSPM tool) are
+   *  skipped here; correlation merges the observations (§60). */
+  async analyzeCloudSection(scanId: string, section: string): Promise<{ findings: number; assessments: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const account = await prisma.cloudAccount.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    if (!account) return null;
+    const [resourceRows, identityRows] = await Promise.all([
+      prisma.cloudResource.findMany({ where: { cloudAccountId: account.id, scopeStatus: "IN_SCOPE", status: "ACTIVE" } }),
+      prisma.cloudIdentity.findMany({ where: { cloudAccountId: account.id } }),
+    ]);
+    if (resourceRows.length === 0 && identityRows.length === 0) return null;
+    const resources: NormalizedCloudResource[] = resourceRows.map((r) => ({
+      provider: account.provider as NormalizedCloudResource["provider"],
+      resourceType: r.resourceType, providerResourceId: r.providerResourceId, name: r.name,
+      ...(r.region ? { region: r.region } : {}), ...(r.zone ? { zone: r.zone } : {}),
+      tags: (r.tags ?? {}) as Record<string, string>,
+      configuration: (r.configurationMetadata ?? {}) as Record<string, unknown>,
+      exposure: r.exposure as NormalizedCloudResource["exposure"],
+      source: "persisted-inventory",
+    }));
+    const identities: NormalizedCloudIdentity[] = identityRows.map((i) => ({
+      provider: account.provider as NormalizedCloudIdentity["provider"],
+      identityType: i.identityType as NormalizedCloudIdentity["identityType"],
+      providerIdentityId: i.providerIdentityId, name: i.name,
+      privileged: i.privileged,
+      ...(i.privilegeEvidence ? { privilegeEvidence: i.privilegeEvidence as Record<string, unknown> } : {}),
+      ...(i.mfaEnabled !== null && i.mfaEnabled !== undefined ? { mfaEnabled: i.mfaEnabled } : {}),
+      ...(i.lastUsedAt ? { lastUsedAt: i.lastUsedAt.toISOString() } : {}),
+      ...(i.lastSignInAt ? { lastSignInAt: i.lastSignInAt.toISOString() } : {}),
+      ...(i.keyAgeDays ? { keyAgeDays: i.keyAgeDays } : {}),
+      metadata: (i.metadata ?? {}) as Record<string, unknown>,
+    }));
+    const ctx = {
+      provider: account.provider as "AWS" | "AZURE" | "GCP",
+      accountId: account.id, accountRef: account.externalAccountId,
+      ...(account.environment ? { environment: account.environment } : {}),
+      toolSlug: "cloud-platform-analysis",
+    };
+    const result =
+      section === "IAM_ANALYSIS" ? analyzeIam(identities, ctx)
+      : section === "STORAGE_ANALYSIS" ? mergeSections([analyzeStorage(resources, ctx), analyzeDatabases(resources, ctx)])
+      : section === "NETWORK_ANALYSIS" ? analyzeNetwork(resources, ctx)
+      : section === "ENCRYPTION_ANALYSIS" ? analyzeEncryption(resources, ctx)
+      : section === "LOGGING_ANALYSIS" ? analyzeLogging(resources, ctx)
+      : null;
+    if (!result) return null;
+    const resourceRowByProviderId = new Map(resourceRows.map((r) => [r.providerResourceId, r.id]));
+    let created = 0;
+    for (const f of result.findings) {
+      const existing = await prisma.finding.findFirst({ where: { scanId, fingerprint: f.sourceFingerprint } });
+      if (existing) continue;
+      await prisma.finding.create({
+        data: {
+          workspaceId: graph.workspaceId, scanId,
+          title: f.title, description: f.description, severity: f.severity as never, confidence: f.confidence,
+          fingerprint: f.sourceFingerprint, isMock: false, status: "OPEN", verificationStatus: "UNVERIFIED",
+          sources: [f.sourceTool], ruleId: f.ruleId, controlId: f.controlId, remediation: f.remediation,
+          origin: f.origin, findingClass: f.findingClass, cloudProvider: f.cloudProvider,
+          cloudAccountId: account.id,
+          cloudResourceId: f.providerResourceId ? resourceRowByProviderId.get(f.providerResourceId) : undefined,
+          providerResourceId: f.providerResourceId, cloudRegion: f.cloudRegion,
+          evidence: { create: { sourceTool: f.sourceTool, evidenceType: "TEXT", summary: f.evidence ?? "", fingerprint: f.sourceFingerprint } },
+          history: { create: { workspaceId: graph.workspaceId, event: "CREATED", metadata: { sourceTool: f.sourceTool, stage: section } as never } },
+        },
+      });
+      created++;
+    }
+    for (const a of result.controlAssessments) {
+      await prisma.controlAssessment.create({
+        data: {
+          workspaceId: graph.workspaceId, scanId, frameworkKey: a.frameworkKey, controlId: a.controlId,
+          subjectRef: a.subjectRef, status: a.status as never, evidence: a.evidence,
+        },
+      });
+    }
+    return { findings: created, assessments: result.controlAssessments.length };
+  }
+
+  /** CLOUD_COMPLIANCE (§63–§68): assemble the compliance picture —
+   *  control assessments already recorded for this scan, drift events
+   *  recorded at inventory time, and defensive risk paths built from
+   *  evidence-backed graph edges (§66). PASS is evidence only; the
+   *  platform never claims certification (§68). */
+  async assessCloudCompliance(scanId: string): Promise<{ assessed: number; failed: number; drift: number; riskPaths: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const account = await prisma.cloudAccount.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    if (!account) return null;
+    const [assessments, driftCount, resourceRows, relationshipRows, findingRows] = await Promise.all([
+      prisma.controlAssessment.findMany({ where: { scanId } }),
+      prisma.cloudDriftEvent.count({ where: { cloudAccountId: account.id, scanId } }),
+      prisma.cloudResource.findMany({ where: { cloudAccountId: account.id, scopeStatus: "IN_SCOPE", status: "ACTIVE" } }),
+      prisma.cloudRelationship.findMany({ where: { cloudAccountId: account.id } }),
+      prisma.finding.findMany({ where: { scanId, duplicateOfId: null }, select: { id: true, fingerprint: true, providerResourceId: true } }),
+    ]);
+    const resources: NormalizedCloudResource[] = resourceRows.map((r) => ({
+      provider: account.provider as NormalizedCloudResource["provider"],
+      resourceType: r.resourceType, providerResourceId: r.providerResourceId, name: r.name,
+      ...(r.region ? { region: r.region } : {}),
+      tags: (r.tags ?? {}) as Record<string, string>,
+      configuration: (r.configurationMetadata ?? {}) as Record<string, unknown>,
+      exposure: r.exposure as NormalizedCloudResource["exposure"], source: "persisted-inventory",
+    }));
+    const paths = buildCloudRiskPaths({
+      resources,
+      relationships: relationshipRows.map((r) => ({
+        fromType: r.fromType, fromRef: r.fromRef, toType: r.toType, toRef: r.toRef,
+        relationship: r.relationship, ...(r.evidence ? { evidence: r.evidence } : {}),
+      })),
+      findings: findingRows.map((f) => ({
+        title: "", description: "", severity: "LOW" as const, confidence: 0, references: [], sourceTool: "cloud",
+        sourceFingerprint: f.fingerprint ?? f.id, providerResourceId: f.providerResourceId ?? undefined,
+      })),
+    });
+    let riskPaths = 0;
+    for (const p of paths) {
+      const existing = await prisma.cloudRiskPath.findFirst({ where: { cloudAccountId: account.id, scanId, title: p.title } });
+      if (existing) continue;
+      const findingIds = findingRows.filter((f) => p.findingFingerprints.includes(f.fingerprint ?? "")).map((f) => f.id);
+      await prisma.cloudRiskPath.create({
+        data: {
+          workspaceId: graph.workspaceId, cloudAccountId: account.id, scanId,
+          title: p.title, steps: p.steps as never, confidence: p.confidence, findingIds,
+        },
+      });
+      riskPaths++;
+    }
+    await prisma.cloudAccount.update({ where: { id: account.id }, data: { lastAssessmentAt: new Date() } });
+    return {
+      assessed: assessments.length,
+      failed: assessments.filter((a) => a.status === "FAIL").length,
+      drift: driftCount, riskPaths,
+    };
+  }
+
+  /** QUALITY_GATE for cloud scans (§70): the cloud gate over the
+   *  scan's canonical findings + observed audit-logging state. A
+   *  failed gate is a recorded RESULT, never a pipeline failure. */
+  async evaluateCloudQualityGate(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    if (!["AWS", "AZURE", "GCP"].includes(graph.assessment.target.type)) return null;
+    const account = await prisma.cloudAccount.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    if (!account) return null;
+    const [rows, resourceRows] = await Promise.all([
+      prisma.finding.findMany({ where: { scanId, duplicateOfId: null } }),
+      prisma.cloudResource.findMany({ where: { cloudAccountId: account.id, scopeStatus: "IN_SCOPE", status: "ACTIVE" } }),
+    ]);
+    const resourceByProviderId = new Map(resourceRows.map((r) => [r.providerResourceId, r]));
+    const result = evaluateCloudSecurityGate({
+      findings: rows.map((r) => ({
+        severity: r.severity, findingClass: r.findingClass ?? undefined,
+        exposureClass: (r.providerResourceId ? resourceByProviderId.get(r.providerResourceId)?.exposure : undefined) as never,
+        resourceType: r.providerResourceId ? resourceByProviderId.get(r.providerResourceId)?.resourceType : undefined,
+        kevListed: r.kevListed,
+      })),
+      auditLoggingEnabled: auditLoggingEnabled(resourceRows.map((r) => ({
+        provider: account.provider as NormalizedCloudResource["provider"],
+        resourceType: r.resourceType, providerResourceId: r.providerResourceId, name: r.name,
+        tags: {}, configuration: (r.configurationMetadata ?? {}) as Record<string, unknown>,
+        exposure: r.exposure as NormalizedCloudResource["exposure"], source: "persisted-inventory",
+      }))),
+    });
+    await prisma.qualityGateResult.create({
+      data: {
+        scanId, status: result.status as never, policyVersion: "cloud-gate-v1",
+        failedRules: result.failedRules as never, warningRules: result.warningRules as never,
+        summary: result as never,
+      },
+    });
+    return { status: result.status, failedRules: result.failedRules.length, warningRules: result.warningRules.length };
+  }
+
+  /** Prompt 14: the CLOUD_INVENTORY stage narrows its connector
+   *  candidates to the registered account's provider (§16–§18). */
+  async cloudScanProvider(scanId: string): Promise<string | null> {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment) return null;
+    const account = await prisma.cloudAccount.findFirst({ where: { workspaceId: graph.workspaceId, targetId: graph.assessment.targetId } });
+    return account?.provider ?? null;
+  }
+
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
   async summarizeFindings(scanId: string): Promise<Record<string, unknown> | null> {
     const rows = await prisma.finding.findMany({ where: { scanId }, select: { severity: true } });
@@ -1122,6 +1537,12 @@ export class PrismaWorkerStore implements ScanRunStore {
       clusterRef: r.clusterRef ?? undefined, namespace: r.namespace ?? undefined,
       resourceKind: r.resourceKind ?? undefined, resourceName: r.resourceName ?? undefined,
       containerName: r.containerName ?? undefined, controlId: r.controlId ?? undefined,
+      // Prompt 14: cloud fields ride along so cloud findings route to
+      // the cloud correlation partition with cloud fingerprints (§61)
+      // and IaC/live identity (§62) intact.
+      findingClass: r.findingClass ?? undefined, cloudProvider: r.cloudProvider ?? undefined,
+      cloudAccountId: r.cloudAccountId ?? undefined, providerResourceId: r.providerResourceId ?? undefined,
+      cloudRegion: r.cloudRegion ?? undefined,
       ...(r.secretMetadata ? {
         secret: {
           secretType: r.secretMetadata.secretType,
@@ -1275,7 +1696,7 @@ export class PrismaWorkerStore implements ScanRunStore {
    * the ordinary StageExecutor, so authorization, scope, policy and
    * budget gates are re-evaluated by construction (§57).
    */
-  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string } | null> {
+  async prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string; cloudAnalysisSection?: string } | null> {
     const retest = await prisma.retestRequest.findUnique({ where: { id: retestId } });
     if (!retest || retest.status !== "QUEUED") return null;
     const finding = await prisma.finding.findUnique({ where: { id: retest.findingId } });
@@ -1288,6 +1709,60 @@ export class PrismaWorkerStore implements ScanRunStore {
       checkReference: retest.checkReference, lifecycleStatus: "RETEST_PENDING",
     });
     if (!plan.ok) return null;
+    // Prompt 14 §73: cloud findings retest through a targeted
+    // read-only cloud chain (auth → provider inventory → the ONE
+    // relevant analysis section). The runner executes the inventory
+    // stage; this store's analysis hook then produces the section
+    // evidence the judgement compares (§58 discipline: a failed stage
+    // is never a pass).
+    const cloudSecPlan = planCloudRetest({
+      cloudProvider: finding.cloudProvider, providerResourceId: finding.providerResourceId, ruleId: finding.ruleId,
+    });
+    if (cloudSecPlan && finding.fingerprint) {
+      const connectorSlug = `${cloudSecPlan.provider.toLowerCase()}-inventory`;
+      const scopeParseCloud = scopeRulesSchema.safeParse(graph.assessment.scope?.rules ?? {});
+      const childCloud = await prisma.scan.create({
+        data: { workspaceId: finding.workspaceId, assessmentId: graph.assessmentId, requestedBy: retest.requestedBy, status: "QUEUED" },
+      });
+      const cloudStagePlans = cloudSecPlan.stages.map((type) => ({
+        id: type, type, name: type === cloudSecPlan.analysisSection ? "Targeted Cloud Retest Analysis" : type,
+        description: "Prompt 14 §73 targeted cloud retest: re-check the specific resource and control only.",
+        requiredCapabilities: [], dependencies: [] as string[],
+        selectedAdapters: type === "CLOUD_INVENTORY"
+          ? [{ slug: connectorSlug, adapterId: connectorSlug, name: connectorSlug, riskLevel: "LOW", preference: "REQUIRED", simulation: false, reason: "provider inventory connector (§73)" }]
+          : [],
+        weight: 10, timeoutSeconds: 1800, failureStrategy: "FAIL_STAGE_CONTINUE", networkCapable: false, status: "QUEUED",
+      }));
+      await prisma.scanPlan.create({
+        data: {
+          scanId: childCloud.id, assessmentId: graph.assessmentId, profile: "CUSTOM",
+          plan: {
+            scanId: childCloud.id, assessmentId: graph.assessmentId, targetId: graph.assessment.targetId,
+            workspaceId: finding.workspaceId, organizationId: graph.workspace.organizationId,
+            profile: "CUSTOM", targetType: graph.assessment.target.type, targetValue: graph.assessment.target.value,
+            targetHost: finding.host ?? "", scope: scopeParseCloud.success ? scopeParseCloud.data : {},
+            stages: cloudStagePlans, dependencies: {}, selectedTools: [connectorSlug],
+            policySnapshot: { targetVerified: graph.assessment.target.verified, assessmentApproved: graph.assessment.status === "APPROVED", executableSlugs: [connectorSlug], simulation: false },
+          } as never,
+          policySnapshot: { retest: true, retestId, cloudRetest: true } as never,
+        },
+      });
+      for (const stage of cloudStagePlans) {
+        await prisma.scanStage.create({
+          data: { scanId: childCloud.id, type: stage.type as never, status: "QUEUED", dependencies: [], weight: stage.weight, metadata: { retestId } as never },
+        });
+      }
+      const execution = await this.ensureExecution(childCloud.id, "CLOUD_INVENTORY", connectorSlug, 1);
+      await prisma.retestRequest.update({
+        where: { id: retestId },
+        data: { status: "RUNNING", scanId: childCloud.id, startedAt: new Date() },
+      });
+      return {
+        executionId: execution.id, scanId: childCloud.id,
+        canonicalFingerprint: finding.fingerprint, stageId: "CLOUD_INVENTORY",
+        cloudAnalysisSection: cloudSecPlan.analysisSection,
+      };
+    }
     // Prompt 13 §77: cloud-native findings retest in their original
     // stage kind; everything else keeps the Prompt 11 stage.
     const cloudRetest = finding.origin ? planCloudNativeRetest({ origin: finding.origin, sourceTool: retest.sourceTool, controlId: finding.controlId ?? undefined }) : null;

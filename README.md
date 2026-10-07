@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 13 complete (Prompts 1–13).** Production monorepo, backend and
+> **Status — Phase 14 complete (Prompts 1–14).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -73,7 +73,20 @@ without verified scope and approval.
 > certification), Falco runtime-event ingestion (sanitized detections,
 > never vulnerabilities), and /containers, /kubernetes, /compliance and
 > /runtime-events GUIs. No image is ever executed and no Docker socket
-> is mounted anywhere.
+> is mounted anywhere. And now the **multi-cloud security layer**:
+> AWS/Azure/GCP accounts registered as verified targets and assessed
+> READ-ONLY forever (no code path creates, modifies or deletes a cloud
+> resource; credentials exist only as secret-reference names resolved
+> under job-scoped leases inside an isolated CLOUD_ANALYSIS worker),
+> normalized resource/identity inventory with evidence-based exposure
+> classification, IAM policy analysis over hardened parsers (policy
+> documents are untrusted input), Prowler/ScoutSuite/Steampipe CSPM on
+> canonical rules that merge with native analysis into one finding per
+> issue, CloudMapper/ROADtools defensive imports, Pacu registered
+> DISABLED with no adapter, CIS AWS/Azure/GCP control assessments on
+> the Phase 13 compliance framework, snapshot + IaC drift, risk paths,
+> and a /cloud-security GUI. Unconfigured accounts honestly report
+> NOT_CONFIGURED — inventory is never fabricated.
 
 ## Architecture
 
@@ -202,10 +215,38 @@ and the AI health endpoint.
 11. ✅ Vulnerability management & intelligence (Prompt 11) 20. Unified reporting & dashboard
 12. ✅ Source code security: SAST, secrets & SCA (Prompt 12)
 13. ✅ Container, Docker & Kubernetes security (Prompt 13)
-14. Lab-only modules (AD, wireless, mobile)
+14. ✅ Multi-cloud security assessment: AWS, Azure & GCP (Prompt 14)
+15. Lab-only modules (AD, wireless, mobile)
 
 ## Changelog
 
+- **2026-10-07 — Prompt 14: Multi-Cloud Security Assessment.**
+  Cloud accounts (AWS/Azure/GCP) became verified targets with a
+  READ_ONLY assessment posture: registration stores identity, scope
+  and a credential REFERENCE name only — secret-shaped values are
+  refused at the API, and the worker resolves references under
+  job-scoped leases (≤1h) on an isolated `CLOUD_ANALYSIS` worker.
+  Provider inventory connectors normalize resources/identities/
+  relationships into assets with provider/region/service identity;
+  transports expose no mutating method (read-only by construction)
+  and production transports are deployment-provisioned, so
+  unconfigured accounts honestly report NOT_CONFIGURED. Platform
+  analysis stages (IAM, network, storage/database, encryption,
+  logging) reason over the persisted inventory; IAM policy documents
+  are parsed as untrusted input under hard caps. Prowler, ScoutSuite
+  and governed Steampipe packs land on canonical cloud rules and merge
+  with native analysis by cloud fingerprint (one canonical finding,
+  many observations; PASS is evidence, never a finding); CloudMapper
+  and ROADtools are defensive import connectors; **Pacu is registered
+  DISABLED — classification CLOUD_OFFENSIVE_TESTING, no adapter, no
+  execution path**. CIS AWS 1.5 / CIS Azure 2.1 / CIS GCP 1.6 control
+  assessments reuse the Phase 13 compliance framework; snapshot diffs
+  and conservative Checkov IaC↔live correlation produce drift;
+  evidence-backed risk paths model exposure without ever executing
+  it. A `/cloud-security` GUI (dashboard, accounts, resources, IAM,
+  exposure, storage, graph) fronts the `/cloud/*` API. Migration
+  `20261007110000_multi_cloud_security` generated, not applied
+  (Docker unavailable on the build VM).
 - **2026-10-07 — Prompt 13: Container, Docker & Kubernetes Security.**
   Container images became digest-bound inventory (`ContainerImage` +
   drift snapshots): registration parses references, scans resolve the

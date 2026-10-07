@@ -107,6 +107,15 @@ enum AssessmentProfile {
   KUBERNETES_COMPREHENSIVE
   DOCKER_HOST_BASELINE
   CLOUD_NATIVE_FULL
+  // Prompt 14 §12: multi-cloud security profiles. The legacy CLOUD
+  // profile above remains as the alias for CLOUD_BASELINE.
+  CLOUD_INVENTORY
+  CLOUD_BASELINE
+  CLOUD_COMPREHENSIVE
+  IAM_REVIEW
+  PUBLIC_EXPOSURE_REVIEW
+  COMPLIANCE_ASSESSMENT
+  IAC_TO_CLOUD_CORRELATION
 }
 
 enum AssessmentStatus {
@@ -179,6 +188,19 @@ enum ScanStageType {
   CLUSTER_INVENTORY
   KUBERNETES_POSTURE
   DOCKER_POSTURE
+  // Prompt 14 §86: multi-cloud pipeline stages. CLOUD_AUTH, the five
+  // analysis stages and CLOUD_COMPLIANCE are PLATFORM stages (engine
+  // work over persisted inventory); CLOUD_INVENTORY and CLOUD_CSPM are
+  // tool/connector stages on CLOUD_ANALYSIS workers only.
+  CLOUD_AUTH
+  CLOUD_INVENTORY
+  IAM_ANALYSIS
+  NETWORK_ANALYSIS
+  STORAGE_ANALYSIS
+  ENCRYPTION_ANALYSIS
+  LOGGING_ANALYSIS
+  CLOUD_CSPM
+  CLOUD_COMPLIANCE
   QUALITY_GATE
   NORMALIZATION
   CORRELATION
@@ -443,6 +465,18 @@ enum AuditAction {
   COMPLIANCE_ASSESSED
   RUNTIME_EVENT_INGESTED
   CLOUD_NATIVE_ARTIFACT_ACCESSED
+  // Prompt 14 §103: multi-cloud audit actions. Metadata for these
+  // actions NEVER contains credentials, tokens or secret values (§100).
+  CLOUD_ACCOUNT_REGISTERED
+  CLOUD_CREDENTIAL_VALIDATED
+  CLOUD_SCAN_STARTED
+  CLOUD_SCAN_COMPLETED
+  CLOUD_RESOURCE_DISCOVERED
+  PUBLIC_EXPOSURE_DETECTED
+  IAM_RISK_DETECTED
+  CLOUD_DRIFT_DETECTED
+  CLOUD_COMPLIANCE_ASSESSED
+  CLOUD_ARTIFACT_ACCESSED
 }
 
 enum NotificationType {
@@ -1063,6 +1097,17 @@ model Finding {
   resourceName            String?
   containerName           String?
   controlId               String? // CIS / NSA-CISA control id for posture findings (§31/§41)
+  // Prompt 14 §58/§61: multi-cloud finding identity. findingClass keeps
+  // CLOUD_MISCONFIGURATION / IAM_RISK / PUBLIC_EXPOSURE / ENCRYPTION_GAP
+  // / LOGGING_GAP / COMPLIANCE_FAILURE / POTENTIAL_VULNERABILITY /
+  // CONFIRMED_VULNERABILITY distinguishable; the cloud fingerprint is
+  // provider + account + region + providerResourceId + rule + class.
+  cloudProvider           String? // AWS | AZURE | GCP
+  cloudAccountId          String?
+  cloudResourceId         String?
+  providerResourceId      String?
+  cloudRegion             String?
+  findingClass            String?
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1097,6 +1142,9 @@ model Finding {
   @@index([kevListed])
   @@index([firstSeen])
   @@index([lastSeen])
+  @@index([cloudAccountId])
+  @@index([cloudResourceId])
+  @@index([providerResourceId])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -2004,7 +2052,7 @@ model SourceSnapshot {
 
 // One inventoried software component (§45) — PURL identity (§46).
 model SoftwareComponent {
-  id              String         @id @default(uuid())
+  id              String          @id @default(uuid())
   snapshotId      String?
   // Prompt 13 §13/§14: image package inventory (Syft) binds components
   // to the image instead of a source snapshot — same component model.
@@ -2014,13 +2062,13 @@ model SoftwareComponent {
   ecosystem       String
   purl            String
   sourceManifest  String
-  scope           String         @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
-  dependencyScope String         @default("RUNTIME")
-  licenses        String[]       @default([])
+  scope           String          @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
+  dependencyScope String          @default("RUNTIME")
+  licenses        String[]        @default([])
   supplier        String?
   snapshot        SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   image           ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  createdAt       DateTime       @default(now())
+  createdAt       DateTime        @default(now())
 
   @@unique([snapshotId, purl])
   @@unique([imageId, purl])
@@ -2032,7 +2080,7 @@ model SoftwareComponent {
 // A generated SBOM (§47/§48): document lives in object storage behind
 // artifactReference; the row carries format + checksum + counts.
 model SoftwareBillOfMaterials {
-  id             String         @id @default(uuid())
+  id             String          @id @default(uuid())
   snapshotId     String?
   // Prompt 13 §12: image SBOMs bind to the image (Syft), not a snapshot.
   imageId        String?
@@ -2041,10 +2089,10 @@ model SoftwareBillOfMaterials {
   specVersion    String
   checksum       String
   artifactRef    String?
-  componentCount Int            @default(0)
+  componentCount Int             @default(0)
   snapshot       SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   image          ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime        @default(now())
 
   @@index([snapshotId])
   @@index([imageId])
@@ -2116,16 +2164,21 @@ model QualityGateResult {
 // A container registry connection (§6/§7). URLs pass the platform
 // network/SSRF policy before approval; credentials are references only.
 model ContainerRegistry {
-  id                  String    @id @default(uuid())
+  id                  String           @id @default(uuid())
   workspaceId         String
   name                String
   url                 String
-  provider            String    @default("GENERIC") // GENERIC | DOCKER_HUB | GHCR | ECR | GCR | ACR | HARBOR | QUAY | PRIVATE
+  provider            String           @default("GENERIC") // GENERIC | DOCKER_HUB | GHCR | ECR | GCR | ACR | HARBOR | QUAY | PRIVATE
   credentialReference String? // secret reference name only — never a value
-  approved            Boolean   @default(false)
+  approved            Boolean          @default(false)
+  // Prompt 14 §51: a cloud-provider registry (ECR / ACR / Artifact
+  // Registry) links to its cloud account + inventory resource where
+  // evidence permits — images keep flowing through ContainerImage.
+  cloudAccountId      String?
+  cloudResourceId     String?
   createdBy           String
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
   images              ContainerImage[]
 
   @@unique([workspaceId, url])
@@ -2136,7 +2189,7 @@ model ContainerRegistry {
 // is mutable and is only the lookup key. Scans record the digest they
 // analyzed; drift appends a snapshot, never overwrites history (§78).
 model ContainerImage {
-  id           String    @id @default(uuid())
+  id           String                    @id @default(uuid())
   workspaceId  String
   targetId     String?
   registryId   String?
@@ -2148,10 +2201,10 @@ model ContainerImage {
   platform     String?
   architecture String?
   os           String?
-  source       String    @default("MANUAL") // MANUAL | REGISTRY | SBOM | CI | RUNTIME | CLUSTER
-  firstSeen    DateTime  @default(now())
-  lastSeen     DateTime  @updatedAt
-  registryRef  ContainerRegistry? @relation(fields: [registryId], references: [id], onDelete: SetNull)
+  source       String                    @default("MANUAL") // MANUAL | REGISTRY | SBOM | CI | RUNTIME | CLUSTER
+  firstSeen    DateTime                  @default(now())
+  lastSeen     DateTime                  @updatedAt
+  registryRef  ContainerRegistry?        @relation(fields: [registryId], references: [id], onDelete: SetNull)
   snapshots    ContainerImageSnapshot[]
   components   SoftwareComponent[]
   sboms        SoftwareBillOfMaterials[]
@@ -2167,17 +2220,17 @@ model ContainerImage {
 // entrypoint presence) and layer digests. A changed digest for the same
 // tag is drift — a NEW snapshot, never an overwrite.
 model ContainerImageSnapshot {
-  id            String   @id @default(uuid())
-  imageId       String
-  scanId        String?
-  digest        String
+  id             String         @id @default(uuid())
+  imageId        String
+  scanId         String?
+  digest         String
   previousDigest String?
-  drift         Boolean  @default(false)
-  config        Json     @default("{}") // user, exposedPorts, entrypointPresent, cmdPresent, envKeys (names only)
-  layers        Json     @default("[]") // layer digests + sizes only
-  baseImage     Json? // { registry, repository, digest? } only when reliably known (§23)
-  capturedAt    DateTime @default(now())
-  image         ContainerImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  drift          Boolean        @default(false)
+  config         Json           @default("{}") // user, exposedPorts, entrypointPresent, cmdPresent, envKeys (names only)
+  layers         Json           @default("[]") // layer digests + sizes only
+  baseImage      Json? // { registry, repository, digest? } only when reliably known (§23)
+  capturedAt     DateTime       @default(now())
+  image          ContainerImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
 
   @@index([imageId])
   @@index([scanId])
@@ -2187,17 +2240,17 @@ model ContainerImageSnapshot {
 // Docker Bench output on an APPROVED host by a dedicated privileged
 // worker (§28/§29) — the platform never demands daemon socket access.
 model DockerHost {
-  id              String    @id @default(uuid())
-  workspaceId     String
-  targetId        String?
-  name            String
-  engineVersion   String?
-  os              String?
-  environment     String    @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | CI | UNKNOWN
-  scanStatus      String    @default("NOT_ASSESSED")
+  id               String    @id @default(uuid())
+  workspaceId      String
+  targetId         String?
+  name             String
+  engineVersion    String?
+  os               String?
+  environment      String    @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | CI | UNKNOWN
+  scanStatus       String    @default("NOT_ASSESSED")
   lastAssessmentAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([workspaceId])
 }
@@ -2207,19 +2260,23 @@ model DockerHost {
 // secret reference to a least-privilege, read-oriented service account.
 // Cluster-admin is never assumed or requested by default.
 model KubernetesCluster {
-  id                  String    @id @default(uuid())
+  id                  String               @id @default(uuid())
   workspaceId         String
   targetId            String?
   name                String
   apiServerReference  String // reference name only — no embedded credentials, ever
   version             String?
-  provider            String    @default("GENERIC") // GENERIC | EKS | AKS | GKE | OPENSHIFT | ON_PREM
+  provider            String               @default("GENERIC") // GENERIC | EKS | AKS | GKE | OPENSHIFT | ON_PREM
   credentialReference String? // secret reference name only — never a value
-  environment         String    @default("UNKNOWN")
-  criticality         String    @default("MEDIUM")
+  // Prompt 14 §50: an EKS / AKS / GKE cluster discovered in cloud
+  // inventory LINKS to this row — never a duplicate cluster entity.
+  cloudAccountId      String?
+  cloudResourceId     String?
+  environment         String               @default("UNKNOWN")
+  criticality         String               @default("MEDIUM")
   lastAssessmentAt    DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   workloads           KubernetesWorkload[]
 
   @@unique([workspaceId, name])
@@ -2230,7 +2287,7 @@ model KubernetesCluster {
 // security-context summary and image references (digests when known) —
 // Secret VALUES are never part of inventory (§36/§105).
 model KubernetesWorkload {
-  id              String   @id @default(uuid())
+  id              String            @id @default(uuid())
   workspaceId     String
   clusterId       String
   scanId          String?
@@ -2239,12 +2296,12 @@ model KubernetesWorkload {
   name            String
   replicas        Int?
   serviceAccount  String?
-  images          Json     @default("[]") // [{ container, image, digest?, tagPinned, digestPinned }]
-  securityContext Json     @default("{}") // privileged, runAsRoot, readOnlyRootFilesystem, capabilities, hostPath...
-  exposure        String   @default("CLUSTER_INTERNAL") // PUBLIC_INTERNET | EXTERNAL_NETWORK | CLUSTER_INTERNAL | LOCAL_ONLY | UNKNOWN (§64)
-  labels          Json     @default("{}") // sanitized metadata only (§109)
-  firstSeen       DateTime @default(now())
-  lastSeen        DateTime @updatedAt
+  images          Json              @default("[]") // [{ container, image, digest?, tagPinned, digestPinned }]
+  securityContext Json              @default("{}") // privileged, runAsRoot, readOnlyRootFilesystem, capabilities, hostPath...
+  exposure        String            @default("CLUSTER_INTERNAL") // PUBLIC_INTERNET | EXTERNAL_NETWORK | CLUSTER_INTERNAL | LOCAL_ONLY | UNKNOWN (§64)
+  labels          Json              @default("{}") // sanitized metadata only (§109)
+  firstSeen       DateTime          @default(now())
+  lastSeen        DateTime          @updatedAt
   cluster         KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
 
   @@unique([clusterId, kind, namespace, name])
@@ -2256,17 +2313,17 @@ model KubernetesWorkload {
 // Kubernetes YAML or Helm chart from a source snapshot. YAML is hostile
 // input — only counts, checksum and type are kept here (§49).
 model InfrastructureManifest {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  repositoryId String?
-  snapshotId   String?
-  scanId       String?
-  filePath     String // repository-relative only
-  manifestType String // DOCKERFILE | KUBERNETES | HELM_CHART | HELM_VALUES | COMPOSE
-  resourceCount Int     @default(0)
-  checksum     String
-  source       String   @default("SOURCE_SNAPSHOT")
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  workspaceId   String
+  repositoryId  String?
+  snapshotId    String?
+  scanId        String?
+  filePath      String // repository-relative only
+  manifestType  String // DOCKERFILE | KUBERNETES | HELM_CHART | HELM_VALUES | COMPOSE
+  resourceCount Int      @default(0)
+  checksum      String
+  source        String   @default("SOURCE_SNAPSHOT")
+  createdAt     DateTime @default(now())
 
   @@index([workspaceId])
   @@index([snapshotId])
@@ -2276,8 +2333,8 @@ model InfrastructureManifest {
 // Kubernetes, NSA/CISA Kubernetes Hardening. Mappings support reporting
 // structure only — the platform never claims certification.
 model ComplianceFramework {
-  id          String @id @default(uuid())
-  key         String @unique // CIS_DOCKER | CIS_KUBERNETES | NSA_CISA_KUBERNETES
+  id          String              @id @default(uuid())
+  key         String              @unique // CIS_DOCKER | CIS_KUBERNETES | NSA_CISA_KUBERNETES
   name        String
   version     String
   description String
@@ -2285,7 +2342,7 @@ model ComplianceFramework {
 }
 
 model ComplianceControl {
-  id          String @id @default(uuid())
+  id          String              @id @default(uuid())
   frameworkId String
   controlId   String // e.g. 5.4 (CIS Kubernetes), 4.2.1 (CIS Docker)
   title       String
@@ -2308,16 +2365,16 @@ enum ControlAssessmentStatus {
 // NOT_APPLICABLE / UNKNOWN never become findings; FAIL may link the
 // finding it produced. Evidence is bounded and sanitized.
 model ControlAssessment {
-  id          String                  @id @default(uuid())
-  workspaceId String
-  scanId      String?
+  id           String                  @id @default(uuid())
+  workspaceId  String
+  scanId       String?
   frameworkKey String
-  controlId   String
-  subjectRef  String // cluster / docker host / workload / image reference
-  status      ControlAssessmentStatus
-  evidence    String                  @default("")
-  findingId   String?
-  assessedAt  DateTime                @default(now())
+  controlId    String
+  subjectRef   String // cluster / docker host / workload / image reference
+  status       ControlAssessmentStatus
+  evidence     String                  @default("")
+  findingId    String?
+  assessedAt   DateTime                @default(now())
 
   @@index([workspaceId])
   @@index([scanId])
@@ -2330,23 +2387,257 @@ model ControlAssessment {
 // stored-XSS and log-injection safe, secrets redacted. Runtime events
 // are detections, not vulnerabilities (§63).
 model RuntimeSecurityEvent {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  clusterId    String?
-  clusterName  String?
-  node         String?
-  namespace    String?
-  pod          String?
-  container    String?
-  rule         String
-  priority     String // EMERGENCY | ALERT | CRITICAL | ERROR | WARNING | NOTICE | INFORMATIONAL | DEBUG
-  eventTime    DateTime
-  metadata     Json     @default("{}") // sanitized fields only
-  source       String   @default("FALCO")
-  artifactRef  String?
-  ingestedAt   DateTime @default(now())
+  id          String   @id @default(uuid())
+  workspaceId String
+  clusterId   String?
+  clusterName String?
+  node        String?
+  namespace   String?
+  pod         String?
+  container   String?
+  rule        String
+  priority    String // EMERGENCY | ALERT | CRITICAL | ERROR | WARNING | NOTICE | INFORMATIONAL | DEBUG
+  eventTime   DateTime
+  metadata    Json     @default("{}") // sanitized fields only
+  source      String   @default("FALCO")
+  artifactRef String?
+  ingestedAt  DateTime @default(now())
 
   @@index([workspaceId])
   @@index([clusterId])
   @@index([eventTime])
+}
+
+// ------------------------------- Prompt 14: Multi-Cloud Security -------------------------------
+
+enum CloudProvider {
+  AWS
+  AZURE
+  GCP
+}
+
+// A registered cloud account / subscription / project (§4). The account
+// is assessed READ-ONLY (§7): the platform stores the credential
+// REFERENCE only — an AWS secret access key, Azure client secret, GCP
+// service-account private key, access token or refresh token NEVER
+// appears in this table or anywhere in ordinary storage (§6).
+model CloudAccount {
+  id                  String                   @id @default(uuid())
+  workspaceId         String
+  targetId            String?
+  provider            CloudProvider
+  name                String
+  // AWS account id / Azure tenant+subscription / GCP project id — the
+  // provider's own identifier for the assessed estate. NOT a credential.
+  externalAccountId   String
+  environment         String                   @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | CI | UNKNOWN
+  criticality         String                   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  credentialReference String? // secret reference name only — never a value
+  // Assessment posture (§7): READ_ONLY is the only posture ordinary
+  // assessments may hold; the field exists so policy can name it.
+  assessmentPolicy    String                   @default("READ_ONLY")
+  status              String                   @default("REGISTERED") // REGISTERED | VALIDATED | NOT_CONFIGURED | VALIDATION_FAILED
+  identityMetadata    Json? // §9: non-secret identity metadata (assumed role ARN, tenant, project) — never tokens
+  lastInventoryAt     DateTime?
+  lastAssessmentAt    DateTime?
+  createdBy           String
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  scopes              CloudScope[]
+  resources           CloudResource[]
+  snapshots           CloudInventorySnapshot[]
+  identities          CloudIdentity[]
+  relationships       CloudRelationship[]
+  riskPaths           CloudRiskPath[]
+  driftEvents         CloudDriftEvent[]
+  leases              CredentialLease[]
+
+  @@unique([workspaceId, provider, externalAccountId])
+  @@index([workspaceId])
+  @@index([workspaceId, provider])
+}
+
+// The assessed estate boundary (§5): explicit inclusions and exclusions
+// of regions / subscriptions / projects / resources. Discovered
+// resources outside the scope are recorded OUT_OF_SCOPE, never assessed.
+model CloudScope {
+  id               String       @id @default(uuid())
+  workspaceId      String
+  cloudAccountId   String
+  includeRegions   String[]     @default([])
+  excludeRegions   String[]     @default([])
+  includeUnits     String[]     @default([]) // Azure subscriptions / GCP projects+folders / AWS OUs
+  excludeUnits     String[]     @default([])
+  includeResources String[]     @default([]) // provider resource ids / ARNs
+  excludeResources String[]     @default([])
+  account          CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([workspaceId])
+  @@index([cloudAccountId])
+}
+
+// One normalized cloud resource (§14): bounded, security-relevant
+// metadata ONLY. Customer data inside resources (objects, secret
+// values, key material, database contents) is never collected (§13).
+// Tags/labels are provider-controlled text: sanitized before storage
+// (§99). A resource that disappears is marked NOT_SEEN / REMOVED —
+// historical records are never hard-deleted (§20).
+model CloudResource {
+  id                    String        @id @default(uuid())
+  workspaceId           String
+  cloudAccountId        String
+  provider              CloudProvider
+  resourceType          String // e.g. AWS_S3_BUCKET | AZURE_STORAGE_ACCOUNT | GCP_VPC_FIREWALL
+  providerResourceId    String // ARN / Azure resource id / GCP full resource name
+  name                  String
+  region                String?
+  zone                  String?
+  tags                  Json          @default("{}") // sanitized string map only
+  configurationMetadata Json          @default("{}") // bounded normalized security metadata
+  exposure              String        @default("UNKNOWN") // PUBLIC | INTERNET_REACHABLE_POSSIBLE | PRIVATE | UNKNOWN (§47)
+  criticality           String        @default("UNSPECIFIED")
+  status                String        @default("ACTIVE") // ACTIVE | NOT_SEEN | REMOVED (§20)
+  scopeStatus           String        @default("IN_SCOPE") // IN_SCOPE | OUT_OF_SCOPE
+  sources               String[]      @default([]) // adapter slugs that reported this resource
+  firstSeen             DateTime      @default(now())
+  lastSeen              DateTime      @updatedAt
+  account               CloudAccount  @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([cloudAccountId, providerResourceId])
+  @@index([workspaceId])
+  @@index([cloudAccountId, resourceType])
+  @@index([workspaceId, exposure])
+}
+
+// One inventory observation of an account (§19): regions covered,
+// per-type resource counts, content hash — the drift baseline (§64).
+model CloudInventorySnapshot {
+  id             String        @id @default(uuid())
+  workspaceId    String
+  cloudAccountId String
+  scanId         String?
+  provider       CloudProvider
+  regions        String[]      @default([])
+  resourceCounts Json          @default("{}")
+  snapshotHash   String
+  capturedAt     DateTime      @default(now())
+  account        CloudAccount  @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([cloudAccountId])
+  @@index([scanId])
+}
+
+// A cloud identity (§36): user, role, group, service account, managed
+// identity or policy. Privilege/MFA/staleness are METADATA the provider
+// APIs expose (§39–§41) — credential material itself is never here (§40).
+model CloudIdentity {
+  id                 String        @id @default(uuid())
+  workspaceId        String
+  cloudAccountId     String
+  provider           CloudProvider
+  identityType       String // USER | ROLE | GROUP | SERVICE_ACCOUNT | MANAGED_IDENTITY | POLICY
+  providerIdentityId String // ARN / principal id / service-account email — identity, not a secret
+  name               String
+  privileged         Boolean       @default(false) // evidence-backed admin-equivalence (§38)
+  privilegeEvidence  Json? // the wildcard/admin policy facts behind the verdict — never auto a finding by itself
+  mfaEnabled         Boolean?
+  lastUsedAt         DateTime?
+  lastSignInAt       DateTime?
+  keyAgeDays         Int? // long-lived credential age metadata (§40) — never the key itself
+  metadata           Json          @default("{}")
+  firstSeen          DateTime      @default(now())
+  lastSeen           DateTime      @updatedAt
+  account            CloudAccount  @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([cloudAccountId, providerIdentityId])
+  @@index([workspaceId])
+  @@index([cloudAccountId, identityType])
+}
+
+// An evidence-backed asset-graph edge (§15/§37/§85). Only relationships
+// a provider response or a governed check actually supports are stored —
+// the graph never speculates.
+model CloudRelationship {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  cloudAccountId String
+  fromType       String // ACCOUNT | REGION | NETWORK | SUBNET | RESOURCE | IDENTITY | POLICY | WORKLOAD | IMAGE | CLUSTER | SERVICE | ENDPOINT
+  fromRef        String
+  toType         String
+  toRef          String
+  relationship   String // CONTAINS | ATTACHED_TO | ASSUMES | MEMBER_OF | GRANTS | ROUTES_TO | EXPOSES | RUNS | USES_IMAGE | MAPS_TO
+  evidence       String?
+  firstSeen      DateTime     @default(now())
+  lastSeen       DateTime     @updatedAt
+  account        CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([cloudAccountId, fromType, fromRef, relationship, toType, toRef])
+  @@index([workspaceId])
+  @@index([cloudAccountId])
+}
+
+// A defensive risk path (§66): an evidence-backed chain such as
+// Public Endpoint → Workload → Identity → Sensitive Resource. It is a
+// MODEL of exposure — the path is never executed, and privilege
+// escalation is never attempted (§67/§106).
+model CloudRiskPath {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  cloudAccountId String
+  scanId         String?
+  title          String
+  steps          Json         @default("[]") // [{ kind, ref, label }] — evidence-backed nodes only
+  confidence     String       @default("LOW") // LOW | MEDIUM | HIGH (§67)
+  findingIds     String[]     @default([])
+  createdAt      DateTime     @default(now())
+  account        CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([cloudAccountId])
+}
+
+// A drift observation (§63/§64): snapshot-vs-snapshot changes and
+// IaC-vs-live mismatches. A change is an observation, never an
+// automatic malicious verdict (§64).
+model CloudDriftEvent {
+  id             String       @id @default(uuid())
+  workspaceId    String
+  cloudAccountId String
+  scanId         String?
+  snapshotId     String?
+  kind           String // RESOURCE_ADDED | RESOURCE_REMOVED | EXPOSURE_CHANGED | IAM_CHANGED | ENCRYPTION_CHANGED | LOGGING_CHANGED | IAC_DRIFT
+  state          String? // MATCHED | DRIFTED | UNMAPPED | UNKNOWN (§63; IAC_DRIFT rows)
+  resourceRef    String?
+  detail         String       @default("")
+  detectedAt     DateTime     @default(now())
+  account        CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([cloudAccountId])
+  @@index([kind])
+}
+
+// An ephemeral credential lease (§11): the RECORD that a CLOUD_ANALYSIS
+// worker resolved a secret reference for one authorized job. The record
+// carries the reference NAME and lifecycle only — credential material
+// never appears here, in queue payloads, or in logs (§100).
+model CredentialLease {
+  id                  String       @id @default(uuid())
+  workspaceId         String
+  cloudAccountId      String
+  scanId              String?
+  credentialReference String // reference name only — never a value
+  purpose             String       @default("CLOUD_ASSESSMENT")
+  status              String       @default("ISSUED") // ISSUED | CONSUMED | EXPIRED | RELEASED
+  issuedAt            DateTime     @default(now())
+  expiresAt           DateTime
+  releasedAt          DateTime?
+  account             CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([cloudAccountId])
+  @@index([scanId])
 }

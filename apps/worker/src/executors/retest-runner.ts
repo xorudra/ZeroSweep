@@ -15,9 +15,13 @@ import type { StageExecutor } from "./stage-executor";
  * absence of evidence is not evidence of absence.
  */
 export interface RetestStore {
-  prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string } | null>;
+  prepareRetestExecution(retestId: string): Promise<{ executionId: string; scanId: string; canonicalFingerprint: string; stageId?: string; cloudAnalysisSection?: string } | null>;
   retestScanFingerprints(scanId: string): Promise<string[]>;
   completeRetest(retestId: string, outcome: "RESOLVED" | "REOPENED" | "FAILED", detail: string): Promise<void>;
+  /** Prompt 14 §73: after a cloud retest's inventory stage succeeds,
+   *  the store runs the ONE targeted analysis section so the child
+   *  scan holds the section evidence the judgement compares. */
+  analyzeCloudSection?(scanId: string, section: string): Promise<{ findings: number; assessments: number } | null>;
 }
 
 export class RetestRunner {
@@ -40,6 +44,21 @@ export class RetestRunner {
       const reason = outcome.status === "DENIED" ? ` (${outcome.reasonCode})` : "";
       await this.store.completeRetest(retestId, "FAILED", `targeted stage ended ${outcome.status}${reason} — the issue was NOT verified fixed`);
       return { status: "FAILED" };
+    }
+    // Prompt 14 §73: cloud retests judge on ANALYSIS evidence — run
+    // the targeted section over the child scan's fresh inventory
+    // before comparing fingerprints. If the section cannot run, the
+    // retest is inconclusive → FAILED, never a silent pass.
+    if (prepared.cloudAnalysisSection) {
+      if (!this.store.analyzeCloudSection) {
+        await this.store.completeRetest(retestId, "FAILED", "cloud analysis hook unavailable — the issue was NOT verified fixed");
+        return { status: "FAILED" };
+      }
+      const section = await this.store.analyzeCloudSection(prepared.scanId, prepared.cloudAnalysisSection).catch(() => null);
+      if (!section) {
+        await this.store.completeRetest(retestId, "FAILED", "cloud analysis section produced no evidence — the issue was NOT verified fixed");
+        return { status: "FAILED" };
+      }
     }
     const produced = await this.store.retestScanFingerprints(prepared.scanId);
     const plan: RetestPlan = {

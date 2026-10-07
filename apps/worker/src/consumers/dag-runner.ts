@@ -66,6 +66,18 @@ export interface ScanRunStore extends ExecutionStore {
    *  whose image cannot be resolved — an honest failure. */
   resolveContainerImage?(scanId: string): Promise<{ imageRef: string; digest?: string; drift?: boolean; skipped?: boolean } | null>;
   evaluateContainerQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
+  /** Prompt 14 platform-stage hooks (same optional pattern): cloud
+   *  account authorization (§9 — null fails the scan honestly as
+   *  NOT_CONFIGURED), section analysis over persisted inventory
+   *  (§36–§57), compliance/drift/risk-path assessment (§63–§68) and
+   *  the cloud quality gate (§70). */
+  validateCloudAccount?(scanId: string): Promise<{ status: string; provider?: string } | null>;
+  analyzeCloudSection?(scanId: string, section: string): Promise<{ findings: number; assessments: number } | null>;
+  assessCloudCompliance?(scanId: string): Promise<{ assessed: number; failed: number; drift: number; riskPaths: number } | null>;
+  evaluateCloudQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
+  /** Prompt 14: the provider of the scan's registered cloud account —
+   *  the CLOUD_INVENTORY stage narrows its connector candidates to it. */
+  cloudScanProvider?(scanId: string): Promise<string | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -164,6 +176,18 @@ export class DagRunner {
         // stage outcome aggregates: all complete → COMPLETED, some →
         // PARTIAL (§55), none → the failure-strategy path below.
         let candidates = planned.selectedAdapters;
+        // Prompt 14 §16–§18: the CLOUD_INVENTORY stage selects every
+        // provider connector at plan time; execution narrows to the
+        // connector of the account's OWN provider (store-resolved) —
+        // the other providers' connectors never run against it.
+        if (node.id === "CLOUD_INVENTORY" && this.store.cloudScanProvider) {
+          const provider = await this.store.cloudScanProvider(scanId);
+          if (provider) {
+            const own = `${provider.toLowerCase()}-inventory`;
+            const narrowed = candidates.filter((a) => a.slug === own || a.slug === "roadtools");
+            if (narrowed.length > 0) candidates = narrowed;
+          }
+        }
         if (candidates.length > 1) {
           const availability = await Promise.all(candidates.map(async (a) => ({ slug: a.slug, ok: await this.isAdapterAvailable(a.slug).catch(() => false) })));
           const available = availability.filter((a) => a.ok);
@@ -240,6 +264,9 @@ export class DagRunner {
     }
     if (plan.stages.some((s) => s.type === "IMAGE_RESOLUTION" || s.type === "CLUSTER_INVENTORY" || s.type === "DOCKER_POSTURE")) {
       await emit("container.scan_completed", { finalStatus });
+    }
+    if (plan.stages.some((s) => s.type === "CLOUD_AUTH")) {
+      await emit("cloud.scan_completed", { finalStatus });
     }
     return { status: finalStatus };
   }
@@ -390,6 +417,39 @@ export class DagRunner {
     if (stageId === "QUALITY_GATE" && this.store.evaluateContainerQualityGate) {
       const result = await this.store.evaluateContainerQualityGate(scanId);
       if (result) await emit("container.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
+    }
+    // Prompt 14 platform stages (§86): CLOUD_AUTH validates the
+    // registered account (missing hook or NOT_CONFIGURED fails the
+    // scan honestly — FAIL_SCAN strategy); the section stages run
+    // deterministic analysis over the persisted inventory;
+    // CLOUD_COMPLIANCE assembles control assessments + drift + risk
+    // paths; the cloud gate shares the QUALITY_GATE stage.
+    if (stageId === "CLOUD_AUTH") {
+      if (!this.store.validateCloudAccount) return "FAILED";
+      const result = await this.store.validateCloudAccount(scanId);
+      if (!result || result.status !== "VALIDATED") {
+        await emit("policy.denied", { stageId, reasonCode: "CLOUD_NOT_CONFIGURED" });
+        return "FAILED";
+      }
+      await emit("cloud.account_validated", { stageId, provider: result.provider ?? null });
+    }
+    if (["IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS"].includes(stageId) && this.store.analyzeCloudSection) {
+      const result = await this.store.analyzeCloudSection(scanId, stageId);
+      if (result) {
+        await emit("cloud.analysis_completed", { stageId, section: stageId, findings: result.findings, assessments: result.assessments });
+        if (stageId === "IAM_ANALYSIS" && result.findings > 0) await emit("cloud.iam_risk_detected", { stageId, findings: result.findings });
+      }
+    }
+    if (stageId === "CLOUD_COMPLIANCE" && this.store.assessCloudCompliance) {
+      const result = await this.store.assessCloudCompliance(scanId);
+      if (result) {
+        await emit("cloud.compliance_assessed", { stageId, assessed: result.assessed, failed: result.failed });
+        if (result.drift > 0) await emit("cloud.drift_detected", { stageId, count: result.drift });
+      }
+    }
+    if (stageId === "QUALITY_GATE" && this.store.evaluateCloudQualityGate) {
+      const result = await this.store.evaluateCloudQualityGate(scanId);
+      if (result) await emit("cloud.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
     }
     return "COMPLETED";
   }

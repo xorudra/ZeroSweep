@@ -617,6 +617,11 @@ export function parseCheckov(text: string, ctx: CloudParserContext): ParsedCloud
       const lineRange = Array.isArray(check.file_line_range) ? (check.file_line_range as number[]) : [];
       // Kubernetes resources carry kind/namespace/name identity (§54).
       const kindMatch = resource.match(/^([A-Za-z]+)\.([^.]+)\.(.+)$/);
+      // Prompt 14 §62: Terraform addresses (aws_s3_bucket.name /
+      // module.aws_s3_bucket.name) carry the deployed resource NAME in
+      // the trailing segment — the identity IaC/live correlation uses.
+      const tfMatch = !kindMatch ? resource.match(/^[a-z][a-z0-9_]*\.(.+)$/) : null;
+      const tfName = tfMatch ? tfMatch[1]!.split(".").pop() : undefined;
       out.findings.push({
         title: sanitizeCloudText(str(check.check_name) ?? `Checkov ${checkId}`, 300),
         description: sanitizeCloudText(str(check.check_name) ?? "", 2000),
@@ -632,6 +637,7 @@ export function parseCheckov(text: string, ctx: CloudParserContext): ParsedCloud
         ...(typeof lineRange[0] === "number" ? { startLine: lineRange[0] } : {}),
         ...(typeof lineRange[1] === "number" ? { endLine: lineRange[1] } : {}),
         ...(kindMatch ? { resourceKind: kindMatch[1], namespace: kindMatch[2], resourceName: kindMatch[3] } : {}),
+        ...(!kindMatch && tfName ? { resourceName: tfName } : {}),
         evidence: sanitizeCloudText(`Checkov ${checkId} failed for ${resource} in ${filePath}.`, 1000),
         ...(str(check.guideline) ? { remediation: `Follow the Checkov guidance for ${checkId}: ${str(check.guideline)}` } : {}),
       });

@@ -94,6 +94,12 @@ export const PLATFORM_STAGE_TYPES = new Set([
   // Prompt 13: image resolution (tag → digest + drift snapshot) is an
   // engine/store hook — no adapter executes (§5/§78).
   "IMAGE_RESOLUTION",
+  // Prompt 14: cloud authorization, the section analysis stages and
+  // compliance assessment are engine/store hooks over normalized
+  // inventory — deterministic data analysis, no adapter executes
+  // (§9/§36–§57/§68).
+  "CLOUD_AUTH", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS",
+  "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_COMPLIANCE",
 ]);
 
 export class InvalidPlanError extends Error {

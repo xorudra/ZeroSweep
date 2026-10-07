@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
-  apiHealthBySlug, cloudNativeHealthBySlug, codeHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
+  apiHealthBySlug, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
 } from "@dsrclone/security-sdk";
 import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
@@ -88,9 +88,17 @@ export class OrchestrationService {
       // plan-time selection; connector health derives from the
       // workspace's registered clusters (kubernetesHealth below).
       registerCloudNativeAdapters(registry, undefined, INERT_KUBERNETES_DEPS);
+      // Prompt 14: cloud-security adapters (provider inventory
+      // connectors with inert deps / Prowler / ScoutSuite / Steampipe /
+      // CloudMapper / ROADtools imports) join plan-time selection for
+      // the cloud profiles. Connectors report NOT_CONFIGURED at plan
+      // time — per-account configuration resolves in the worker (§9).
+      // Pacu has NO adapter (§34): its health is a governed DISABLED
+      // constant in cloudSecHealthBySlug, never a probe.
+      registerCloudSecAdapters(registry);
       // Plan-time health (§39): synchronous PATH probe of this host. The
       // worker re-checks availability at execution time on ITS host.
-      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()) } };
+      this.registryCache = { registry, healthBySlug: { ...reconHealthBySlug(registry.list()), ...vulnHealthBySlug(registry.list()), ...apiHealthBySlug(registry.list()), ...networkHealthBySlug(registry.list()), ...codeHealthBySlug(registry.list()), ...cloudNativeHealthBySlug(registry.list()), ...cloudSecHealthBySlug(registry.list()) } };
     }
     return this.registryCache.registry;
   }

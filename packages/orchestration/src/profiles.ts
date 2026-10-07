@@ -28,6 +28,14 @@ export const STAGE_TYPES = [
   // Prompt 13: container / Docker / Kubernetes stages (§90).
   "IMAGE_RESOLUTION", "IMAGE_VULNERABILITY_SCAN", "MANIFEST_SCAN",
   "CLUSTER_INVENTORY", "KUBERNETES_POSTURE", "DOCKER_POSTURE",
+  // Prompt 14: multi-cloud stages (§86). CLOUD_AUTH / the *_ANALYSIS
+  // stages / CLOUD_COMPLIANCE are PLATFORM stages (deterministic data
+  // analysis over normalized inventory); CLOUD_INVENTORY and
+  // CLOUD_CSPM are tool stages. CLOUD_INVENTORY mirrors the Prisma
+  // ScanStageType value added by the Prompt 14 migration.
+  "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS",
+  "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS",
+  "CLOUD_CSPM", "CLOUD_COMPLIANCE",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -179,6 +187,33 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     simulationFallback: false,
   },
   QUALITY_GATE: S("QUALITY_GATE", "Security Quality Gate", "Evaluate the configurable security quality gate over the scan summary (Prompt 12 §81/§82): PASSED / WARNING / FAILED is recorded as a scan RESULT — a failed gate never crashes the pipeline. Platform stage.", [], ["RISK_ANALYSIS"], 2, 300, "CONTINUE_WITH_PARTIAL_DATA"),
+  // Prompt 14 §86: the cloud chain. CLOUD_AUTH validates the registered
+  //  account + credential lease (platform; fails the scan honestly when
+  //  the account is NOT_CONFIGURED). CLOUD_INVENTORY runs the provider
+  //  connector (+ ROADtools identity inventory for Entra accounts).
+  //  Analysis stages are platform data analysis (§36–§57) — findings
+  //  come from returned configuration data only. CLOUD_CSPM runs the
+  //  governed CSPM tools (Prowler/ScoutSuite/Steampipe/CloudMapper);
+  //  Pacu is selectable by NO stage (§34 — DISABLED). CLOUD_COMPLIANCE
+  //  maps evidence onto CIS/provider frameworks via the shared
+  //  compliance machinery (§68).
+  CLOUD_AUTH: S("CLOUD_AUTH", "Cloud Account Authorization", "Validate the registered cloud account, its read-only posture and the job-scoped credential lease before any provider interaction (Prompt 14 §9–§11). Platform stage: an unregistered or unvalidated account fails honestly as NOT_CONFIGURED.", [], ["SCOPE_VALIDATION"], 3, 120, "FAIL_SCAN"),
+  CLOUD_INVENTORY: {
+    ...S("CLOUD_INVENTORY", "Cloud Inventory", "Read-only provider inventory: resources, identities, relationships and an inventory snapshot (Prompt 14 §13–§19). Metadata only — no object contents, secret values or key material. The executor selects the connector matching the account's provider.", ["CLOUD_INVENTORY"], ["CLOUD_AUTH"], 12, 1800, "FAIL_STAGE_CONTINUE", true),
+    capabilityGroups: [["CLOUD_INVENTORY"], ["IDENTITY_INVENTORY"]],
+    simulationFallback: false,
+  },
+  IAM_ANALYSIS: S("IAM_ANALYSIS", "IAM Analysis", "Analyze normalized identities and policy FACTS: admin equivalence, wildcards, broad trust, MFA, long-lived and stale credentials (Prompt 14 §36–§42). Policy documents were parsed under hard caps as untrusted input. Platform stage.", [], ["CLOUD_INVENTORY"], 8, 600, "FAIL_STAGE_CONTINUE"),
+  NETWORK_ANALYSIS: S("NETWORK_ANALYSIS", "Cloud Network Analysis", "Analyze firewall/security-group rules and public exposure from configuration evidence (Prompt 14 §46–§48): world-open sensitive ports are findings; standard web ports are not. Platform stage.", [], ["CLOUD_INVENTORY"], 8, 600, "FAIL_STAGE_CONTINUE"),
+  STORAGE_ANALYSIS: S("STORAGE_ANALYSIS", "Storage Analysis", "Analyze storage + database configuration: public access, encryption, logging, versioning, backups, TLS (Prompt 14 §43–§45). Data analysis only — nothing is downloaded or connected to. Platform stage.", [], ["CLOUD_INVENTORY"], 8, 600, "FAIL_STAGE_CONTINUE"),
+  ENCRYPTION_ANALYSIS: S("ENCRYPTION_ANALYSIS", "Encryption Analysis", "Analyze encryption posture: KMS rotation and key metadata, provider-default vs customer-managed keys (Prompt 14 §54/§55). Key material is never requested. Platform stage.", [], ["CLOUD_INVENTORY"], 5, 600, "FAIL_STAGE_CONTINUE"),
+  LOGGING_ANALYSIS: S("LOGGING_ANALYSIS", "Logging Analysis", "Analyze audit logging and security services: trails, multi-region coverage, detection services (Prompt 14 §56/§57). A disabled service is a policy-governed gap, not an automatic vulnerability. Platform stage.", [], ["CLOUD_INVENTORY"], 5, 600, "FAIL_STAGE_CONTINUE"),
+  CLOUD_CSPM: {
+    ...S("CLOUD_CSPM", "CSPM Assessment", "Governed CSPM tools over the account (Prowler §23, ScoutSuite §26, Steampipe approved packs §32, CloudMapper import §27): FAIL/alarm results become findings on canonical cloud rules and merge with native analysis (§60). No simulation fallback — unconfigured tools degrade honestly.", ["CSPM"], ["CLOUD_INVENTORY"], 12, 1800, "CONTINUE_WITH_PARTIAL_DATA", true),
+    capabilityGroups: [["CSPM"], ["CLOUD_QUERY"], ["PUBLIC_EXPOSURE_ANALYSIS"]],
+    simulationFallback: false,
+  },
+  CLOUD_COMPLIANCE: S("CLOUD_COMPLIANCE", "Cloud Compliance Assessment", "Map the scan's control assessments onto CIS AWS/Azure/GCP and the mapped frameworks (NIST 800-53 / PCI DSS / SOC 2 / ISO 27001) through the shared compliance machinery (Prompt 14 §68/§69). PASS means control evidence was observed — never certification. Platform stage.", [], ["RISK_ANALYSIS"], 3, 300, "FAIL_STAGE_CONTINUE"),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -254,7 +289,18 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   DOCKER_HOST_BASELINE: template([...HEAD, "DOCKER_POSTURE", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION"]),
   CLOUD_NATIVE_FULL: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "IMAGE_VULNERABILITY_SCAN", "MANIFEST_SCAN", "CLUSTER_INVENTORY", "KUBERNETES_POSTURE", "DOCKER_POSTURE", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   CONTAINER: template([...HEAD, "IMAGE_RESOLUTION", "SBOM_GENERATION", "IMAGE_VULNERABILITY_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
-  CLOUD: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
+  // Prompt 14 §12/§86: cloud profiles share the auth → inventory →
+  //  analysis → CSPM → normalize → correlate → risk → compliance →
+  //  quality gate → report chain. The legacy CLOUD profile resolves
+  //  to the CLOUD_BASELINE chain.
+  CLOUD_INVENTORY: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  CLOUD_BASELINE: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  CLOUD_COMPREHENSIVE: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "MANIFEST_SCAN", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  IAM_REVIEW: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  PUBLIC_EXPOSURE_REVIEW: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "NETWORK_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  COMPLIANCE_ASSESSMENT: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  IAC_TO_CLOUD_CORRELATION: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "MANIFEST_SCAN", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
+  CLOUD: template([...HEAD, "CLOUD_AUTH", "CLOUD_INVENTORY", "IAM_ANALYSIS", "NETWORK_ANALYSIS", "STORAGE_ANALYSIS", "ENCRYPTION_ANALYSIS", "LOGGING_ANALYSIS", "CLOUD_CSPM", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "CLOUD_COMPLIANCE", "QUALITY_GATE", "REPORT_GENERATION"]),
   MOBILE: template([...HEAD, "SAFE_VULNERABILITY_SCAN", ...TAIL]),
   CUSTOM: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
 };

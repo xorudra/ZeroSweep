@@ -58,7 +58,7 @@ export interface NormalizedFinding {
   // optional; populated only by container/Kubernetes adapters. Static
   // analysis and live observation are distinguished by `origin` and
   // correlated WITHOUT collapsing either observation (§51/§103).
-  origin?: "STATIC_CONFIGURATION_FINDING" | "LIVE_CLUSTER_FINDING" | "IMAGE_FINDING" | "DOCKER_HOST_FINDING" | "RUNTIME_CORRELATED";
+  origin?: "STATIC_CONFIGURATION_FINDING" | "LIVE_CLUSTER_FINDING" | "IMAGE_FINDING" | "DOCKER_HOST_FINDING" | "RUNTIME_CORRELATED" | "CLOUD_FINDING";
   /** Image identity the finding is bound to — digest is strongest (§5). */
   imageDigest?: string;
   imageRef?: string;
@@ -74,6 +74,105 @@ export interface NormalizedFinding {
   packageType?: "OS" | "LANGUAGE" | "UNKNOWN";
   /** Image layer digest the component/vulnerability was seen in (§22). */
   layerDigest?: string;
+  // ── Prompt 14 — multi-cloud finding extensions (§58/§61). All
+  // optional; populated only by cloud-security analyzers/parsers.
+  /** Cloud finding class (§58) — misconfigurations, IAM risks,
+   *  exposure, gaps and vulnerabilities stay distinguishable. */
+  findingClass?: CloudFindingClass;
+  cloudProvider?: "AWS" | "AZURE" | "GCP";
+  /** Registered CloudAccount id (platform identity, not a credential). */
+  cloudAccountId?: string;
+  /** Provider-native resource identity (ARN / resource id / full name). */
+  providerResourceId?: string;
+  cloudResourceType?: string;
+  cloudRegion?: string;
+  /** Evidence-based exposure verdict for the resource (§47). */
+  exposureClass?: CloudExposureClass;
+}
+
+/** Prompt 14 §58: cloud finding classes — kept distinguishable end to end. */
+export type CloudFindingClass =
+  | "CLOUD_MISCONFIGURATION" | "IAM_RISK" | "PUBLIC_EXPOSURE" | "ENCRYPTION_GAP"
+  | "LOGGING_GAP" | "COMPLIANCE_FAILURE" | "POTENTIAL_VULNERABILITY" | "CONFIRMED_VULNERABILITY";
+
+/** Prompt 14 §47: exposure classification — from evidence only, never
+ *  fabricated reachability. */
+export type CloudExposureClass = "PUBLIC" | "INTERNET_REACHABLE_POSSIBLE" | "PRIVATE" | "UNKNOWN";
+
+/** A normalized cloud resource (Prompt 14 §14): bounded, security-
+ *  relevant metadata only. Customer data inside resources — objects,
+ *  secret values, key material — is never part of inventory (§13). */
+export interface NormalizedCloudResource {
+  provider: "AWS" | "AZURE" | "GCP";
+  resourceType: string;
+  providerResourceId: string;
+  name: string;
+  region?: string;
+  zone?: string;
+  /** Sanitized provider tags/labels (§99). */
+  tags: Record<string, string>;
+  /** Bounded normalized security configuration metadata (§14). */
+  configuration: Record<string, unknown>;
+  exposure: CloudExposureClass;
+  criticality?: string;
+  source: string; // adapter slug that reported it
+}
+
+/** A normalized cloud identity (Prompt 14 §36): users, roles, groups,
+ *  service identities and policies with privilege/MFA/staleness
+ *  METADATA only — credential material never exists here (§40). */
+export interface NormalizedCloudIdentity {
+  provider: "AWS" | "AZURE" | "GCP";
+  identityType: "USER" | "ROLE" | "GROUP" | "SERVICE_ACCOUNT" | "MANAGED_IDENTITY" | "POLICY";
+  providerIdentityId: string;
+  name: string;
+  privileged?: boolean;
+  privilegeEvidence?: Record<string, unknown>;
+  mfaEnabled?: boolean;
+  lastUsedAt?: string;
+  lastSignInAt?: string;
+  keyAgeDays?: number;
+  metadata: Record<string, unknown>;
+}
+
+/** An evidence-backed asset-graph edge (Prompt 14 §15/§37/§85). */
+export interface NormalizedCloudRelationship {
+  fromType: string;
+  fromRef: string;
+  toType: string;
+  toRef: string;
+  relationship: string;
+  evidence?: string;
+}
+
+/** An inventory snapshot descriptor (Prompt 14 §19). */
+export interface NormalizedCloudSnapshot {
+  provider: "AWS" | "AZURE" | "GCP";
+  regions: string[];
+  resourceCounts: Record<string, number>;
+  snapshotHash: string;
+}
+
+/** A defensive, evidence-backed risk path (Prompt 14 §66/§67). The
+ *  path is modeled, never executed; confidence reflects graph evidence. */
+export interface NormalizedCloudRiskPath {
+  title: string;
+  steps: { kind: string; ref: string; label: string }[];
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  findingFingerprints: string[];
+}
+
+/** The multi-cloud payload of a normalized result (Prompt 14). */
+export interface NormalizedCloudData {
+  resources: NormalizedCloudResource[];
+  identities: NormalizedCloudIdentity[];
+  relationships: NormalizedCloudRelationship[];
+  controlAssessments: NormalizedControlAssessment[];
+  snapshot?: NormalizedCloudSnapshot;
+  riskPaths: NormalizedCloudRiskPath[];
+  /** Resources the account scope excluded (§15): recorded with an
+   *  OUT_OF_SCOPE verdict, never analyzed, never promoted. */
+  outOfScopeResources?: NormalizedCloudResource[];
 }
 
 /** A container image observed by an image/SBOM scan (Prompt 13 §5/§13):
@@ -513,6 +612,8 @@ export interface NormalizedSecurityResult {
   sbom?: NormalizedSbom;
   /** Container / Kubernetes inventory + posture payload (Prompt 13). */
   cloudNative?: NormalizedCloudNativeData;
+  /** Multi-cloud inventory + IAM + posture payload (Prompt 14). */
+  cloud?: NormalizedCloudData;
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

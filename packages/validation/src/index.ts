@@ -310,3 +310,46 @@ export const ingestRuntimeEventSchema = z.object({
   outputFields: z.record(z.union([z.string().max(2000), z.number(), z.boolean(), z.null()])).default({}),
 }).strict();
 export type IngestRuntimeEventInput = z.input<typeof ingestRuntimeEventSchema>;
+
+/**
+ * Prompt 14 — multi-cloud security (§87). STRICT schemas: a cloud
+ * account registration carries identity + a credential REFERENCE name
+ * only. There is no field that could hold an AWS secret access key, an
+ * Azure client secret, a GCP service-account key, a token or a password
+ * — unknown keys are rejected outright, and the SDK re-validates the
+ * reference shape at the service boundary (§6). Cloud references are
+ * secret-manager paths, so "/" is allowed (e.g. vault:prod/aws/role);
+ * whitespace and secret-shaped values are not.
+ */
+const cloudCredentialReferenceSchema = z.string().min(1).max(300).regex(/^[A-Za-z0-9_.:/-]+$/, "credentialReference is a reference NAME (e.g. vault:prod/aws/assessment-role), never a secret value");
+
+const cloudRegionList = z.array(z.string().min(1).max(64)).max(500).default([]);
+const cloudUnitList = z.array(z.string().min(1).max(512)).max(1000).default([]);
+
+export const registerCloudAccountSchema = z.object({
+  name: z.string().min(1).max(200),
+  provider: z.enum(["AWS", "AZURE", "GCP"]),
+  // AWS account id / Azure subscription id / GCP project id — the
+  // provider's identifier for the estate. NOT a credential (§4).
+  externalAccountId: z.string().min(1).max(512),
+  credentialReference: cloudCredentialReferenceSchema.optional(),
+  environment: z.enum(["PRODUCTION", "STAGING", "DEVELOPMENT", "CI", "UNKNOWN"]).default("UNKNOWN"),
+  criticality: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+  scope: z.object({
+    includeRegions: cloudRegionList,
+    excludeRegions: cloudRegionList,
+    includeUnits: cloudUnitList,
+    excludeUnits: cloudUnitList,
+    includeResources: cloudUnitList,
+    excludeResources: cloudUnitList,
+  }).strict().optional(),
+}).strict();
+export type RegisterCloudAccountInput = z.input<typeof registerCloudAccountSchema>;
+
+export const startCloudScanSchema = z.object({
+  profile: z.enum([
+    "CLOUD_INVENTORY", "CLOUD_BASELINE", "CLOUD_COMPREHENSIVE", "IAM_REVIEW",
+    "PUBLIC_EXPOSURE_REVIEW", "COMPLIANCE_ASSESSMENT", "IAC_TO_CLOUD_CORRELATION",
+  ]).default("CLOUD_BASELINE"),
+}).strict();
+export type StartCloudScanInput = z.input<typeof startCloudScanSchema>;

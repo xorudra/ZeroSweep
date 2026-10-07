@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
-  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createApiAdapters, createCloudNativeAdapters, createNetworkAdapters, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
+  CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createApiAdapters, createCloudNativeAdapters, createCloudSecAdapters, createNetworkAdapters, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
 } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
@@ -13,6 +13,18 @@ const PROXY_TOOL_SLUGS: string[] = ["owasp-zap", "burp-suite-professional", "cai
 
 /** Prompt 9: platform importers are code, not binaries — always HEALTHY. */
 const IMPORTER_TOOL_SLUGS: string[] = ["postman", "insomnia"];
+
+/** Prompt 14: provider inventory connectors have no binary — their
+ *  health is whether the caller's organization has a registered cloud
+ *  account for that provider (§9). */
+const CLOUD_CONNECTOR_PROVIDERS: Record<string, string> = {
+  "aws-inventory": "AWS", "azure-inventory": "AZURE", "gcp-inventory": "GCP",
+};
+
+/** Prompt 14: import connectors are fed by recorded exports in the
+ *  worker artifact store; with no export source configured they are
+ *  honestly NOT_CONFIGURED (§27/§29). */
+const CLOUD_IMPORT_SLUGS: string[] = ["cloudmapper", "roadtools"];
 
 const updateToolSchema = z.object({ enabled: z.boolean().optional() });
 
@@ -35,7 +47,7 @@ export class ToolsController {
   /** Recon adapters probed live for health (§39). Built once; the probe is
    *  a PATH lookup + `--version` on THIS host — the worker host probes again
    *  at execution time, and plan-time/execution-time health always wins. */
-  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters(), ...createApiAdapters(), ...createNetworkAdapters(), ...createCloudNativeAdapters()];
+  private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters(), ...createApiAdapters(), ...createNetworkAdapters(), ...createCloudNativeAdapters(), ...createCloudSecAdapters()];
 
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
@@ -160,6 +172,38 @@ export class ToolsController {
         slug: tool.slug, healthStatus: "NOT_CONFIGURED", installed: false,
         detail: "Falco is a runtime sensor: events arrive through the trusted ingestion path (§59); no sensor feed is configured on this deployment",
         source: "runtime sensor configuration",
+      };
+    }
+    // Prompt 14 §34/§89: Pacu is offensive cloud tooling — registered
+    // DISABLED with NO adapter behind it. It is never probed, never
+    // enabled by health, and no stage can select it.
+    if (tool.slug === "pacu") {
+      return {
+        slug: tool.slug, healthStatus: "DISABLED", installed: false,
+        detail: "Pacu (CLOUD_OFFENSIVE_TESTING, INTRUSIVE/HIGH) is disabled by policy: DSRclone performs read-only assessment only (§7/§34) — no adapter exists and it can never execute",
+        source: "governed tool policy (Prompt 14 §34)",
+      };
+    }
+    // Prompt 14 §9: cloud inventory connectors report per-account
+    // health — HEALTHY only when the caller's organization has a
+    // registered account for the provider.
+    const cloudProvider = CLOUD_CONNECTOR_PROVIDERS[tool.slug];
+    if (cloudProvider) {
+      const delegate = (this.prisma as unknown as {
+        cloudAccount?: { count: (args: unknown) => Promise<number> };
+      }).cloudAccount;
+      const accounts = delegate && user?.organizationId
+        ? await delegate.count({ where: { provider: cloudProvider, workspace: { organizationId: user.organizationId } } })
+        : 0;
+      return accounts > 0
+        ? { slug: tool.slug, healthStatus: "HEALTHY", installed: true, configuredInstances: accounts, detail: "Cloud account(s) registered; inventory runs read-only from the CLOUD_ANALYSIS worker (§7/§16)", source: "cloud account registry" }
+        : { slug: tool.slug, healthStatus: "NOT_CONFIGURED", installed: false, configuredInstances: 0, detail: "No cloud account is registered for your organization — register one under Cloud Security (Prompt 14 §4)", source: "cloud account registry" };
+    }
+    if (CLOUD_IMPORT_SLUGS.includes(tool.slug)) {
+      return {
+        slug: tool.slug, healthStatus: "NOT_CONFIGURED", installed: false,
+        detail: "Import connector: fed by recorded exports in the worker artifact store; no export source is configured on this deployment (§27/§29)",
+        source: "import connector configuration",
       };
     }
     // Prompt 9: the Postman/Insomnia importers are platform code (no

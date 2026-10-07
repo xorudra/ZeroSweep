@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCloudNativeAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -10,6 +10,7 @@ import { StageExecutor, type StageJobData } from "./executors/stage-executor";
 import { PrismaWorkerStore } from "./store/prisma-store";
 import { prismaScannerDeps } from "./store/scanner-deps";
 import { prismaKubernetesDeps } from "./store/kubernetes-deps";
+import { prismaCloudDeps } from "./store/cloud-deps";
 import { RetestRunner } from "./executors/retest-runner";
 import type { RetestJobData } from "./jobs";
 import { DagRunner } from "./consumers/dag-runner";
@@ -70,6 +71,14 @@ registerCodeAdapters(registry, undefined, prismaScannerDeps());
 // the connector's live transport honestly reports UNAVAILABLE until a
 // read-only cluster client is provisioned on the worker (§34).
 registerCloudNativeAdapters(registry, undefined, prismaKubernetesDeps());
+// Prompt 14: multi-cloud adapters (provider inventory connectors,
+// Prowler / ScoutSuite / Steampipe, CloudMapper / ROADtools imports)
+// over Prisma-resolved CloudAccount records. Assessment is READ-ONLY
+// forever (§7); accounts without a wired provider transport report
+// NOT_CONFIGURED (§9), and cloud adapters execute only on
+// CLOUD_ANALYSIS workers (§10). Pacu is registered DISABLED in the
+// catalog only — it has no adapter and never executes (§34).
+registerCloudSecAdapters(registry, undefined, prismaCloudDeps());
 const executor = new StageExecutor(registry, store, undefined, {
   workerCapabilities: privilegedCapabilitiesFromEnv(),
 });
