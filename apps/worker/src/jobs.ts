@@ -26,6 +26,15 @@ export interface RetestJobData {
   workspaceId: string;
 }
 
+/** Prompt 16 §12: controlled validation session job — IDs only. The
+ *  payload can never carry a plan, parameters or credentials; the
+ *  worker loads the governed plan from trusted store state. */
+export interface ValidationJobData {
+  kind: "VALIDATION_EXECUTION";
+  validationRequestId: string;
+  workspaceId: string;
+}
+
 /** @deprecated Phase 2 placeholder shape, kept so old queued jobs fail safe. */
 export interface OrchestrationJobData {
   kind: "ASSESSMENT_ORCHESTRATION_PLACEHOLDER";

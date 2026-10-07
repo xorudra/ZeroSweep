@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, type CvssRecord, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, type CvssRecord, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
@@ -2413,6 +2413,210 @@ export class PrismaWorkerStore implements ScanRunStore {
         metadata: { retestId, outcome } as never,
       },
     });
+  }
+
+  // ---------- Prompt 16: controlled validation store (§12/§13) ----------
+  // The runner re-checks everything against this trusted state; queue
+  // payloads carry only the request id (§14 pattern from Prompt 4).
+
+  async prepareValidationExecution(requestId: string, workerId: string) {
+    const request = await prisma.validationRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        finding: true,
+        approvals: { where: { decision: "APPROVED" }, orderBy: { createdAt: "desc" }, take: 1 },
+      },
+    });
+    if (!request || request.status !== "APPROVED") return null;
+    if (request.expiresAt && request.expiresAt.getTime() <= Date.now()) {
+      await prisma.validationRequest.update({ where: { id: requestId }, data: { status: "EXPIRED" } });
+      return null;
+    }
+    const finding = request.finding;
+    const target = await prisma.target.findUnique({ where: { id: request.targetId } });
+    const scan = await prisma.scan.findUnique({ where: { id: finding.scanId }, include: { assessment: true } });
+    const workspace = await prisma.workspace.findUnique({ where: { id: request.workspaceId } });
+    const asset = finding.assetId ? await prisma.asset.findUnique({ where: { id: finding.assetId } }) : null;
+    const policyRow = await prisma.validationPolicy.findUnique({ where: { workspaceId: request.workspaceId } });
+    const snapshot = (request.authorizationSnapshot ?? {}) as { authorizationExpiresAt?: string };
+    const plan = request.plan as unknown as import("@dsrclone/security-sdk").ValidationPlan;
+    const session = await prisma.validationSession.create({
+      data: {
+        requestId, workspaceId: request.workspaceId, workerId, validatorSlug: request.validatorSlug,
+        toolSlug: request.toolSlug, status: "RUNNING", startedAt: new Date(), budget: request.budget as never,
+      },
+    });
+    await prisma.validationRequest.update({ where: { id: requestId }, data: { status: "RUNNING" } });
+    await prisma.auditLog.create({
+      data: {
+        actorId: request.requestedBy, organizationId: workspace?.organizationId, workspaceId: request.workspaceId,
+        action: "VALIDATION_STARTED" as never, resourceType: "ValidationRequest", resourceId: requestId,
+        metadata: { sessionId: session.id, validator: request.validatorSlug, riskClass: request.riskClass } as never,
+      },
+    });
+    const approval = request.approvals[0];
+    return {
+      requestId, sessionId: session.id, workspaceId: request.workspaceId,
+      ...(workspace?.organizationId ? { organizationId: workspace.organizationId } : {}),
+      findingId: finding.id,
+      finding: {
+        id: finding.id, title: finding.title, fingerprint: finding.fingerprint, vulnClass: finding.vulnClass,
+        cwe: finding.cwe, cve: finding.cve, host: finding.host, port: finding.port, endpoint: finding.endpoint,
+        sources: finding.sources, assetCriticality: asset?.criticality ?? null,
+        repositoryId: finding.repositoryId, filePath: finding.filePath, ruleId: finding.ruleId,
+        componentPurl: finding.componentPurl, imageDigest: finding.imageDigest, clusterRef: finding.clusterRef,
+        cloudProvider: finding.cloudProvider, cloudResourceId: finding.cloudResourceId,
+        directoryDomainId: finding.directoryDomainId, directoryObjectId: finding.directoryObjectId,
+      },
+      targetId: request.targetId, scanId: finding.scanId,
+      validatorSlug: request.validatorSlug, riskClass: request.riskClass as never,
+      plan, planHash: request.planHash,
+      parameters: (request.parameters ?? {}) as Record<string, string | number | boolean>,
+      requestedBy: request.requestedBy,
+      environment: (request.environment === "LAB" ? "LAB" : "PRODUCTION") as "PRODUCTION" | "LAB",
+      policy: {
+        productionPolicy: (policyRow?.productionPolicy === "SAFE_AND_LOW_IMPACT_WITH_APPROVAL" ? "SAFE_AND_LOW_IMPACT_WITH_APPROVAL" : "SAFE_ONLY") as "SAFE_ONLY" | "SAFE_AND_LOW_IMPACT_WITH_APPROVAL",
+        separationOfDuties: policyRow?.separationOfDuties ?? true,
+        allowIntrusiveInLab: policyRow?.allowIntrusiveInLab ?? false,
+        allowedValidators: policyRow?.allowedValidators ?? [],
+      },
+      ...(asset?.criticality ? { assetCriticality: asset.criticality } : {}),
+      authorization: {
+        // Live state wins over the snapshot (§8): a target unverified or
+        // an assessment un-approved since the request voids execution.
+        targetVerified: Boolean(target?.verified),
+        assessmentApproved: scan?.assessment?.status === "APPROVED",
+        ...(snapshot.authorizationExpiresAt ? { expiresAt: snapshot.authorizationExpiresAt } : {}),
+      },
+      scopeRules: scopeRulesSchema.parse(request.scopeSnapshot ?? {}),
+      approval: approval
+        ? {
+            approverId: approval.approverId, decision: approval.decision, planHash: approval.planHash,
+            targetId: request.targetId, findingId: request.findingId, validatorSlug: request.validatorSlug,
+            expiresAt: approval.expiresAt.toISOString(),
+          }
+        : null,
+    };
+  }
+
+  async activeKillSwitches(_ctx: import("@dsrclone/security-sdk").KillSwitchContext) {
+    const rows = await prisma.validationKillSwitch.findMany({ where: { active: true } });
+    return rows.map((r) => ({
+      level: r.level, organizationId: r.organizationId, workspaceId: r.workspaceId, scopeRef: r.scopeRef, active: r.active,
+    }));
+  }
+
+  async recordValidationEvidence(sessionId: string, evidence: import("@dsrclone/security-sdk").SanitizedEvidence[]): Promise<void> {
+    const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: true } });
+    if (!session) return;
+    for (const e of evidence) {
+      await prisma.validationEvidence.create({
+        data: {
+          requestId: session.requestId, sessionId, workspaceId: session.workspaceId,
+          findingId: session.request.findingId, type: e.type as never, summary: e.summary,
+          content: (e.content ?? undefined) as never, checksum: e.checksum, sourceTool: e.sourceTool,
+        },
+      });
+    }
+  }
+
+  async completeValidation(sessionId: string, outcome: import("@dsrclone/security-sdk").ValidationOutcome, detail: string, consumption: import("@dsrclone/security-sdk").BudgetConsumption): Promise<void> {
+    const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: { include: { finding: true } } } });
+    if (!session) return;
+    const requestStatus = outcome === "REPRODUCED" || outcome === "FIXED" ? "SUCCEEDED" : outcome === "VALIDATION_BLOCKED" ? "BLOCKED" : "INCONCLUSIVE";
+    await prisma.validationSession.update({
+      where: { id: sessionId },
+      data: { status: requestStatus, endedAt: new Date(), budgetConsumed: consumption as never, terminationReason: detail },
+    });
+    await prisma.validationRequest.update({
+      where: { id: session.requestId },
+      data: { status: requestStatus as never, outcome },
+    });
+    const update = confidenceUpdateForOutcome(outcome);
+    await prisma.finding.update({
+      where: { id: session.request.findingId },
+      data: {
+        validationConfidence: update.validationConfidence,
+        ...(update.verificationStatus ? { verificationStatus: update.verificationStatus } : {}),
+        lastValidatedAt: new Date(update.lastValidatedAt),
+      },
+    });
+    await prisma.findingHistory.create({
+      data: {
+        findingId: session.request.findingId, workspaceId: session.workspaceId, event: "VALIDATED",
+        metadata: { validationRequestId: session.requestId, sessionId, outcome, detail, note: update.note } as never,
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.request.requestedBy, workspaceId: session.workspaceId,
+        action: "VALIDATION_COMPLETED" as never, resourceType: "ValidationRequest", resourceId: session.requestId,
+        metadata: { sessionId, outcome, validator: session.validatorSlug } as never,
+      },
+    });
+  }
+
+  async blockValidation(sessionId: string, reasonCode: string, message: string): Promise<void> {
+    const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: true } });
+    if (!session) return;
+    await prisma.validationSession.update({
+      where: { id: sessionId },
+      data: { status: "BLOCKED", endedAt: new Date(), terminationReason: `${reasonCode}: ${message}` },
+    });
+    await prisma.validationRequest.update({
+      where: { id: session.requestId },
+      data: { status: "BLOCKED", outcome: "VALIDATION_BLOCKED", policyReason: `${reasonCode}: ${message}` },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.request.requestedBy, workspaceId: session.workspaceId,
+        action: "VALIDATION_BLOCKED" as never, resourceType: "ValidationRequest", resourceId: session.requestId,
+        metadata: { sessionId, reasonCode, message } as never,
+      },
+    });
+  }
+
+  async cancelValidation(sessionId: string, reason: string): Promise<void> {
+    const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: true } });
+    if (!session) return;
+    await prisma.validationSession.update({
+      where: { id: sessionId },
+      data: { status: "CANCELLED", endedAt: new Date(), terminationReason: reason },
+    });
+    await prisma.validationRequest.update({ where: { id: session.requestId }, data: { status: "CANCELLED" } });
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.request.requestedBy, workspaceId: session.workspaceId,
+        action: "VALIDATION_CANCELLED" as never, resourceType: "ValidationRequest", resourceId: session.requestId,
+        metadata: { sessionId, reason, via: "kill-switch" } as never,
+      },
+    });
+  }
+
+  async failValidation(sessionId: string, terminationReason: string, message: string): Promise<void> {
+    const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: true } });
+    if (!session) return;
+    await prisma.validationSession.update({
+      where: { id: sessionId },
+      data: { status: "FAILED", endedAt: new Date(), terminationReason: `${terminationReason}: ${message}` },
+    });
+    await prisma.validationRequest.update({
+      where: { id: session.requestId },
+      data: { status: "FAILED", outcome: "INCONCLUSIVE" },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.request.requestedBy, workspaceId: session.workspaceId,
+        action: "VALIDATION_COMPLETED" as never, resourceType: "ValidationRequest", resourceId: session.requestId,
+        metadata: { sessionId, result: "FAILED", terminationReason, message } as never,
+      },
+    });
+  }
+
+  async resolveHost(host: string): Promise<string[]> {
+    const { lookup } = await import("node:dns/promises");
+    const records = await lookup(host, { all: true });
+    return records.map((r) => r.address);
   }
 
   // ---------- Prompt 9 platform-stage hooks ----------

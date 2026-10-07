@@ -217,10 +217,41 @@ and the AI health endpoint.
 13. ✅ Container, Docker & Kubernetes security (Prompt 13)
 14. ✅ Multi-cloud security assessment: AWS, Azure & GCP (Prompt 14)
 15. ✅ Active Directory security assessment, identity graph & defensive attack-path engine (Prompt 15)
-16. Lab-only modules (wireless, mobile)
+16. ✅ Controlled penetration testing & validation workflow (Prompt 16)
+17. Lab-only modules (wireless, mobile)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 16: Controlled Security Validation & Authorized
+  Pentest Workflow.** Findings can now be *validated* — confidence raised
+  through governed, safe rechecks — under a full control stack: a closed
+  catalog of 11 SAFE validators (header/TLS/endpoint/Nuclei rechecks,
+  service presence, API-safe, cloud/K8s posture, source, container, AD
+  posture), immutable authorization snapshots, scope revalidation with
+  fresh DNS resolution immediately before execution, plan-hash-bound
+  approvals with separation of duties and expiry, strict budgets clamped
+  to administrator hard limits, six-level kill switches with mid-flight
+  termination, and a controlled callback service (hash-only tokens,
+  tenant/session-bound, single-use). `PROHIBITED_AUTOMATION` techniques
+  (spraying, dumping, Kerberoasting, relay, DCSync, RCE, …) are refused
+  at plan, API and worker layers alike; offensive tools (NetExec,
+  Impacket, Metasploit, …) live in a separate metadata-only registry,
+  execution DISABLED. Evidence is redacted before storage and
+  checksummed after; a successful safe validation sets VERIFIED
+  confidence without touching the original scanner evidence, and a
+  failed validation is never auto-labelled a false positive. Manual
+  validation records let analysts attach sanitized evidence for
+  manual-only classes (RCE findings). Validation runs only in isolated
+  workers through read-only transports; the production transport is
+  deliberately unprovisioned until a deployment configures governed
+  egress (sessions then fail honestly, never fabricate). Scheduled
+  SAFE-only revalidation is deferred to the Prompt 22 scheduler.
+  Migration `20261007130000_security_validation` generated (not applied —
+  no Docker on the build VM). Docs: `docs/architecture/security-validation-engine.md`,
+  `docs/architecture/validation-workflow.md`,
+  `docs/architecture/controlled-callback-service.md`,
+  `docs/security/validation-policy.md`, `docs/security/evidence-redaction.md`,
+  `docs/security/kill-switch.md`.
 - **2026-10-08 — Prompt 15: Active Directory Security Assessment.** AD domains
   became verified targets (internal engagements only) with a defensive
   READ-ONLY posture: registration stores identity and a credential

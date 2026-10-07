@@ -95,8 +95,32 @@ export class QueueService implements OnModuleDestroy {
     }
   }
 
+  private validationQueue?: Queue;
+
+  /** Prompt 16 §12: enqueue a controlled validation session (IDs
+   *  only). Failure to enqueue is logged and reported — the
+   *  ValidationRequest row stays APPROVED in Postgres and can be
+   *  re-dispatched; it is never silently dropped. */
+  async enqueueValidation(data: { validationRequestId: string; workspaceId: string }): Promise<boolean> {
+    try {
+      if (!this.connection) this.ensure();
+      if (!this.validationQueue) {
+        this.validationQueue = new Queue(QUEUES.VALIDATION_EXECUTION, { connection: this.connection! });
+      }
+      await this.validationQueue.add(
+        "validation-execution",
+        { kind: "VALIDATION_EXECUTION", validationRequestId: data.validationRequestId, workspaceId: data.workspaceId },
+        { jobId: `validation-${data.validationRequestId}`, removeOnComplete: 100, removeOnFail: 100 },
+      );
+      return true;
+    } catch (e) {
+      logger.warn("could not enqueue validation", { error: e instanceof Error ? e.message : "unknown" });
+      return false;
+    }
+  }
+
   async onModuleDestroy(): Promise<void> {
-    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close(), this.retestQueue?.close()]);
+    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close(), this.retestQueue?.close(), this.validationQueue?.close()]);
     this.connection?.disconnect();
   }
 }

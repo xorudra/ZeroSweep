@@ -192,6 +192,42 @@ async function main(): Promise<void> {
       },
     });
   }
+  // Prompt 16 §30/§31: the OFFENSIVE tool registry. These tools are
+  // registered SEPARATELY as metadata only — classification
+  // OFFENSIVE_SECURITY_TOOL, default execution DISABLED, manual-only.
+  // The registry may track name/version/capabilities/risk/required
+  // authorization/required environment, but ordinary scan orchestration
+  // must never invoke them: no adapter is implemented for any of them,
+  // and both the Tool and its catalog adapter stay disabled.
+  const OFFENSIVE_REGISTRY: Array<{ slug: string; requiredAuthorization: string; requiredEnvironment: string }> = [
+    { slug: "netexec", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "impacket", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "certipy", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "kerbrute", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "responder", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "powerview", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "metasploit-framework", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+    { slug: "pacu", requiredAuthorization: "separate external engagement process (§22)", requiredEnvironment: "LAB" },
+  ];
+  for (const offensive of OFFENSIVE_REGISTRY) {
+    const tool = await prisma.tool.findUnique({ where: { slug: offensive.slug } });
+    if (!tool) continue;
+    await prisma.tool.update({ where: { id: tool.id }, data: { enabled: false } });
+    await prisma.toolAdapter.updateMany({
+      where: { toolId: tool.id },
+      data: {
+        enabled: false,
+        inputSchema: {
+          classification: "OFFENSIVE_SECURITY_TOOL",
+          execution: "DISABLED",
+          manualOnly: true,
+          requiredAuthorization: offensive.requiredAuthorization,
+          requiredEnvironment: offensive.requiredEnvironment,
+          note: "Registry metadata only (Prompt 16 §30/§31) — no adapter exists and scan orchestration must never invoke this tool. Metasploit-class frameworks are never executors in DSRclone.",
+        },
+      },
+    });
+  }
   // Prompt 5: adapters implemented in code are seeded ENABLED so the
   // registry/planner can select them. Health stays UNKNOWN in the catalog —
   // the real state is probed live (API plan-time + worker execution-time).

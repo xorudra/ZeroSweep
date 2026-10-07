@@ -24,6 +24,7 @@ export const NAV = [
   { href: "/scans", label: "Scans" },
   { href: "/findings", label: "Findings" },
   { href: "/vulnerabilities", label: "Vulnerabilities" },
+  { href: "/security-validation", label: "Security Validation" },
   { href: "/remediation", label: "Remediation" },
   { href: "/reports", label: "Reports" },
   { href: "/tools", label: "Tools" },

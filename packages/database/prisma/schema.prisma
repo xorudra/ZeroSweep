@@ -520,6 +520,19 @@ enum AuditAction {
   AD_DRIFT_DETECTED
   DIRECTORY_ARTIFACT_ACCESSED
   AD_OFFENSIVE_ACTION_BLOCKED
+  // Prompt 16 §80: controlled validation audit actions. Metadata for
+  // these actions NEVER contains secrets, payloads or raw evidence (§81).
+  VALIDATION_REQUESTED
+  VALIDATION_POLICY_EVALUATED
+  VALIDATION_APPROVED
+  VALIDATION_REJECTED
+  VALIDATION_STARTED
+  VALIDATION_COMPLETED
+  VALIDATION_CANCELLED
+  VALIDATION_BLOCKED
+  VALIDATION_EVIDENCE_ACCESSED
+  MANUAL_VALIDATION_ADDED
+  KILL_SWITCH_ACTIVATED
 }
 
 enum NotificationType {
@@ -1157,11 +1170,20 @@ model Finding {
   // no password hashes (§19) can ever be stored on a finding.
   directoryDomainId       String?
   directoryObjectId       String?
+  // Prompt 16 §36/§37: validation confidence is tracked SEPARATELY from
+  // scanner confidence and from severity. A successful safe validation
+  // may raise verificationStatus to CONFIRMED (deterministic proof only)
+  // and stamps lastValidatedAt — original scanner evidence is never
+  // overwritten (§37).
+  validationConfidence    String? // UNVERIFIED | LIKELY | VERIFIED | INCONCLUSIVE (§36)
+  lastValidatedAt         DateTime?
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
   exploitReferences       ExploitReference[]
   retests                 RetestRequest[]
+  validationRequests      ValidationRequest[]
+  manualValidations       ManualValidationRecord[]
   firstSeen               DateTime                  @default(now())
   lastSeen                DateTime                  @updatedAt
   scan                    Scan                      @relation(fields: [scanId], references: [id], onDelete: Cascade)
@@ -3145,4 +3167,250 @@ model DirectoryArtifact {
 
   @@index([workspaceId])
   @@index([domainId])
+}
+
+// --------------------------- Controlled validation (Prompt 16) ---------------------------
+// The validation engine increases CONFIDENCE in a finding through safe,
+// governed rechecks (§5/§6). It is NOT an exploitation engine: prohibited
+// techniques are unrepresentable in the validator catalog (§95/§97), the
+// approval is bound to the plan content hash (§10), and every execution
+// re-validates authorization, scope, policy, budget and kill switches in
+// the worker immediately before running (§9/§13/§43).
+
+enum ValidationRequestStatus {
+  REQUESTED
+  POLICY_REVIEW
+  APPROVAL_REQUIRED
+  APPROVED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  INCONCLUSIVE
+  BLOCKED
+  CANCELLED
+  EXPIRED
+}
+
+enum ValidationRiskClass {
+  SAFE
+  LOW_IMPACT
+  REVIEW_REQUIRED
+  INTRUSIVE
+  PROHIBITED_AUTOMATION
+}
+
+enum ValidationEvidenceType {
+  HTTP_REQUEST
+  HTTP_RESPONSE
+  TLS_RESULT
+  SERVICE_RESULT
+  CONFIGURATION_RESULT
+  SCREENSHOT
+  LOG
+  SCANNER_RESULT
+  MANUAL_NOTE
+}
+
+model ValidationRequest {
+  id                    String                  @id @default(uuid())
+  workspaceId           String
+  findingId             String
+  targetId              String
+  requestedBy           String
+  // Governed validator slug from the SDK catalog — never a tool command,
+  // never a user-supplied payload (§79). validationType mirrors the
+  // catalog technique family (HEADER, TLS, EXPOSURE, RECHECK, ...).
+  validatorSlug         String
+  validationType        String
+  toolSlug              String?
+  riskClass             ValidationRiskClass
+  reason                String?
+  // Immutable snapshots taken at request time (§8): authorization, scope
+  // rules and the exact plan document. planHash binds the approval to
+  // the plan CONTENT — any plan change invalidates the approval.
+  authorizationSnapshot Json
+  scopeSnapshot         Json
+  plan                  Json
+  planHash              String
+  parameters            Json? // allowlisted per-validator typed params only (§79)
+  budget                Json // ValidationBudget (§40), already clamped to admin hard limits (§41)
+  status                ValidationRequestStatus @default(REQUESTED)
+  policyDecision        String? // ALLOW | DENY | REQUIRE_APPROVAL (§7)
+  policyReason          String?
+  outcome               String? // REPRODUCED | NOT_REPRODUCED | INCONCLUSIVE | TARGET_CHANGED | VALIDATION_BLOCKED | FIXED (§38)
+  environment           String                  @default("PRODUCTION") // PRODUCTION | LAB — explicitly marked, never inferred (§65)
+  idempotencyKey        String?
+  expiresAt             DateTime?
+  finding               Finding                 @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  approvals             ValidationApproval[]
+  sessions              ValidationSession[]
+  evidence              ValidationEvidence[]
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId])
+  @@index([findingId])
+  @@index([targetId])
+  @@index([status])
+}
+
+model ValidationApproval {
+  id          String            @id @default(uuid())
+  requestId   String
+  workspaceId String
+  approverId  String
+  decision    String // APPROVED | REJECTED
+  reason      String?
+  // The approval is valid ONLY for this exact plan hash, target, finding
+  // and technique (§10). A plan edit changes the hash and voids it.
+  planHash    String
+  approvedAt  DateTime          @default(now())
+  expiresAt   DateTime
+  request     ValidationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+
+  @@index([requestId])
+  @@index([workspaceId])
+}
+
+model ValidationSession {
+  id                String               @id @default(uuid())
+  requestId         String
+  workspaceId       String
+  workerId          String?
+  toolSlug          String?
+  validatorSlug     String
+  status            String               @default("QUEUED") // QUEUED | RUNNING | SUCCEEDED | FAILED | INCONCLUSIVE | BLOCKED | CANCELLED
+  startedAt         DateTime?
+  endedAt           DateTime?
+  budget            Json
+  budgetConsumed    Json?
+  terminationReason String?
+  request           ValidationRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  evidence          ValidationEvidence[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([requestId])
+  @@index([workspaceId])
+  @@index([status])
+}
+
+// Sanitized validation evidence (§33–§35): content is redacted BEFORE it
+// reaches this table (§34/§91); checksum covers the sanitized artifact so
+// integrity checks never require un-redacting anything.
+model ValidationEvidence {
+  id          String                 @id @default(uuid())
+  requestId   String
+  sessionId   String?
+  workspaceId String
+  findingId   String?
+  type        ValidationEvidenceType
+  summary     String
+  content     Json? // sanitized structured content (§34)
+  checksum    String
+  sourceTool  String?
+  request     ValidationRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  session     ValidationSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  createdAt   DateTime               @default(now())
+
+  @@index([requestId])
+  @@index([sessionId])
+  @@index([workspaceId])
+}
+
+// Analyst-attached manual validation (§32): DSRclone executes NOTHING for
+// these records — they document validation performed by an authorized
+// human outside the automated engine (the only path for RCE-class
+// findings, §21). Attachments are sanitized before storage (§34).
+model ManualValidationRecord {
+  id          String   @id @default(uuid())
+  workspaceId String
+  findingId   String
+  analystId   String
+  description String
+  outcome     String   @default("INCONCLUSIVE") // VERIFIED | NOT_REPRODUCED | INCONCLUSIVE
+  evidence    Json? // sanitized notes / request-response excerpts (§32/§34)
+  finding     Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([findingId])
+  @@index([workspaceId])
+}
+
+// Workspace validation policy (§64/§77): production defaults to
+// SAFE_ONLY. Administrator hard limits (§41) clamp every request budget
+// regardless of what a user or workspace asks for.
+model ValidationPolicy {
+  id                    String   @id @default(uuid())
+  workspaceId           String   @unique
+  productionPolicy      String   @default("SAFE_ONLY") // SAFE_ONLY | SAFE_AND_LOW_IMPACT_WITH_APPROVAL
+  defaultRiskLevel      String   @default("SAFE")
+  separationOfDuties    Boolean  @default(true)
+  allowIntrusiveInLab   Boolean  @default(false)
+  allowedValidators     String[] @default([])
+  hardLimits            Json // administrator hard budget ceilings (§41)
+  defaultBudget         Json
+  defaultTimeoutSeconds Int      @default(300)
+  approvalTtlMinutes    Int      @default(60)
+  evidenceRetentionDays Int      @default(365)
+  callbackEnabled       Boolean  @default(false)
+  updatedBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// Kill switches (§43): any matching ACTIVE row terminates validation.
+// Levels: GLOBAL, ORGANIZATION, WORKSPACE, SCAN, TARGET, SESSION.
+model ValidationKillSwitch {
+  id             String    @id @default(uuid())
+  level          String
+  organizationId String?
+  workspaceId    String?
+  scopeRef       String? // scanId | targetId | sessionId depending on level
+  active         Boolean   @default(true)
+  reason         String?
+  activatedBy    String
+  activatedAt    DateTime  @default(now())
+  clearedBy      String?
+  clearedAt      DateTime?
+
+  @@index([level, active])
+  @@index([workspaceId])
+  @@index([organizationId])
+}
+
+// Controlled callback tokens (§47/§48): only the HASH is stored. A token
+// is bound to one tenant + one validation session, expires quickly, and
+// is NEVER an authorization credential — it only correlates a callback.
+model ValidationCallbackToken {
+  id          String    @id @default(uuid())
+  tokenHash   String    @unique
+  workspaceId String
+  requestId   String?
+  sessionId   String?
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([expiresAt])
+}
+
+// Minimal callback ingestion log (§50): metadata only — no bodies, no
+// visitor information beyond what correlation requires.
+model ValidationCallbackEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  tokenId     String
+  sessionId   String?
+  kind        String   @default("HTTP") // HTTP | DNS (§49/§50)
+  sourceIp    String?
+  receivedAt  DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([tokenId])
 }

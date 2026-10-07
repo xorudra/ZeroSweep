@@ -13,7 +13,8 @@ import { prismaKubernetesDeps } from "./store/kubernetes-deps";
 import { prismaCloudDeps } from "./store/cloud-deps";
 import { prismaDirectoryDeps } from "./store/directory-deps";
 import { RetestRunner } from "./executors/retest-runner";
-import type { RetestJobData } from "./jobs";
+import type { RetestJobData, ValidationJobData } from "./jobs";
+import { UnconfiguredValidationTransport, ValidationRunner } from "./executors/validation-runner";
 import { DagRunner } from "./consumers/dag-runner";
 import { createBullmqStageDispatcher } from "./consumers/bullmq-dispatcher";
 import { makeWorkerId, privilegedCapabilitiesFromEnv, registrationRecord } from "./heartbeat/heartbeat";
@@ -90,7 +91,18 @@ async function handleRetest(job: Job<RetestJobData>): Promise<{ ok: true; retest
   const result = await retestRunner.runRetest(job.data.retestId);
   return { ok: true, retestId: job.data.retestId, ...result };
 }
+
+async function handleValidation(job: Job<ValidationJobData>): Promise<{ ok: true; validationRequestId: string; status: string; outcome?: string; reasonCode?: string }> {
+  const result = await validationRunner.runValidation(job.data.validationRequestId);
+  return { ok: true, validationRequestId: job.data.validationRequestId, ...result };
+}
 const workerId = makeWorkerId();
+// Prompt 16 §45/§46: validation runs ONLY on worker processes, under
+// the full re-check gauntlet in ValidationRunner. The transport is
+// deliberately unconfigured until a deployment provisions governed
+// egress transports — sessions then fail honestly rather than
+// fabricating results.
+const validationRunner = new ValidationRunner(store, new UnconfiguredValidationTransport(), { workerId });
 let activeJobs = 0;
 let draining = false;
 
@@ -150,6 +162,7 @@ const workers = [
   new Worker(QUEUES.ORCHESTRATION, handleScanOrchestration, { connection }),
   new Worker(QUEUES.STAGE_EXECUTION, handleStageExecution, { connection, concurrency: 4 }),
   new Worker(QUEUES.RETEST_EXECUTION, handleRetest, { connection, concurrency: 2 }),
+  new Worker(QUEUES.VALIDATION_EXECUTION, handleValidation, { connection, concurrency: 2 }),
 ];
 for (const w of workers) {
   w.on("failed", (job, err) => logger.error("job failed", { jobId: job?.id, queue: w.name, error: err.message }));

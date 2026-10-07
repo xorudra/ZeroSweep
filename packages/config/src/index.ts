@@ -38,4 +38,6 @@ export const QUEUES = {
   RISK_ANALYSIS: "risk-analysis",
   // Prompt 11 §55: targeted vulnerability retests (IDs only payloads).
   RETEST_EXECUTION: "retest-execution",
+  // Prompt 16 §12: controlled validation sessions (IDs only payloads).
+  VALIDATION_EXECUTION: "validation-execution",
 } as const;
