@@ -156,6 +156,16 @@ enum AssessmentProfile {
   BINARY_COMPREHENSIVE_STATIC
   BINARY_DEPENDENCY_ANALYSIS
   BINARY_CONTROLLED_DEBUG
+  // Prompt 19 §15: wireless assessment profiles. Every profile is
+  // PASSIVE — no profile transmits, cracks, deauthenticates or
+  // creates rogue APs (§99). WIRELESS_LAB_VALIDATION names the
+  // governed lab architecture (§65); its active tooling stays
+  // DISABLED in baseline orchestration (§64).
+  WIRELESS_PASSIVE_BASELINE
+  WIRELESS_PASSIVE_COMPREHENSIVE
+  PCAP_ANALYSIS_ONLY
+  WIRELESS_COMPLIANCE
+  WIRELESS_LAB_VALIDATION
 }
 
 enum AssessmentStatus {
@@ -280,6 +290,16 @@ enum ScanStageType {
   BINARY_HARDENING_ANALYSIS
   BINARY_STATIC_ANALYSIS
   BINARY_DEBUG_SESSION
+  // Prompt 19 §15: wireless pipeline stages. WIRELESS_CAPTURE_INTAKE
+  // and WIRELESS_POSTURE_ANALYSIS are PLATFORM stages (intake proof +
+  // deterministic posture/rogue/drift/gate analysis over persisted
+  // inventory); WIRELESS_PASSIVE_DISCOVERY (Kismet) and
+  // WIRELESS_PCAP_ANALYSIS (tshark/hcxtools/aircrack-metadata) are
+  // tool stages on WIRELESS_PASSIVE_ANALYSIS workers only.
+  WIRELESS_CAPTURE_INTAKE
+  WIRELESS_PASSIVE_DISCOVERY
+  WIRELESS_PCAP_ANALYSIS
+  WIRELESS_POSTURE_ANALYSIS
   QUALITY_GATE
   NORMALIZATION
   CORRELATION
@@ -615,6 +635,21 @@ enum AuditAction {
   BINARY_DEBUG_CANCELLED
   BINARY_CRASH_CAPTURED
   BINARY_DEBUG_ACTION_BLOCKED
+  // Prompt 19 §96: wireless security audit actions. Metadata for
+  // these actions NEVER contains Wi-Fi credentials (§96) — observed
+  // credential material is counted, never logged.
+  WIRELESS_ENVIRONMENT_CREATED
+  WIRELESS_SENSOR_REGISTERED
+  WIRELESS_SCAN_STARTED
+  WIRELESS_SCAN_COMPLETED
+  WIRELESS_CAPTURE_UPLOADED
+  WIRELESS_CAPTURE_ACCESSED
+  WIRELESS_AP_DISCOVERED
+  WIRELESS_SECURITY_DRIFT_DETECTED
+  WIRELESS_SECURITY_EVENT_CREATED
+  WIRELESS_POLICY_VIOLATION_DETECTED
+  WIRELESS_ACTIVE_TOOL_BLOCKED
+  WIRELESS_LAB_VALIDATION_REQUESTED
 }
 
 enum NotificationType {
@@ -667,46 +702,50 @@ model Membership {
 }
 
 model Workspace {
-  id                 String              @id @default(uuid())
-  organizationId     String
-  name               String
-  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  targets            Target[]
-  assessments        Assessment[]
-  credentials        Credential[]
-  scannerInstances   ScannerInstance[]
-  sessionProfiles    SessionProfile[]
-  scanApprovals      ScanApproval[]
-  repositories       SourceRepository[]
-  mobileApplications MobileApplication[]
-  mobileDevices      MobileTestDevice[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  deletedAt          DateTime?
+  id                          String                       @id @default(uuid())
+  organizationId              String
+  name                        String
+  organization                Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targets                     Target[]
+  assessments                 Assessment[]
+  credentials                 Credential[]
+  scannerInstances            ScannerInstance[]
+  sessionProfiles             SessionProfile[]
+  scanApprovals               ScanApproval[]
+  repositories                SourceRepository[]
+  mobileApplications          MobileApplication[]
+  mobileDevices               MobileTestDevice[]
+  wirelessEnvironments        WirelessEnvironment[]
+  wirelessSensors             WirelessSensor[]
+  wirelessCaptures            WirelessCapture[]
+  wirelessChannelObservations WirelessChannelObservation[]
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  deletedAt                   DateTime?
 
   @@index([organizationId])
 }
 
 // ------------------------------- Targets, verification, scope -------------------------------
 model Target {
-  id            String               @id @default(uuid())
-  workspaceId   String
-  name          String
-  type          TargetType
-  value         String
-  description   String?
-  status        TargetStatus         @default(DRAFT)
-  verified      Boolean              @default(false)
-  createdBy     String
-  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  verifications TargetVerification[]
-  scopes        Scope[]
-  assets        Asset[]
-  assessments   Assessment[]
+  id              String               @id @default(uuid())
+  workspaceId     String
+  name            String
+  type            TargetType
+  value           String
+  description     String?
+  status          TargetStatus         @default(DRAFT)
+  verified        Boolean              @default(false)
+  createdBy       String
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  verifications   TargetVerification[]
+  scopes          Scope[]
+  assets          Asset[]
+  assessments     Assessment[]
   binaryArtifacts BinaryArtifact[]
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  deletedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deletedAt       DateTime?
 
   @@index([workspaceId])
   @@index([workspaceId, type])
@@ -746,43 +785,44 @@ model Scope {
 
 // ------------------------------- Discovered surface -------------------------------
 model Asset {
-  id                 String                  @id @default(uuid())
-  workspaceId        String
-  targetId           String
-  host               String
-  ip                 String?
-  type               String                  @default("HOST")
+  id                   String                  @id @default(uuid())
+  workspaceId          String
+  targetId             String
+  host                 String
+  ip                   String?
+  type                 String                  @default("HOST")
   // Discovered-asset scope verdict (Prompt 4 §33): IN_SCOPE | OUT_OF_SCOPE |
   // PENDING_REVIEW. Out-of-scope assets never become scan targets on their own.
-  scopeStatus        String                  @default("IN_SCOPE")
+  scopeStatus          String                  @default("IN_SCOPE")
   // Provenance (Prompt 5 §18): adapter slugs that discovered this asset —
   // one asset, many sources, never duplicate rows per tool.
-  sources            String[]                @default([])
+  sources              String[]                @default([])
   // Live HTTP status when httpx probed this host (Prompt 5 §32); metadata,
   // never a finding by itself.
-  httpStatus         Int?
+  httpStatus           Int?
   // Asset criticality for the risk engine (Prompt 7 §36): user/admin
   // classified — CRITICAL | HIGH | MEDIUM | LOW | UNSPECIFIED. Never
   // auto-raised just because a host is internet-facing.
-  criticality        String                  @default("UNSPECIFIED")
+  criticality          String                  @default("UNSPECIFIED")
   // Scan that most recently discovered/refresh this asset — powers the
   // per-scan recon summary (Prompt 5 §46) without inventing a join table.
-  discoveredByScanId String?
+  discoveredByScanId   String?
   // Prompt 10 §35/§50: OS HINT (never stated as fact) + confidence, and
   // the canonical network/CIDR this host belongs to when known.
-  osHint             String?
-  osConfidence       Float?
-  network            String?
-  packetCaptures     PacketCaptureArtifact[]
-  target             Target                  @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  services           Service[]
-  endpoints          Endpoint[]
-  technologies       Technology[]
-  findings           Finding[]
-  firstSeen          DateTime                @default(now())
-  lastSeen           DateTime                @updatedAt
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  osHint               String?
+  osConfidence         Float?
+  network              String?
+  packetCaptures       PacketCaptureArtifact[]
+  wirelessAccessPoints WirelessAccessPoint[]
+  target               Target                  @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  services             Service[]
+  endpoints            Endpoint[]
+  technologies         Technology[]
+  findings             Finding[]
+  firstSeen            DateTime                @default(now())
+  lastSeen             DateTime                @updatedAt
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   @@index([workspaceId])
   @@index([targetId, host])
@@ -1290,6 +1330,17 @@ model Finding {
   binaryFingerprint       String?
   staticConfidence        String?
   binaryArtifact          BinaryArtifact?           @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
+  // Prompt 19 (§52/§53): wireless extension block — the registered
+  // wireless environment, the AP identity (BSSID, §5), the §52
+  // finding type and the §53 canonical fingerprint (environment +
+  // BSSID + rule + security mode + class — never the SSID alone).
+  wirelessEnvironmentId   String?
+  wirelessAccessPointId   String?
+  wirelessBssid           String?
+  wirelessFindingType     String?
+  wirelessFingerprint     String?
+  wirelessEnvironment     WirelessEnvironment?      @relation(fields: [wirelessEnvironmentId], references: [id], onDelete: SetNull)
+  wirelessAccessPoint     WirelessAccessPoint?      @relation(fields: [wirelessAccessPointId], references: [id], onDelete: SetNull)
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
   comments                FindingComment[]
@@ -1336,6 +1387,9 @@ model Finding {
   @@index([crossBuildFingerprint])
   @@index([binaryArtifactId])
   @@index([binaryFingerprint])
+  @@index([wirelessEnvironmentId])
+  @@index([wirelessAccessPointId])
+  @@index([wirelessFingerprint])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -2243,32 +2297,32 @@ model SourceSnapshot {
 
 // One inventoried software component (§45) — PURL identity (§46).
 model SoftwareComponent {
-  id              String          @id @default(uuid())
-  snapshotId      String?
+  id               String          @id @default(uuid())
+  snapshotId       String?
   // Prompt 13 §13/§14: image package inventory (Syft) binds components
   // to the image instead of a source snapshot — same component model.
-  imageId         String?
+  imageId          String?
   // Prompt 17 §42: mobile dependency inventory binds components to the
   // mobile build — same component model, never invented versions (§45).
-  buildId         String?
+  buildId          String?
   // Prompt 18 §26: binary dependency inventory binds components to the
   // binary artifact — same component model; a version exists ONLY
   // where reliably known (§25), never inferred from a soname major.
   binaryArtifactId String?
-  name            String
-  version         String?
-  ecosystem       String
-  purl            String
-  sourceManifest  String
-  scope           String          @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
-  dependencyScope String          @default("RUNTIME")
-  licenses        String[]        @default([])
-  supplier        String?
-  snapshot        SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  image           ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  build           MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
-  binaryArtifact  BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
-  createdAt       DateTime        @default(now())
+  name             String
+  version          String?
+  ecosystem        String
+  purl             String
+  sourceManifest   String
+  scope            String          @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
+  dependencyScope  String          @default("RUNTIME")
+  licenses         String[]        @default([])
+  supplier         String?
+  snapshot         SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  image            ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  build            MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact   BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
+  createdAt        DateTime        @default(now())
 
   @@unique([snapshotId, purl])
   @@unique([imageId, purl])
@@ -2284,26 +2338,26 @@ model SoftwareComponent {
 // A generated SBOM (§47/§48): document lives in object storage behind
 // artifactReference; the row carries format + checksum + counts.
 model SoftwareBillOfMaterials {
-  id             String          @id @default(uuid())
-  snapshotId     String?
+  id               String          @id @default(uuid())
+  snapshotId       String?
   // Prompt 13 §12: image SBOMs bind to the image (Syft), not a snapshot.
-  imageId        String?
+  imageId          String?
   // Prompt 17 §43: mobile SBOMs bind to the build (MobileBuild → SBOM
   // → Components → CVEs, §44).
-  buildId        String?
+  buildId          String?
   // Prompt 18 §27: binary SBOMs bind to the artifact the same way.
   binaryArtifactId String?
-  scanId         String?
-  format         SbomFormat
-  specVersion    String
-  checksum       String
-  artifactRef    String?
-  componentCount Int             @default(0)
-  snapshot       SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  image          ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  build          MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
-  binaryArtifact BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
-  createdAt      DateTime        @default(now())
+  scanId           String?
+  format           SbomFormat
+  specVersion      String
+  checksum         String
+  artifactRef      String?
+  componentCount   Int             @default(0)
+  snapshot         SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  image            ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  build            MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact   BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
+  createdAt        DateTime        @default(now())
 
   @@index([snapshotId])
   @@index([imageId])
@@ -2405,25 +2459,25 @@ model ContainerRegistry {
 // is mutable and is only the lookup key. Scans record the digest they
 // analyzed; drift appends a snapshot, never overwrites history (§78).
 model ContainerImage {
-  id           String                    @id @default(uuid())
-  workspaceId  String
-  targetId     String?
-  registryId   String?
-  reference    String // full reference as registered/observed (registry/repo[:tag][@digest])
-  registry     String // registry host, e.g. ghcr.io
-  repository   String
-  tag          String?
-  digest       String? // sha256:... — strongest identity
-  platform     String?
-  architecture String?
-  os           String?
-  source       String                    @default("MANUAL") // MANUAL | REGISTRY | SBOM | CI | RUNTIME | CLUSTER
-  firstSeen    DateTime                  @default(now())
-  lastSeen     DateTime                  @updatedAt
-  registryRef  ContainerRegistry?        @relation(fields: [registryId], references: [id], onDelete: SetNull)
-  snapshots    ContainerImageSnapshot[]
-  components   SoftwareComponent[]
-  sboms        SoftwareBillOfMaterials[]
+  id              String                    @id @default(uuid())
+  workspaceId     String
+  targetId        String?
+  registryId      String?
+  reference       String // full reference as registered/observed (registry/repo[:tag][@digest])
+  registry        String // registry host, e.g. ghcr.io
+  repository      String
+  tag             String?
+  digest          String? // sha256:... — strongest identity
+  platform        String?
+  architecture    String?
+  os              String?
+  source          String                    @default("MANUAL") // MANUAL | REGISTRY | SBOM | CI | RUNTIME | CLUSTER
+  firstSeen       DateTime                  @default(now())
+  lastSeen        DateTime                  @updatedAt
+  registryRef     ContainerRegistry?        @relation(fields: [registryId], references: [id], onDelete: SetNull)
+  snapshots       ContainerImageSnapshot[]
+  components      SoftwareComponent[]
+  sboms           SoftwareBillOfMaterials[]
   // Prompt 18 §4: binaries extracted from this image are binary
   // artifacts with their own provenance — never duplicated payloads.
   binaryArtifacts BinaryArtifact[]
@@ -3711,24 +3765,24 @@ model MobileEndpoint {
 // A native library inside the build (§33): inventory + hardening
 // properties from static inspection. Never executed (§34).
 model MobileNativeLibrary {
-  id           String      @id @default(uuid())
-  buildId      String
-  workspaceId  String
-  path         String
-  architecture String?
-  sha256       String?
-  pie          Boolean?
-  nx           Boolean?
-  stackCanary  Boolean?
-  relro        String? // NONE | PARTIAL | FULL
-  stripped     Boolean?
+  id               String          @id @default(uuid())
+  buildId          String
+  workspaceId      String
+  path             String
+  architecture     String?
+  sha256           String?
+  pie              Boolean?
+  nx               Boolean?
+  stackCanary      Boolean?
+  relro            String? // NONE | PARTIAL | FULL
+  stripped         Boolean?
   // Prompt 18 §4/§51: when the same physical library is registered as
   // a binary artifact, the records LINK — correlation never duplicates
   // the artifact or its findings.
   binaryArtifactId String?
-  build        MobileBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
-  binaryArtifact BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
-  createdAt    DateTime    @default(now())
+  build            MobileBuild     @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact   BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
 
   @@index([buildId])
   @@index([workspaceId])
@@ -3857,37 +3911,37 @@ model MobileDynamicSession {
 // image / source snapshot) preserve lineage without duplicating the
 // artifact.
 model BinaryArtifact {
-  id                String    @id @default(uuid())
+  id                String                    @id @default(uuid())
   workspaceId       String
   targetId          String?
   name              String
   // UPLOAD | MOBILE_BUILD | CONTAINER_IMAGE | SOURCE_BUILD | CONTROLLED_LAB
-  source            String    @default("UPLOAD")
+  source            String                    @default("UPLOAD")
   sourceRef         String?
   mobileBuildId     String?
   containerImageId  String?
   sha256            String
   sha1              String?
-  sizeBytes         BigInt    @default(0)
-  format            String    @default("UNKNOWN") // ELF | PE | MACH_O | UNKNOWN (§5)
+  sizeBytes         BigInt                    @default(0)
+  format            String                    @default("UNKNOWN") // ELF | PE | MACH_O | UNKNOWN (§5)
   kind              String? // EXECUTABLE | SHARED_LIBRARY | OBJECT | CORE
   architecture      String?
   bitness           Int?
   endianness        String?
   platform          String?
-  environment       String    @default("PRODUCTION") // PRODUCTION | STAGING | LAB | DEVELOPMENT
+  environment       String                    @default("PRODUCTION") // PRODUCTION | STAGING | LAB | DEVELOPMENT
   artifactReference String? // object-storage reference — bytes never travel in rows
   // Bounded recorded analysis payload registered with the artifact
   // (parsed header report / tool inputs) — sanitized + secret-redacted
   // at intake (§6/§107 discipline). NEVER raw artifact bytes.
   analysisArtifacts Json?
-  status            String    @default("REGISTERED") // REGISTERED | ANALYZED | ANALYSIS_FAILED
+  status            String                    @default("REGISTERED") // REGISTERED | ANALYZED | ANALYSIS_FAILED
   createdBy         String
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  target            Target?   @relation(fields: [targetId], references: [id], onDelete: SetNull)
-  mobileBuild       MobileBuild? @relation(fields: [mobileBuildId], references: [id], onDelete: SetNull)
-  containerImage    ContainerImage? @relation(fields: [containerImageId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  target            Target?                   @relation(fields: [targetId], references: [id], onDelete: SetNull)
+  mobileBuild       MobileBuild?              @relation(fields: [mobileBuildId], references: [id], onDelete: SetNull)
+  containerImage    ContainerImage?           @relation(fields: [containerImageId], references: [id], onDelete: SetNull)
   sections          BinarySection[]
   hardeningProfile  BinaryHardeningProfile?
   functions         BinaryFunction[]
@@ -3901,8 +3955,8 @@ model BinaryArtifact {
   sboms             SoftwareBillOfMaterials[]
   findings          Finding[]
   nativeLibraries   MobileNativeLibrary[]
-  diffsAsBase       BinaryDiff[] @relation("BinaryDiffBase")
-  diffsAsTarget     BinaryDiff[] @relation("BinaryDiffTarget")
+  diffsAsBase       BinaryDiff[]              @relation("BinaryDiffBase")
+  diffsAsTarget     BinaryDiff[]              @relation("BinaryDiffTarget")
   debugSessions     BinaryDebugSession[]
   crashes           BinaryCrash[]
 
@@ -3935,32 +3989,32 @@ model BinarySection {
 // per-mitigation status ENABLED | DISABLED | PARTIAL | NOT_APPLICABLE
 // | UNKNOWN in the Json profile, with per-tool provenance.
 model BinaryHardeningProfile {
-  id         String         @id @default(uuid())
-  artifactId String         @unique
+  id          String         @id @default(uuid())
+  artifactId  String         @unique
   workspaceId String
-  profile    Json           @default("[]") // [{ name, status, detail?, source }]
-  assessedAt DateTime       @default(now())
-  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  profile     Json           @default("[]") // [{ name, status, detail?, source }]
+  assessedAt  DateTime       @default(now())
+  artifact    BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
 }
 
 model BinaryFunction {
-  id                  String         @id @default(uuid())
-  artifactId          String
-  workspaceId         String
-  name                String
-  address             String?
-  size                Int?
-  callingConvention   String?
+  id                 String         @id @default(uuid())
+  artifactId         String
+  workspaceId        String
+  name               String
+  address            String?
+  size               Int?
+  callingConvention  String?
   // §22 stable identity from normalized bytes/signatures — never an
   // absolute address alone.
-  fingerprint         String?
-  referencesRiskyApi  String[]       @default([])
-  confidence          Float          @default(0.7)
-  source              String
-  artifact            BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt           DateTime       @default(now())
+  fingerprint        String?
+  referencesRiskyApi String[]       @default([])
+  confidence         Float          @default(0.7)
+  source             String
+  artifact           BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now())
 
   @@unique([artifactId, name, address])
   @@index([artifactId])
@@ -3968,45 +4022,45 @@ model BinaryFunction {
 }
 
 model BinaryImport {
-  id         String         @id @default(uuid())
-  artifactId String
+  id          String         @id @default(uuid())
+  artifactId  String
   workspaceId String
-  library    String
-  symbol     String
-  address    String?
-  source     String
-  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt  DateTime       @default(now())
+  library     String
+  symbol      String
+  address     String?
+  source      String
+  artifact    BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
 
   @@index([artifactId])
   @@index([workspaceId, symbol])
 }
 
 model BinaryExport {
-  id         String         @id @default(uuid())
-  artifactId String
+  id          String         @id @default(uuid())
+  artifactId  String
   workspaceId String
-  symbol     String
-  address    String?
-  type       String?
-  source     String
-  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt  DateTime       @default(now())
+  symbol      String
+  address     String?
+  type        String?
+  source      String
+  artifact    BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
 
   @@index([artifactId])
 }
 
 model BinarySymbol {
-  id         String         @id @default(uuid())
-  artifactId String
+  id          String         @id @default(uuid())
+  artifactId  String
   workspaceId String
-  name       String
-  type       String?
-  binding    String?
-  address    String?
-  source     String
-  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt  DateTime       @default(now())
+  name        String
+  type        String?
+  binding     String?
+  address     String?
+  source      String
+  artifact    BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
 
   @@index([artifactId])
 }
@@ -4034,22 +4088,22 @@ model BinaryString {
 }
 
 model BinaryDependency {
-  id         String         @id @default(uuid())
-  artifactId String
+  id          String         @id @default(uuid())
+  artifactId  String
   workspaceId String
-  library    String
+  library     String
   // Only where reliably known (§25) — never inferred from a soname.
-  version    String?
-  path       String?
-  platform   String?
-  purl       String?
-  cpe        String?
+  version     String?
+  path        String?
+  platform    String?
+  purl        String?
+  cpe         String?
   // DECLARED | DETECTED_LINKED | HEURISTIC (§27)
-  sourceKind String         @default("DETECTED_LINKED")
-  confidence Float          @default(0.8)
-  source     String
-  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt  DateTime       @default(now())
+  sourceKind  String         @default("DETECTED_LINKED")
+  confidence  Float          @default(0.8)
+  source      String
+  artifact    BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
 
   @@unique([artifactId, library])
   @@index([artifactId])
@@ -4057,14 +4111,14 @@ model BinaryDependency {
 }
 
 model BinaryCryptoReference {
-  id         String         @id @default(uuid())
-  artifactId String
+  id          String         @id @default(uuid())
+  artifactId  String
   workspaceId String
-  kind       String // LIBRARY | ALGORITHM | CERTIFICATE_API | KEY_MANAGEMENT_API
-  name       String
-  source     String
-  artifact   BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt  DateTime       @default(now())
+  kind        String // LIBRARY | ALGORITHM | CERTIFICATE_API | KEY_MANAGEMENT_API
+  name        String
+  source      String
+  artifact    BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
 
   @@index([artifactId])
 }
@@ -4072,17 +4126,17 @@ model BinaryCryptoReference {
 // A cross-build comparison (§53–§55): inventories compared,
 // security regressions recorded explicitly.
 model BinaryDiff {
-  id             String         @id @default(uuid())
-  workspaceId    String
-  baseArtifactId String
+  id               String         @id @default(uuid())
+  workspaceId      String
+  baseArtifactId   String
   targetArtifactId String
-  summary        Json           @default("{}")
-  regressions    Json           @default("[]")
-  detail         Json           @default("{}")
-  createdBy      String
-  baseArtifact   BinaryArtifact @relation("BinaryDiffBase", fields: [baseArtifactId], references: [id], onDelete: Cascade)
-  targetArtifact BinaryArtifact @relation("BinaryDiffTarget", fields: [targetArtifactId], references: [id], onDelete: Cascade)
-  createdAt      DateTime       @default(now())
+  summary          Json           @default("{}")
+  regressions      Json           @default("[]")
+  detail           Json           @default("{}")
+  createdBy        String
+  baseArtifact     BinaryArtifact @relation("BinaryDiffBase", fields: [baseArtifactId], references: [id], onDelete: Cascade)
+  targetArtifact   BinaryArtifact @relation("BinaryDiffTarget", fields: [targetArtifactId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
 
   @@index([workspaceId])
   @@index([baseArtifactId])
@@ -4095,23 +4149,23 @@ model BinaryDiff {
 // Debugger transports are provisioned per deployment; an eligible
 // session without a transport reports NOT_PROVISIONED (§72).
 model BinaryDebugSession {
-  id              String         @id @default(uuid())
-  workspaceId     String
-  artifactId      String
-  environment     String         @default("LAB")
-  status          String         @default("REQUESTED") // REQUESTED | APPROVED | BLOCKED | ELIGIBLE | RUNNING | COMPLETED | TERMINATED | NOT_PROVISIONED
-  operations      Json           @default("[]")
-  policyDecision  Json           @default("{}")
-  networkPolicy   String         @default("NO_NETWORK")
-  timeoutSeconds  Int            @default(1800)
-  killSwitchChecked Boolean      @default(false)
-  requestedBy     String
-  approvedBy      String?
-  startedAt       DateTime?
-  endedAt         DateTime?
-  artifact        BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  crashes         BinaryCrash[]
-  createdAt       DateTime       @default(now())
+  id                String         @id @default(uuid())
+  workspaceId       String
+  artifactId        String
+  environment       String         @default("LAB")
+  status            String         @default("REQUESTED") // REQUESTED | APPROVED | BLOCKED | ELIGIBLE | RUNNING | COMPLETED | TERMINATED | NOT_PROVISIONED
+  operations        Json           @default("[]")
+  policyDecision    Json           @default("{}")
+  networkPolicy     String         @default("NO_NETWORK")
+  timeoutSeconds    Int            @default(1800)
+  killSwitchChecked Boolean        @default(false)
+  requestedBy       String
+  approvedBy        String?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  artifact          BinaryArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  crashes           BinaryCrash[]
+  createdAt         DateTime       @default(now())
 
   @@index([workspaceId])
   @@index([artifactId])
@@ -4122,23 +4176,363 @@ model BinaryDebugSession {
 // stack + faulting function + lineage — never raw addresses. Triage
 // NEVER claims exploitability.
 model BinaryCrash {
-  id                String            @id @default(uuid())
-  workspaceId       String
-  artifactId        String
-  sessionId         String?
-  fingerprint       String
-  signal            String
-  exceptionType     String?
-  faultingFunction  String?
-  stackSummary      Json              @default("[]")
-  registerSummary   Json              @default("{}")
-  inputReference    String?
+  id               String              @id @default(uuid())
+  workspaceId      String
+  artifactId       String
+  sessionId        String?
+  fingerprint      String
+  signal           String
+  exceptionType    String?
+  faultingFunction String?
+  stackSummary     Json                @default("[]")
+  registerSummary  Json                @default("{}")
+  inputReference   String?
   // LIKELY_SECURITY_RELEVANT | NEEDS_REVIEW | LIKELY_NON_SECURITY | UNKNOWN
-  triage            String            @default("NEEDS_REVIEW")
-  artifact          BinaryArtifact    @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  session           BinaryDebugSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  createdAt         DateTime          @default(now())
+  triage           String              @default("NEEDS_REVIEW")
+  artifact         BinaryArtifact      @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  session          BinaryDebugSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  createdAt        DateTime            @default(now())
 
   @@index([workspaceId, fingerprint])
   @@index([artifactId])
+}
+
+// ------------------------------- Prompt 19 — Wireless security assessment -------------------------------
+// PASSIVE-FIRST (§IMPORTANT/§99): these models record OBSERVED
+// inventory and OFFLINE capture analysis only. Nothing here can
+// represent a transmission, a cracking attempt or a rogue AP created
+// by the platform — those behaviours do not exist. Observed data is
+// untrusted input, sanitized before persistence (§92); stations are
+// pseudonymized by default (§9); authentication material in captures
+// is a COUNT, never a value (§67).
+
+// §3: a wireless environment under assessment. No precise physical
+// coordinates are required — a location LABEL suffices.
+model WirelessEnvironment {
+  id                  String                       @id @default(uuid())
+  workspaceId         String
+  name                String
+  locationLabel       String?
+  // CORPORATE | GUEST | LAB | OFFICE | PUBLIC | UNKNOWN — drives
+  // contextual risk (§34) and gate PMF requirements (§60).
+  environment         String                       @default("CORPORATE")
+  criticality         String                       @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  authorizationId     String?
+  status              String                       @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdBy           String
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  workspace           Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scope               WirelessScope?
+  sensors             WirelessSensor[]
+  accessPoints        WirelessAccessPoint[]
+  stations            WirelessStation[]
+  observations        WirelessObservation[]
+  channelObservations WirelessChannelObservation[]
+  captures            WirelessCapture[]
+  approvedProfiles    ApprovedWirelessProfile[]
+  events              WirelessSecurityEvent[]
+  driftEvents         WirelessDriftEvent[]
+  sessions            WirelessScanSession[]
+  findings            Finding[]
+
+  @@index([workspaceId])
+}
+
+// §4: explicit wireless scope. Authorization is NEVER inferred from
+// detectability — only allowlisted BSSIDs/SSIDs/channels/bands are
+// in scope for deeper analysis (§63).
+model WirelessScope {
+  id                        String              @id @default(uuid())
+  environmentId             String              @unique
+  bssidAllowlist            Json // string[] of normalized BSSIDs
+  ssidAllowlist             Json // string[] of SSIDs
+  channelAllowlist          Json // number[]
+  frequencyBands            Json // ("2.4GHZ" | "5GHZ" | "6GHZ")[]
+  maxCaptureDurationSeconds Int                 @default(3600)
+  approvedInterfaces        Json // string[] of sensor interface names
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  environment               WirelessEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+}
+
+// §11: a dedicated approved wireless sensor. Wireless interfaces are
+// never exposed to the web/API/general workers (§14).
+model WirelessSensor {
+  id                 String                @id @default(uuid())
+  workspaceId        String
+  environmentId      String?
+  name               String
+  host               String?
+  adapter            String?
+  driver             String?
+  interfaceName      String?
+  supportedBands     Json // ("2.4GHZ" | "5GHZ" | "6GHZ")[]
+  monitorModeCapable Boolean               @default(false)
+  health             String                @default("UNKNOWN") // HEALTHY | DEGRADED | UNAVAILABLE | UNKNOWN
+  status             String                @default("REGISTERED")
+  lastSeen           DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  environment        WirelessEnvironment?  @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  observations       WirelessObservation[]
+  captures           WirelessCapture[]
+  sessions           WirelessScanSession[]
+
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+// §6: an observed access point. Identity = BSSID (§5) within an
+// environment; the SSID is a sanitized label (§92), never identity.
+model WirelessAccessPoint {
+  id             String                       @id @default(uuid())
+  workspaceId    String
+  environmentId  String
+  bssid          String
+  ssid           String                       @default("") // sanitized; "" when hidden (§7)
+  ssidHidden     Boolean                      @default(false)
+  vendor         String?
+  channel        Int?
+  frequencyMhz   Int?
+  band           String? // 2.4GHZ | 5GHZ | 6GHZ
+  securityMode   String                       @default("UNKNOWN") // §31 normalized mode
+  encryption     String? // detailed cipher evidence
+  authentication String? // detailed AKM evidence
+  pmf            String                       @default("UNKNOWN") // REQUIRED | CAPABLE | NOT_OBSERVED | UNKNOWN (§38)
+  wpsAdvertised  Boolean                      @default(false)
+  signalDbm      Int?
+  // §44 latest rogue classification: APPROVED | UNKNOWN | SUSPICIOUS | POLICY_VIOLATION
+  approvedStatus String                       @default("UNKNOWN")
+  // §50: link to the network asset where evidence supports it —
+  // correlation links, never duplicates.
+  networkAssetId String?
+  firstSeen      DateTime
+  lastSeen       DateTime
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+  environment    WirelessEnvironment          @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  networkAsset   Asset?                       @relation(fields: [networkAssetId], references: [id], onDelete: SetNull)
+  observations   WirelessObservation[]
+  stations       WirelessStation[]
+  history        WirelessAccessPointHistory[]
+  events         WirelessSecurityEvent[]
+  driftEvents    WirelessDriftEvent[]
+  findings       Finding[]
+
+  @@unique([environmentId, bssid])
+  @@index([workspaceId])
+  @@index([environmentId])
+  @@index([bssid])
+}
+
+// §8/§9: a station observation — bounded security-relevant metadata
+// only. addressFingerprint is the HMAC pseudonym (§9); rawAddress is
+// populated ONLY under an elevated collection policy and its reads
+// are permission-gated + audited (§30).
+model WirelessStation {
+  id                 String               @id @default(uuid())
+  workspaceId        String
+  environmentId      String
+  addressFingerprint String
+  rawAddress         String?
+  accessPointId      String?
+  associatedBssid    String?
+  signalDbm          Int?
+  source             String?
+  firstSeen          DateTime
+  lastSeen           DateTime
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  environment        WirelessEnvironment  @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  accessPoint        WirelessAccessPoint? @relation(fields: [accessPointId], references: [id], onDelete: SetNull)
+
+  @@unique([environmentId, addressFingerprint])
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+// §10: one wireless observation — the multi-sensor evidence trail
+// behind a canonical AP (§54).
+model WirelessObservation {
+  id            String              @id @default(uuid())
+  workspaceId   String
+  environmentId String
+  accessPointId String
+  sensorId      String?
+  captureId     String?
+  timestamp     DateTime
+  channel       Int?
+  bssid         String
+  ssid          String              @default("")
+  securityMode  String              @default("UNKNOWN")
+  signalDbm     Int?
+  source        String
+  createdAt     DateTime            @default(now())
+  environment   WirelessEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  accessPoint   WirelessAccessPoint @relation(fields: [accessPointId], references: [id], onDelete: Cascade)
+  sensor        WirelessSensor?     @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+  capture       WirelessCapture?    @relation(fields: [captureId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([environmentId])
+  @@index([accessPointId])
+}
+
+// §10: channel utilization observation for an environment.
+model WirelessChannelObservation {
+  id                 String              @id @default(uuid())
+  workspaceId        String
+  environmentId      String
+  scanId             String?
+  channel            Int
+  band               String?
+  accessPointCount   Int                 @default(0)
+  utilizationPercent Float?
+  noiseDbm           Int?
+  source             String
+  createdAt          DateTime            @default(now())
+  environment        WirelessEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([environmentId, channel])
+}
+
+// §26: a wireless capture artifact. METADATA ONLY in rows — raw bytes
+// live in protected object storage behind artifactReference (§29);
+// raw access is permission-gated and audited (§30).
+model WirelessCapture {
+  id                 String                @id @default(uuid())
+  workspaceId        String
+  environmentId      String
+  sensorId           String?
+  name               String
+  sha256             String
+  format             String // PCAP | PCAPNG (proven from magic bytes, §27)
+  sizeBytes          BigInt                @default(0)
+  startTime          DateTime?
+  endTime            DateTime?
+  channels           Json // number[]
+  artifactReference  String?
+  status             String                @default("PENDING") // PENDING | APPROVED | REJECTED | QUARANTINED (§26 approval workflow)
+  sanitizationStatus String                @default("PENDING") // PENDING | SANITIZED | QUARANTINED
+  // Bounded recorded analysis payload (parser outputs registered
+  // with the capture) — sanitized + metadata-only, NEVER raw frames.
+  analysisArtifacts  Json?
+  createdBy          String
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  environment        WirelessEnvironment   @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  sensor             WirelessSensor?       @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+  observations       WirelessObservation[]
+
+  @@unique([workspaceId, sha256])
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+// §43: an approved wireless profile — expected posture for rogue-AP
+// diffing (§42).
+model ApprovedWirelessProfile {
+  id              String              @id @default(uuid())
+  workspaceId     String
+  environmentId   String
+  ssid            String
+  bssid           String?
+  securityMode    String // §31 normalized mode
+  authentication  String?
+  allowedChannels Json // number[]
+  allowedBands    Json // string[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  environment     WirelessEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+// §47: a passively-detected wireless security event. Detection never
+// triggers a transmission (§47/§68).
+model WirelessSecurityEvent {
+  id              String               @id @default(uuid())
+  workspaceId     String
+  environmentId   String
+  accessPointId   String?
+  type            String // DEAUTH_ACTIVITY | DISASSOCIATION_ACTIVITY | ROGUE_AP_SUSPECTED | SECURITY_MODE_CHANGED | NEW_UNKNOWN_AP | APPROVED_AP_MISSING | OTHER (§48)
+  timestamp       DateTime
+  bssid           String?
+  confidence      String               @default("LOW") // LOW | MEDIUM | HIGH (§49)
+  evidenceSummary String // sanitized, bounded — never raw frames
+  source          String
+  createdAt       DateTime             @default(now())
+  environment     WirelessEnvironment  @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  accessPoint     WirelessAccessPoint? @relation(fields: [accessPointId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([environmentId])
+  @@index([type])
+}
+
+// §56: wireless configuration drift — a fact, never an accusation.
+model WirelessDriftEvent {
+  id                String               @id @default(uuid())
+  workspaceId       String
+  environmentId     String
+  accessPointId     String?
+  kind              String // ENCRYPTION_CHANGED | AUTHENTICATION_CHANGED | NEW_AP | AP_DISAPPEARED | BSSID_CHANGED | CHANNEL_POLICY_CHANGED
+  bssid             String
+  ssid              String               @default("")
+  field             String
+  fromValue         String?
+  toValue           String?
+  securityDowngrade Boolean              @default(false)
+  detectedAt        DateTime             @default(now())
+  environment       WirelessEnvironment  @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  accessPoint       WirelessAccessPoint? @relation(fields: [accessPointId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([environmentId])
+}
+
+// §55: AP configuration history — posture over time per BSSID.
+model WirelessAccessPointHistory {
+  id             String              @id @default(uuid())
+  accessPointId  String
+  ssid           String              @default("")
+  channel        Int?
+  securityMode   String
+  authentication String?
+  approvedStatus String
+  observedAt     DateTime
+  accessPoint    WirelessAccessPoint @relation(fields: [accessPointId], references: [id], onDelete: Cascade)
+
+  @@index([accessPointId])
+}
+
+// §62: a passive wireless scan session.
+model WirelessScanSession {
+  id               String              @id @default(uuid())
+  workspaceId      String
+  environmentId    String
+  sensorId         String?
+  scanId           String?
+  profile          String
+  scopeSnapshot    Json // §4 scope as frozen at session start
+  startedAt        DateTime            @default(now())
+  endedAt          DateTime?
+  channels         Json // number[]
+  observationCount Int                 @default(0)
+  status           String              @default("RUNNING") // RUNNING | COMPLETED | PARTIAL | FAILED | NOT_CONFIGURED
+  budget           Json // WirelessScanBudget (§61)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  environment      WirelessEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  sensor           WirelessSensor?     @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([environmentId])
+  @@index([scanId])
 }

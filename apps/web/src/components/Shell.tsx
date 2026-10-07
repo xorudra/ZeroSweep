@@ -22,6 +22,7 @@ export const NAV = [
   { href: "/active-directory", label: "Active Directory" },
   { href: "/mobile-security", label: "Mobile Security" },
   { href: "/binary-security", label: "Binary Security" },
+  { href: "/wireless-security", label: "Wireless Security" },
   { href: "/assessments", label: "Assessments" },
   { href: "/scans", label: "Scans" },
   { href: "/findings", label: "Findings" },

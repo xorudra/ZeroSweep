@@ -548,3 +548,95 @@ export const approveBinaryDebugSessionSchema = z.object({
   note: z.string().min(1).max(500).optional(),
 }).strict();
 export type ApproveBinaryDebugSessionInput = z.input<typeof approveBinaryDebugSessionSchema>;
+
+// ── Prompt 19: wireless security assessment (§77/§78) ─────────────
+// Environment/sensor/capture bodies carry registration metadata
+// ONLY. There is no schema anywhere for a raw wireless command, a
+// deauthentication request, an arbitrary tshark filter, aircrack
+// arguments or a Wi-Fi credential (§78): fields of that shape are
+// declared ONLY on the lab-validation request so the service can
+// refuse them explicitly + audit the attempt (§93).
+
+export const wirelessScopeSchema = z.object({
+  bssidAllowlist: z.array(z.string().max(32)).max(500).default([]),
+  ssidAllowlist: z.array(z.string().max(64)).max(500).default([]),
+  channelAllowlist: z.array(z.number().int().min(1).max(233)).max(64).default([]),
+  frequencyBands: z.array(z.enum(["2.4GHZ", "5GHZ", "6GHZ"])).max(3).default([]),
+  maxCaptureDurationSeconds: z.number().int().min(60).max(86400).default(3600),
+  approvedInterfaces: z.array(z.string().min(1).max(64)).max(16).default([]),
+}).strict();
+export type WirelessScopeInput = z.input<typeof wirelessScopeSchema>;
+
+export const createWirelessEnvironmentSchema = z.object({
+  name: z.string().min(1).max(255),
+  locationLabel: z.string().max(255).optional(),
+  environment: z.enum(["CORPORATE", "GUEST", "LAB", "OFFICE", "PUBLIC", "UNKNOWN"]).default("CORPORATE"),
+  criticality: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+  scope: wirelessScopeSchema.optional(),
+}).strict();
+export type CreateWirelessEnvironmentInput = z.input<typeof createWirelessEnvironmentSchema>;
+
+export const registerWirelessSensorSchema = z.object({
+  name: z.string().min(1).max(255),
+  environmentId: z.string().min(1).optional(),
+  host: z.string().max(255).optional(),
+  adapter: z.string().max(255).optional(),
+  driver: z.string().max(255).optional(),
+  interfaceName: z.string().min(1).max(64).optional(),
+  supportedBands: z.array(z.enum(["2.4GHZ", "5GHZ", "6GHZ"])).max(3).default([]),
+  monitorModeCapable: z.boolean().default(false),
+}).strict();
+export type RegisterWirelessSensorInput = z.input<typeof registerWirelessSensorSchema>;
+
+export const uploadWirelessCaptureSchema = z.object({
+  environmentId: z.string().min(1),
+  sensorId: z.string().min(1).optional(),
+  name: z.string().min(1).max(255),
+  // Bounded capture content (base64; the service enforces the §61
+  // byte budget before parsing and proves the format from magic
+  // bytes, §27). ~14 MB of base64 ≈ 10 MB of capture.
+  contentBase64: z.string().min(4).max(14_000_000),
+  expectedSha256: z.string().regex(/^[a-f0-9]{64}$/, "expectedSha256 must be a SHA-256 hex digest").optional(),
+  artifactReference: z.string().min(1).max(512).optional(),
+}).strict();
+export type UploadWirelessCaptureInput = z.input<typeof uploadWirelessCaptureSchema>;
+
+export const approveWirelessCaptureSchema = z.object({
+  decision: z.enum(["APPROVE", "REJECT"]),
+  note: z.string().min(1).max(500).optional(),
+}).strict();
+export type ApproveWirelessCaptureInput = z.input<typeof approveWirelessCaptureSchema>;
+
+export const createApprovedWirelessProfileSchema = z.object({
+  environmentId: z.string().min(1),
+  ssid: z.string().max(64),
+  bssid: z.string().max(32).optional(),
+  securityMode: z.enum(["OPEN", "WEP", "WPA", "WPA2", "WPA3", "ENTERPRISE", "PERSONAL", "TRANSITION", "UNKNOWN"]),
+  authentication: z.string().max(64).optional(),
+  allowedChannels: z.array(z.number().int().min(1).max(233)).max(64).default([]),
+  allowedBands: z.array(z.enum(["2.4GHZ", "5GHZ", "6GHZ"])).max(3).default([]),
+}).strict();
+export type CreateApprovedWirelessProfileInput = z.input<typeof createApprovedWirelessProfileSchema>;
+
+export const startWirelessScanSchema = z.object({
+  profile: z.enum([
+    "WIRELESS_PASSIVE_BASELINE", "WIRELESS_PASSIVE_COMPREHENSIVE", "PCAP_ANALYSIS_ONLY",
+    "WIRELESS_COMPLIANCE", "WIRELESS_LAB_VALIDATION",
+  ]).default("WIRELESS_PASSIVE_BASELINE"),
+}).strict();
+export type StartWirelessScanInput = z.input<typeof startWirelessScanSchema>;
+
+export const requestWirelessLabValidationSchema = z.object({
+  environmentId: z.string().min(1),
+  justification: z.string().min(1).max(1000),
+  requestedTool: z.string().max(128).optional(),
+  requestedDurationSeconds: z.number().int().min(60).max(86400).optional(),
+  syntheticDataOnly: z.boolean().default(true),
+  // Command-shaped fields are declared ONLY so their presence is
+  // refused + audited (§78/§93) — never executed, never persisted
+  // as instructions.
+  deauthCommand: z.string().max(4096).optional(),
+  shellCommand: z.string().max(4096).optional(),
+  rawCommand: z.string().max(4096).optional(),
+}).strict();
+export type RequestWirelessLabValidationInput = z.input<typeof requestWirelessLabValidationSchema>;

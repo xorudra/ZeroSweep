@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters, registerWirelessAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -99,6 +99,7 @@ registerDirectoryAdapters(registry, undefined, prismaDirectoryDeps());
 // NO executing adapters; IDA/Binary Ninja transports report
 // NOT_INSTALLED until a licensed installation is provisioned (§96).
 registerBinaryAdapters(registry);
+registerWirelessAdapters(registry);
 // Prompt 17: mobile adapters (MobSF connector, JADX, apktool, Ghidra
 // + the controlled-lab ADB/mitmproxy adapters) over Prisma-resolved
 // application/build records. Static analysis runs in the sandbox —

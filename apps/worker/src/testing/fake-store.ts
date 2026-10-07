@@ -3,7 +3,8 @@ import {
   JwtToolAdapter, MockSecurityAdapter, ToolRegistry, analyzeDatabases, analyzeDirectoryPosture, analyzeEncryption, analyzeIam, analyzeLdapPosture, analyzeLogging, analyzeMobilePosture, extractMobileArtifacts, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, buildIdentityGraph, classifyBaseline,
   detectRepository, diffCloudInventories, diffDirectorySnapshots, emptyMobileData, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateMobileSecurityGate, evaluateQualityGate, expandCidrTargets, findAttackPaths, mergeMobileData, parseManifests, privilegedPrincipals, resolveNestedGroups, summarizeForQualityGate, summarizeMobileForGate,
   analyzeBinaryPlatform, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders,
-  type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type SourceFileEntry,
+  analyzeWirelessPosture, detectWirelessDrift, evaluateWirelessGate, mergeWirelessData,
+  type ApprovedWirelessProfileShape, type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type NormalizedWirelessAccessPoint, type NormalizedWirelessData, type NormalizedWirelessSecurityEvent, type SourceFileEntry,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
@@ -13,6 +14,7 @@ import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, processNormalizedResult, type ProcessedCloudResource, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
 import { isMobileProcessedFinding, stampMobileFindings, type MobileScanIdentity } from "../executors/mobile-stamp";
 import { isBinaryProcessedFinding, stampBinaryFindings, type BinaryScanIdentity } from "../executors/binary-stamp";
+import { isWirelessProcessedFinding, stampWirelessFindings, type WirelessScanIdentity } from "../executors/wireless-stamp";
 
 /**
  * In-memory ScanRunStore for worker tests (Prompt 4 §56, extended Prompt 5):
@@ -35,7 +37,7 @@ export interface FakeStoreOptions {
   planRegistry?: ToolRegistry;
   healthBySlug?: Record<string, string>;
   executableSlugs?: string[];
-  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP" | "BINARY";
+  targetType?: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP" | "BINARY" | "WIRELESS_LAB";
   /** Prompt 10: network target state mirroring the Prisma store — the
    *  CIDR/IP target, its scope, the store-resolved Masscan approval and
    *  the authorized capture reference for tshark analysis. */
@@ -146,6 +148,22 @@ export interface FakeStoreOptions {
     debugSession?: { status: string; requestedBy: string; approvedBy?: string; environment?: string };
     killSwitchActive?: boolean;
   };
+  /** Prompt 19: the fixture wireless environment the store resolves
+   *  for a wireless scan — registered environment identity, the
+   *  approved sensor + capture, the approved-AP profile (§43) for
+   *  rogue classification and the previous-observations fixture for
+   *  drift (§56). Absent environmentId = NOT_CONFIGURED. */
+  wirelessFixtures?: {
+    environmentId?: string;
+    environmentRef?: string;
+    environmentKind?: string;
+    sensorRef?: string;
+    sensorInterface?: string;
+    captureId?: string;
+    captureReference?: string;
+    approvedProfiles?: Array<Record<string, unknown>>;
+    previousAccessPoints?: Array<Record<string, unknown>>;
+  };
 }
 
 export class FakeStore implements ScanRunStore {
@@ -210,6 +228,16 @@ export class FakeStore implements ScanRunStore {
   binaryGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
   binarySbomRecord: { format: string; checksum: string; componentCount: number } | null = null;
   binaryFixtures: NonNullable<FakeStoreOptions["binaryFixtures"]> = {};
+  /** Prompt 19 wireless state mirroring the Prisma store's rows. */
+  wirelessData: NormalizedWirelessData = {
+    accessPoints: [], stations: [], observations: [], channelObservations: [],
+    securityEvents: [], authenticationMaterialCount: 0, framesProcessed: 0, source: "fake-store",
+  };
+  wirelessSecurityEvents: NormalizedWirelessSecurityEvent[] = [];
+  wirelessDriftRecords: Array<{ kind: string; bssid: string; field?: string; fromValue?: string; toValue?: string; securityDowngrade?: boolean }> = [];
+  wirelessGateRecord: { status: string; failedRules: string[]; warningRules: string[] } | null = null;
+  wirelessFixtures: NonNullable<FakeStoreOptions["wirelessFixtures"]> = {};
+  private wirelessDriftComputed = false;
   /** Prompt 17 mobile state mirroring the Prisma store's build rows. */
   mobileData: NormalizedMobileData = emptyMobileData("fake-store");
   mobileComponents: ProcessedComponent[] = [];
@@ -234,11 +262,11 @@ export class FakeStore implements ScanRunStore {
   cancelled = false;
   simulationByStage: Record<string, ExecutionContextRecord["simulation"]> = {};
   verified = true;
-  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP" | "BINARY";
+  targetType: "DOMAIN" | "WEB_APPLICATION" | "API" | "GRAPHQL" | "CIDR" | "IP_ADDRESS" | "SOURCE_REPOSITORY" | "CONTAINER_IMAGE" | "KUBERNETES_CLUSTER" | "DOCKER_HOST" | "AWS" | "AZURE" | "GCP" | "ACTIVE_DIRECTORY_DOMAIN" | "MOBILE_APP" | "BINARY" | "WIRELESS_LAB";
 
   // (constructor assigns targetType from opts)
 
-  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS" | "MOBILE_STATIC_BASELINE" | "MOBILE_STATIC_COMPREHENSIVE" | "MOBILE_SECRETS_ONLY" | "MOBILE_BINARY_ANALYSIS" | "MOBILE_DYNAMIC_CONTROLLED" | "MOBILE_FULL_CONTROLLED" | "MOBILE" | "BINARY_METADATA_ONLY" | "BINARY_BASELINE" | "BINARY_ASSESSMENT" | "BINARY_COMPREHENSIVE_STATIC" | "BINARY_DEPENDENCY_ANALYSIS" | "BINARY_CONTROLLED_DEBUG", opts: FakeStoreOptions = {}) {
+  constructor(profile: "PASSIVE_RECON" | "WEB_BASELINE" | "WEB_COMPREHENSIVE" | "API_ASSESSMENT" | "NETWORK_DISCOVERY" | "NETWORK_BASELINE" | "NETWORK_COMPREHENSIVE" | "NETWORK_INTERNAL" | "NETWORK_ASSESSMENT" | "SOURCE_BASELINE" | "SOURCE_COMPREHENSIVE" | "SECRETS_ONLY" | "DEPENDENCIES_ONLY" | "SAST_ONLY" | "CONTAINER_BASELINE" | "CONTAINER_COMPREHENSIVE" | "SBOM_ONLY" | "IMAGE_VULNERABILITIES_ONLY" | "CONTAINER_MISCONFIG_ONLY" | "KUBERNETES_BASELINE" | "KUBERNETES_COMPREHENSIVE" | "DOCKER_HOST_BASELINE" | "CLOUD_NATIVE_FULL" | "CLOUD_INVENTORY" | "CLOUD_BASELINE" | "CLOUD_COMPREHENSIVE" | "IAM_REVIEW" | "PUBLIC_EXPOSURE_REVIEW" | "COMPLIANCE_ASSESSMENT" | "IAC_TO_CLOUD_CORRELATION" | "CLOUD" | "AD_INVENTORY" | "AD_BASELINE" | "AD_COMPREHENSIVE" | "ADCS_POSTURE" | "SMB_POSTURE" | "IDENTITY_GRAPH" | "ATTACK_PATH_ANALYSIS" | "MOBILE_STATIC_BASELINE" | "MOBILE_STATIC_COMPREHENSIVE" | "MOBILE_SECRETS_ONLY" | "MOBILE_BINARY_ANALYSIS" | "MOBILE_DYNAMIC_CONTROLLED" | "MOBILE_FULL_CONTROLLED" | "MOBILE" | "BINARY_METADATA_ONLY" | "BINARY_BASELINE" | "BINARY_ASSESSMENT" | "BINARY_COMPREHENSIVE_STATIC" | "BINARY_DEPENDENCY_ANALYSIS" | "BINARY_CONTROLLED_DEBUG" | "WIRELESS_PASSIVE_BASELINE" | "WIRELESS_PASSIVE_COMPREHENSIVE" | "PCAP_ANALYSIS_ONLY" | "WIRELESS_COMPLIANCE" | "WIRELESS_LAB_VALIDATION", opts: FakeStoreOptions = {}) {
     this.targetType = opts.targetType ?? "DOMAIN";
     this.scannerBySlug = opts.scannerBySlug ?? {};
     this.apiFixtures = opts.apiFixtures ?? {};
@@ -248,6 +276,7 @@ export class FakeStore implements ScanRunStore {
     this.directoryFixtures = opts.directoryFixtures ?? {};
     this.mobileFixtures = opts.mobileFixtures ?? {};
     this.binaryFixtures = opts.binaryFixtures ?? {};
+    this.wirelessFixtures = opts.wirelessFixtures ?? {};
     this.networkTarget = opts.networkTarget;
     const registry = opts.planRegistry ?? (() => { const r = new ToolRegistry(); r.register(new MockSecurityAdapter()); return r; })();
     this.plan = buildScanPlan({
@@ -379,6 +408,19 @@ export class FakeStore implements ScanRunStore {
         ...(this.binaryFixtures.format ? { format: this.binaryFixtures.format } : {}),
         ...(this.binaryFixtures.environment ? { environment: this.binaryFixtures.environment } : {}),
       } : undefined,
+      // Prompt 19: the scan's wireless context (§3/§12/§26) —
+      // resolved from the registered environment fixture, mirroring
+      // the Prisma store's WirelessEnvironment/Sensor/Capture
+      // lookups. No environmentId = NOT_CONFIGURED.
+      wireless: this.targetType === "WIRELESS_LAB" ? {
+        ...(this.wirelessFixtures.environmentId ? { environmentId: this.wirelessFixtures.environmentId } : {}),
+        ...(this.wirelessFixtures.environmentRef ? { environmentRef: this.wirelessFixtures.environmentRef } : {}),
+        ...(this.wirelessFixtures.environmentKind ? { environmentKind: this.wirelessFixtures.environmentKind } : {}),
+        ...(this.wirelessFixtures.sensorRef ? { sensorRef: this.wirelessFixtures.sensorRef } : {}),
+        ...(this.wirelessFixtures.sensorInterface ? { sensorInterface: this.wirelessFixtures.sensorInterface } : {}),
+        ...(this.wirelessFixtures.captureId ? { captureId: this.wirelessFixtures.captureId } : {}),
+        ...(this.wirelessFixtures.captureReference ? { captureReference: this.wirelessFixtures.captureReference } : {}),
+      } : undefined,
       scanner: this.scannerBySlug[exec.adapterSlug],
       simulation: this.simulationByStage[exec.stageType],
       // Discovery inputs (§26): persisted in-scope inventory so far.
@@ -448,6 +490,11 @@ export class FakeStore implements ScanRunStore {
     // canonical identity BEFORE persistence (mirrors the Prisma store).
     if (this.binaryIdentity() && processed.findings.some(isBinaryProcessedFinding)) {
       processed = { ...processed, findings: stampBinaryFindings(processed.findings, this.binaryIdentity()!) };
+    }
+    // Prompt 19 §52/§53: wireless findings are stamped with their
+    // canonical identity BEFORE persistence (mirrors the Prisma store).
+    if (this.wirelessIdentity() && processed.findings.some(isWirelessProcessedFinding)) {
+      processed = { ...processed, findings: stampWirelessFindings(processed.findings, this.wirelessIdentity()!) };
     }
     // Assets merge by host (one canonical row, provenance unioned) —
     // mirrors the Prisma store's upsert behaviour.
@@ -548,7 +595,8 @@ export class FakeStore implements ScanRunStore {
     const dirCounts = this.persistDirectory(processed);
     const mobCounts = this.persistMobile(processed);
     const binCounts = this.persistBinary(processed);
-    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings + mobCounts.findings + binCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
+    const wlCounts = this.persistWireless(processed);
+    return { assets: processed.assets.length, findings: processed.findings.length + dirCounts.findings + mobCounts.findings + binCounts.findings + wlCounts.findings, endpoints: processed.endpoints.length, services: processed.services.length, technologies: processed.technologies.length, parameters: processed.parameters.length, forms: processed.forms.length, transactions: processed.transactions.length, webSockets: processed.webSockets.length, apiServices: processed.apiServices.length, graphqlServices: processed.graphqlServices.length, jwtProfiles: processed.jwtProfiles.length, packetCaptures: processed.packetCaptures.length, components: processed.components.length, directoryUsers: dirCounts.users, directoryGroups: dirCounts.groups, directoryComputers: dirCounts.computers, directoryRelationships: dirCounts.relationships };
   }
 
   /** Prompt 17: the scan's mobile identity when a build is registered. */
@@ -832,6 +880,82 @@ export class FakeStore implements ScanRunStore {
     const status = failed.length > 0 ? "FAILED" : warnings.length > 0 ? "PASSED_WITH_WARNINGS" : "PASSED";
     this.binaryGateRecord = { status, failedRules: failed, warningRules: warnings };
     return { status, failedRules: failed.length, warningRules: warnings.length };
+  }
+
+  /** Prompt 19: the scan's wireless identity when an environment is registered. */
+  private wirelessIdentity(): WirelessScanIdentity | null {
+    const fx = this.wirelessFixtures;
+    if (this.targetType !== "WIRELESS_LAB" || !fx.environmentId) return null;
+    return { environmentId: fx.environmentId, environmentRef: fx.environmentRef ?? "wireless-fixture" };
+  }
+
+  /** Prompt 19 wireless persistence mirror (§5–§10/§54): inventory
+   *  merges by BSSID / address fingerprint (multi-sensor dedup);
+   *  adapter security events join the environment event set. */
+  private persistWireless(processed: ProcessedResult): { findings: number } {
+    const payload = processed.wireless;
+    const has = payload.accessPoints.length + payload.stations.length + payload.observations.length
+      + payload.channelObservations.length + payload.securityEvents.length > 0 || payload.framesProcessed > 0;
+    if (!has || this.targetType !== "WIRELESS_LAB" || !this.wirelessFixtures.environmentId) return { findings: 0 };
+    this.wirelessData = mergeWirelessData([this.wirelessData, payload]);
+    this.wirelessSecurityEvents.push(...payload.securityEvents);
+    return { findings: 0 };
+  }
+
+  /** Prompt 19 platform hooks mirroring the Prisma store (§3/§60). */
+  async validateWirelessEnvironment(): Promise<{ environmentId: string; environmentRef?: string } | null> {
+    const identity = this.wirelessIdentity();
+    if (!identity) return null;
+    return { environmentId: identity.environmentId, environmentRef: identity.environmentRef };
+  }
+
+  async analyzeWirelessPosture(): Promise<{ findings: number; events: number; drift: number; accessPoints: number } | null> {
+    const identity = this.wirelessIdentity();
+    if (!identity) return null;
+    const ctx = {
+      environmentId: identity.environmentId,
+      environmentKind: this.wirelessFixtures.environmentKind ?? "CORPORATE",
+      approvedProfiles: (this.wirelessFixtures.approvedProfiles ?? []) as unknown as ApprovedWirelessProfileShape[],
+      sourceTool: "wireless-posture",
+    };
+    const analysis = analyzeWirelessPosture(this.wirelessData, ctx);
+    const previous = (this.wirelessFixtures.previousAccessPoints ?? []) as unknown as NormalizedWirelessAccessPoint[];
+    const driftResult = previous.length > 0
+      ? detectWirelessDrift(previous, this.wirelessData.accessPoints, ctx)
+      : { drift: [], findings: [], events: [] };
+    let created = 0;
+    for (const finding of [...analysis.findings, ...driftResult.findings]) {
+      const processed = processNormalizedResult({
+        assets: [], services: [], endpoints: [], technologies: [], findings: [finding],
+        artifacts: [], metrics: {}, mock: false,
+      }, { scopeRules: TEST_SCOPE, toolExecutionId: "platform-wireless-posture", toolSlug: "wireless-posture" });
+      for (const f of processed.findings) {
+        if (!this.findings.some((x) => x.fingerprint === f.fingerprint)) { this.findings.push(f); created++; }
+      }
+    }
+    // Adapter events already joined at persist time; posture + drift
+    // events are new (§47/§56).
+    const postureEvents = [...analysis.events.filter((e) => e.source === "wireless-posture" || e.type === "ROGUE_AP_SUSPECTED" || e.type === "APPROVED_AP_MISSING"), ...driftResult.events];
+    this.wirelessSecurityEvents.push(...postureEvents);
+    if (!this.wirelessDriftComputed) {
+      this.wirelessDriftComputed = true;
+      this.wirelessDriftRecords.push(...driftResult.drift.map((d) => ({ kind: d.kind, bssid: d.bssid, field: d.field, fromValue: d.fromValue, toValue: d.toValue, securityDowngrade: d.securityDowngrade })));
+    }
+    return { findings: created, events: postureEvents.length, drift: driftResult.drift.length, accessPoints: this.wirelessData.accessPoints.length };
+  }
+
+  async evaluateWirelessQualityGate(): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const identity = this.wirelessIdentity();
+    if (!identity) return null;
+    if (this.wirelessData.accessPoints.length === 0 && this.findings.length === 0) return null;
+    const canonical = this.correlatedFindings.length > 0 ? this.correlatedFindings : this.findings;
+    const gate = evaluateWirelessGate(this.wirelessData.accessPoints, canonical as never, {
+      environmentId: identity.environmentId,
+      environmentKind: this.wirelessFixtures.environmentKind ?? "CORPORATE",
+      approvedProfiles: (this.wirelessFixtures.approvedProfiles ?? []) as unknown as ApprovedWirelessProfileShape[],
+    });
+    this.wirelessGateRecord = { status: gate.status, failedRules: gate.failedRules, warningRules: gate.warningRules };
+    return { status: gate.status, failedRules: gate.failedRules.length, warningRules: gate.warningRules.length };
   }
 
   /** Prompt 16/17 (§92): active kill switches for the dynamic gate. */

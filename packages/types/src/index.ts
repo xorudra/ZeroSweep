@@ -51,6 +51,13 @@ export const ASSESSMENT_PROFILES = [
   // profile only appends the governed lab stage (§64–§67).
   "BINARY_METADATA_ONLY", "BINARY_BASELINE", "BINARY_ASSESSMENT",
   "BINARY_COMPREHENSIVE_STATIC", "BINARY_DEPENDENCY_ANALYSIS", "BINARY_CONTROLLED_DEBUG",
+  // Prompt 19 §15: wireless profiles. PASSIVE is the default and the
+  // norm — no profile transmits, cracks, deauthenticates or creates
+  // rogue APs (§99). WIRELESS_LAB_VALIDATION names the governed lab
+  // architecture (§65); its active tooling stays DISABLED in baseline
+  // orchestration (§64).
+  "WIRELESS_PASSIVE_BASELINE", "WIRELESS_PASSIVE_COMPREHENSIVE", "PCAP_ANALYSIS_ONLY",
+  "WIRELESS_COMPLIANCE", "WIRELESS_LAB_VALIDATION",
 ] as const;
 export type AssessmentProfile = (typeof ASSESSMENT_PROFILES)[number];
 

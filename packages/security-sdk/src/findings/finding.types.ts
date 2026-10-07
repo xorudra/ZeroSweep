@@ -141,6 +141,21 @@ export interface NormalizedFinding {
   binaryFingerprint?: string;
   /** §63 static-analysis confidence band. */
   staticConfidence?: "LOW" | "MEDIUM" | "HIGH";
+  // ── Prompt 19 — wireless finding extensions (§52/§53). All
+  // optional; populated only by wireless analyzers/parsers. The BSSID
+  // is the AP observation identity (§5) — the fingerprint (§53) is
+  // environment + BSSID + rule + security mode + finding class, and
+  // deliberately NEVER the SSID alone.
+  /** Registered WirelessEnvironment id (platform identity). */
+  wirelessEnvironmentId?: string;
+  /** BSSID of the access point the finding concerns (§5). */
+  wirelessBssid?: string;
+  /** §52 finding type taxonomy. */
+  wirelessFindingType?: WirelessFindingType;
+  /** §53 canonical fingerprint (environment + BSSID + rule + mode + class). */
+  wirelessFingerprint?: string;
+  /** §44 rogue classification where the finding is rogue-related. */
+  wirelessRogueClassification?: "APPROVED" | "UNKNOWN" | "SUSPICIOUS" | "POLICY_VIOLATION";
 }
 
 /** Prompt 17 §49: mobile finding types — kept distinguishable end to end. */
@@ -157,6 +172,110 @@ export type BinaryFindingType =
 
 /** Prompt 18 §5: binary formats. Unknown stays UNKNOWN — never guessed. */
 export type BinaryFormatName = "ELF" | "PE" | "MACH_O" | "UNKNOWN";
+
+/** Prompt 19 §52: wireless finding types — kept distinguishable end to end. */
+export type WirelessFindingType =
+  | "WIRELESS_ENCRYPTION_FINDING" | "WIRELESS_AUTH_FINDING" | "WIRELESS_CONFIGURATION_FINDING"
+  | "WIRELESS_ROGUE_AP_FINDING" | "WIRELESS_PROTOCOL_FINDING" | "WIRELESS_SECURITY_EVENT";
+
+/** Prompt 19 §31: normalized wireless security modes. Detailed protocol
+ *  evidence (ciphers, AKM suites, PMF, WPS) is preserved separately on
+ *  the AP record — the mode is the posture summary, never the evidence. */
+export type WirelessSecurityMode =
+  | "OPEN" | "WEP" | "WPA" | "WPA2" | "WPA3" | "ENTERPRISE" | "PERSONAL" | "TRANSITION" | "UNKNOWN";
+
+/** Prompt 19 §38: Protected Management Frames observability states. */
+export type WirelessPmfState = "REQUIRED" | "CAPABLE" | "NOT_OBSERVED" | "UNKNOWN";
+
+/** A normalized access-point observation (Prompt 19 §6/§18). SSID is
+ *  sanitized at parse time (§92); identity is the BSSID (§5). */
+export interface NormalizedWirelessAccessPoint {
+  bssid: string;
+  ssid: string; // sanitized; "" when hidden
+  ssidHidden: boolean;
+  vendor?: string;
+  channel?: number;
+  frequencyMhz?: number;
+  band?: "2.4GHZ" | "5GHZ" | "6GHZ";
+  securityMode: WirelessSecurityMode;
+  /** Detailed evidence: cipher suites (e.g. CCMP, TKIP, GCMP). */
+  encryption?: string;
+  /** Detailed evidence: authentication (PSK, SAE, EAP/802.1X, OWE). */
+  authentication?: string;
+  pmf: WirelessPmfState;
+  wpsAdvertised: boolean;
+  signalDbm?: number;
+  firstSeen: string;
+  lastSeen: string;
+  source: string; // adapter slug / parser that reported this AP
+}
+
+/** A normalized station observation (Prompt 19 §8/§9). Stations are
+ *  tracked ONLY as pseudonymized fingerprints in ordinary flows —
+ *  the raw address never travels in this record. */
+export interface NormalizedWirelessStation {
+  /** HMAC pseudonym of the station address (§9). */
+  addressFingerprint: string;
+  associatedBssid?: string;
+  firstSeen: string;
+  lastSeen: string;
+  signalDbm?: number;
+  source: string;
+}
+
+/** A single wireless observation (Prompt 19 §10) — multi-sensor
+ *  observations of the same BSSID deduplicate onto ONE AP (§54). */
+export interface NormalizedWirelessObservation {
+  timestamp: string;
+  sensorRef: string;
+  channel?: number;
+  bssid: string;
+  ssid: string; // sanitized
+  securityMode: WirelessSecurityMode;
+  signalDbm?: number;
+  source: string;
+  captureRef?: string;
+}
+
+/** A channel observation (Prompt 19 §40): operational visibility only. */
+export interface NormalizedWirelessChannelObservation {
+  channel: number;
+  band: "2.4GHZ" | "5GHZ" | "6GHZ";
+  apCount: number;
+  observationPeriodSeconds?: number;
+  maxSignalDbm?: number;
+  source: string;
+}
+
+/** A passively-detected wireless security event (Prompt 19 §47–§49).
+ *  Detection is passive ONLY — no frame is ever transmitted in
+ *  response. A single ambiguous frame never claims an attack (§49). */
+export interface NormalizedWirelessSecurityEvent {
+  type: "DEAUTH_ACTIVITY" | "DISASSOCIATION_ACTIVITY" | "ROGUE_AP_SUSPECTED"
+    | "SECURITY_MODE_CHANGED" | "NEW_UNKNOWN_AP" | "APPROVED_AP_MISSING" | "OTHER";
+  timestamp: string;
+  bssid?: string;
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  /** Sanitized, bounded evidence summary — never raw frames. */
+  evidenceSummary: string;
+  source: string;
+}
+
+/** A wireless inventory + posture payload (Prompt 19 §6–§48).
+ *  Everything here derives from PASSIVE observation or OFFLINE
+ *  capture analysis — nothing was transmitted to produce it. */
+export interface NormalizedWirelessData {
+  accessPoints: NormalizedWirelessAccessPoint[];
+  stations: NormalizedWirelessStation[];
+  observations: NormalizedWirelessObservation[];
+  channelObservations: NormalizedWirelessChannelObservation[];
+  securityEvents: NormalizedWirelessSecurityEvent[];
+  /** §67: authentication material may EXIST in a capture — only the
+   *  count is recorded, never the material. */
+  authenticationMaterialCount: number;
+  framesProcessed: number;
+  source: string; // adapter slug / platform analyzer that reported this payload
+}
 
 /** Prompt 18 §16: hardening status vocabulary. */
 export type BinaryHardeningStatus = "ENABLED" | "DISABLED" | "PARTIAL" | "NOT_APPLICABLE" | "UNKNOWN";
@@ -1087,6 +1206,8 @@ export interface NormalizedSecurityResult {
   mobile?: NormalizedMobileData;
   /** Binary static-analysis payload (Prompt 18). */
   binary?: NormalizedBinaryData;
+  /** Wireless passive inventory + posture payload (Prompt 19). */
+  wireless?: NormalizedWirelessData;
   artifacts: import("../artifacts/artifact.types").ArtifactMetadata[];
   metrics: Record<string, number>;
   /** True when produced by the Mock adapter — fixture data, NOT real results. */

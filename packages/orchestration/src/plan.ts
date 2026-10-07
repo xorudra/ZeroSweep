@@ -105,6 +105,11 @@ export const PLATFORM_STAGE_TYPES = new Set([
   // directory inventory — deterministic analysis, no adapter executes
   // (§70/§32/§34).
   "DOMAIN_DISCOVERY", "LDAP_POSTURE", "GRAPH_COLLECTION", "ATTACK_PATH_ANALYSIS",
+  // Prompt 19: wireless intake (environment/scope/capture proof) and
+  // posture analysis (encryption/rogue/drift/gate over persisted
+  // inventory) are engine/store hooks — deterministic analysis, no
+  // adapter executes (§32–§60).
+  "WIRELESS_CAPTURE_INTAKE", "WIRELESS_POSTURE_ANALYSIS",
 ]);
 
 export class InvalidPlanError extends Error {

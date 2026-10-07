@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 18 complete (Prompts 1–18).** Production monorepo, backend and
+> **Status — Phase 19 complete (Prompts 1–19).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -220,10 +220,31 @@ and the AI health endpoint.
 16. ✅ Controlled penetration testing & validation workflow (Prompt 16)
 17. ✅ Mobile application VAPT — Android & iOS (Prompt 17)
 18. ✅ Reverse engineering & binary analysis (Prompt 18)
-19. Lab-only modules (wireless)
+19. ✅ Wireless security assessment — passive only (Prompt 19)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 19: Wireless Security Assessment.** Wireless
+  environments, dedicated sensors and uploaded captures became a
+  first-class passive assessment domain. **Nothing transmits**: AP and
+  station inventory (identity = BSSID, never the SSID), encryption /
+  authentication posture per AP (open/WEP/WPA/WPA2/WPA3, PSK vs
+  Enterprise, PMF, WPS — evidence-based only), rogue/unknown AP
+  classification against approved profiles (SUSPICIOUS is never a
+  "confirmed evil twin"), configuration drift with security-downgrade
+  findings, and passive security events (a deauth burst is one event; a
+  single frame never claims an attack). Kismet collects passively on
+  dedicated `WIRELESS_PASSIVE_ANALYSIS` sensor workers; tshark (fixed
+  field set), hcxpcapngtool and aircrack-ng (metadata only) analyze
+  APPROVED captures offline. Wifite and hcxdumptool are DISABLED
+  descriptors — no adapter exists, baseline profiles can never select
+  them, and API requests naming them are refused + audited. Cracking,
+  deauthentication, rogue-AP creation and jamming are prohibited
+  automation (§99). Stations are HMAC-pseudonymized; authentication
+  material in captures is counted, never stored; observed networks
+  never become targets. Live RF needs sensor hardware that is not
+  provisioned here, so sensor stages honestly report NOT_CONFIGURED
+  and everything is verified on recorded fixture captures.
 - **2026-10-08 — Prompt 18: Reverse Engineering & Binary Analysis.**
   Authorized binaries became `BINARY` targets with SHA-256 artifact
   identity: hostile-content intake (magic-byte format identification —

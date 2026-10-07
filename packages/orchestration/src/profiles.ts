@@ -45,6 +45,9 @@ export const STAGE_TYPES = [
   "MOBILE_TRAFFIC_ANALYSIS",
   "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS",
   "BINARY_STATIC_ANALYSIS", "BINARY_DEBUG_SESSION",
+  // Prompt 19: wireless pipeline stages (§15).
+  "WIRELESS_CAPTURE_INTAKE", "WIRELESS_PASSIVE_DISCOVERY", "WIRELESS_PCAP_ANALYSIS",
+  "WIRELESS_POSTURE_ANALYSIS",
   "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "REPORT_GENERATION",
 ] as const;
 export type StageType = (typeof STAGE_TYPES)[number];
@@ -315,6 +318,20 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     adapterAllowlist: [],
     simulationFallback: false,
   },
+  WIRELESS_CAPTURE_INTAKE: S("WIRELESS_CAPTURE_INTAKE", "Wireless Environment & Capture Intake", "Validate the registered wireless environment for this scan: explicit scope (§4), approved sensors (§12) and any registered captures proven by magic bytes (§27). Platform stage: a scan without a registered environment fails honestly as NOT_CONFIGURED. Authorization is never inferred from detectability.", [], ["SCOPE_VALIDATION"], 3, 120, "FAIL_SCAN"),
+  WIRELESS_PASSIVE_DISCOVERY: {
+    ...S("WIRELESS_PASSIVE_DISCOVERY", "Wireless Passive Discovery", "Passive AP/station/channel inventory via Kismet on a registered approved sensor (Prompt 19 §16) — WIRELESS_PASSIVE_ANALYSIS workers only. Kismet listens: nothing is transmitted, no station is associated with, no hidden SSID is actively disclosed (§7). Sensor-dependent: on workers without an approved sensor the stage degrades honestly (PARTIAL/NOT_CONFIGURED).", ["PASSIVE_WIFI_DISCOVERY"], ["WIRELESS_CAPTURE_INTAKE"], 14, 1800, "FAIL_STAGE_CONTINUE"),
+    capabilityGroups: [["PASSIVE_WIFI_DISCOVERY", "ACCESS_POINT_INVENTORY"]],
+    adapterAllowlist: ["kismet"],
+    simulationFallback: false,
+  },
+  WIRELESS_PCAP_ANALYSIS: {
+    ...S("WIRELESS_PCAP_ANALYSIS", "Wireless Capture Analysis", "Offline 802.11 analysis of APPROVED capture artifacts (Prompt 19 §23/§24): tshark fixed-field frame analysis, hcxtools session-summary metadata, aircrack-ng capture inspection (metadata only, AircrackPolicy §20). No cracking, key-recovery or hash-export mode is expressible (§67/§99).", ["PCAP_ANALYSIS"], ["WIRELESS_CAPTURE_INTAKE"], 12, 1800, "FAIL_STAGE_CONTINUE"),
+    capabilityGroups: [["PCAP_ANALYSIS"], ["OFFLINE_CAPTURE_PROCESSING"], ["CAPTURE_METADATA_ANALYSIS"], ["OFFLINE_CAPTURE_INSPECTION"]],
+    adapterAllowlist: ["tshark-wireless", "hcxtools", "aircrack-ng"],
+    simulationFallback: false,
+  },
+  WIRELESS_POSTURE_ANALYSIS: S("WIRELESS_POSTURE_ANALYSIS", "Wireless Posture Analysis", "Deterministic platform analysis over persisted wireless inventory (Prompt 19 §32–§60): encryption/authentication posture, PMF/WPS assessment, defensive rogue-AP classification, drift detection, passive security events and the wireless quality gate. Unknown APs are UNKNOWN — never labelled malicious without evidence (§44).", [], ["WIRELESS_PASSIVE_DISCOVERY", "WIRELESS_PCAP_ANALYSIS"], 6, 600, "FAIL_STAGE_CONTINUE"),
   NORMALIZATION: S("NORMALIZATION", "Normalization", "Translate every tool result into the normalized security result model.", [], ["SAFE_VULNERABILITY_SCAN"], 5, 300, "FAIL_SCAN"),
   CORRELATION: S("CORRELATION", "Correlation", "Deterministically group duplicate findings by fingerprint/asset/endpoint/CVE/CWE.", [], ["NORMALIZATION"], 5, 300, "FAIL_STAGE_CONTINUE"),
   RISK_ANALYSIS: S("RISK_ANALYSIS", "Risk Analysis", "Deterministic risk scoring from normalized findings (no fabricated intel).", [], ["CORRELATION"], 3, 300, "FAIL_STAGE_CONTINUE"),
@@ -437,6 +454,15 @@ export const PROFILE_TEMPLATES: Record<AssessmentProfile, StageDefinition[]> = {
   BINARY_COMPREHENSIVE_STATIC: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS", "DEPENDENCY_INVENTORY", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   BINARY_DEPENDENCY_ANALYSIS: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "DEPENDENCY_INVENTORY", "SBOM_GENERATION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   BINARY_CONTROLLED_DEBUG: template([...HEAD, "BINARY_ARTIFACT_INTAKE", "BINARY_METADATA_EXTRACTION", "BINARY_HARDENING_ANALYSIS", "BINARY_STATIC_ANALYSIS", "BINARY_DEBUG_SESSION", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  // Prompt 19 §15: wireless profiles — PASSIVE only. The LAB profile
+  // runs the same passive chain: lab validation is a governed API
+  // workflow (§65), and its active tools (Wifite, hcxdumptool) are
+  // DISABLED descriptors that no template selects (§64).
+  WIRELESS_PASSIVE_BASELINE: template([...HEAD, "WIRELESS_CAPTURE_INTAKE", "WIRELESS_PASSIVE_DISCOVERY", "WIRELESS_POSTURE_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  WIRELESS_PASSIVE_COMPREHENSIVE: template([...HEAD, "WIRELESS_CAPTURE_INTAKE", "WIRELESS_PASSIVE_DISCOVERY", "WIRELESS_PCAP_ANALYSIS", "WIRELESS_POSTURE_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  PCAP_ANALYSIS_ONLY: template([...HEAD, "WIRELESS_CAPTURE_INTAKE", "WIRELESS_PCAP_ANALYSIS", "WIRELESS_POSTURE_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  WIRELESS_COMPLIANCE: template([...HEAD, "WIRELESS_CAPTURE_INTAKE", "WIRELESS_PASSIVE_DISCOVERY", "WIRELESS_PCAP_ANALYSIS", "WIRELESS_POSTURE_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
+  WIRELESS_LAB_VALIDATION: template([...HEAD, "WIRELESS_CAPTURE_INTAKE", "WIRELESS_PASSIVE_DISCOVERY", "WIRELESS_POSTURE_ANALYSIS", "NORMALIZATION", "CORRELATION", "RISK_ANALYSIS", "QUALITY_GATE", "REPORT_GENERATION"]),
   CUSTOM: template([...HEAD, "PASSIVE_RECON", "ASSET_DISCOVERY", ...TAIL]),
 };
 

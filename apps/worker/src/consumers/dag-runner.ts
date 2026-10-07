@@ -109,6 +109,14 @@ export interface ScanRunStore extends ExecutionStore {
   generateBinarySbom?(scanId: string): Promise<{ format: string; checksum: string; components: number } | null>;
   evaluateBinaryDebugSession?(scanId: string): Promise<{ status: string; reason?: string } | null>;
   evaluateBinaryQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
+  /** Prompt 19 platform-stage hooks (same optional pattern):
+   *  environment validation (§3/§4 — null fails the scan honestly as
+   *  NOT_CONFIGURED), posture analysis over persisted inventory
+   *  (§32–§60: encryption, rogue, drift, events) and the wireless
+   *  quality gate (§60). */
+  validateWirelessEnvironment?(scanId: string): Promise<{ environmentId: string; environmentRef?: string } | null>;
+  analyzeWirelessPosture?(scanId: string): Promise<{ findings: number; events: number; drift: number; accessPoints: number } | null>;
+  evaluateWirelessQualityGate?(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null>;
 }
 
 export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutcome>;
@@ -307,6 +315,9 @@ export class DagRunner {
     }
     if (plan.stages.some((s) => s.type === "BINARY_ARTIFACT_INTAKE")) {
       await emit("binary.scan_completed", { finalStatus });
+    }
+    if (plan.stages.some((s) => s.type === "WIRELESS_CAPTURE_INTAKE")) {
+      await emit("wireless.scan_completed", { finalStatus });
     }
     return { status: finalStatus };
   }
@@ -611,6 +622,39 @@ export class DagRunner {
     if (stageId === "QUALITY_GATE" && this.store.evaluateMobileQualityGate) {
       const result = await this.store.evaluateMobileQualityGate(scanId);
       if (result) await emit("mobile.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
+    }
+    // Prompt 19 platform stages (§15): WIRELESS_CAPTURE_INTAKE
+    // validates the registered environment (missing hook or no
+    // environment fails the scan honestly — FAIL_SCAN strategy);
+    // WIRELESS_POSTURE_ANALYSIS runs the deterministic posture pass
+    // (encryption/rogue/drift/events) over persisted inventory; the
+    // wireless gate shares the QUALITY_GATE stage. Tool stages that
+    // reached the platform path selected NO adapters (no approved
+    // sensor/capture) — they complete honestly as degraded, never
+    // simulated (§8-pattern).
+    if (stageId === "WIRELESS_CAPTURE_INTAKE") {
+      if (!this.store.validateWirelessEnvironment) return "FAILED";
+      const result = await this.store.validateWirelessEnvironment(scanId);
+      if (!result) {
+        await emit("policy.denied", { stageId, reasonCode: "WIRELESS_ENVIRONMENT_NOT_CONFIGURED" });
+        return "FAILED";
+      }
+      await emit("wireless.environment_validated", { stageId, environmentId: result.environmentId, environmentRef: result.environmentRef ?? null });
+    }
+    if (stageId === "WIRELESS_PASSIVE_DISCOVERY" || stageId === "WIRELESS_PCAP_ANALYSIS") {
+      await emit("wireless.collection_skipped", { stageId, reasonCode: "WIRELESS_SENSOR_NOT_CONFIGURED", degraded: true });
+    }
+    if (stageId === "WIRELESS_POSTURE_ANALYSIS" && this.store.analyzeWirelessPosture) {
+      const result = await this.store.analyzeWirelessPosture(scanId);
+      if (result) {
+        await emit("wireless.posture_analyzed", { stageId, findings: result.findings, accessPoints: result.accessPoints });
+        if (result.events > 0) await emit("wireless.security_event_detected", { stageId, count: result.events });
+        if (result.drift > 0) await emit("wireless.drift_detected", { stageId, count: result.drift });
+      }
+    }
+    if (stageId === "QUALITY_GATE" && this.store.evaluateWirelessQualityGate) {
+      const result = await this.store.evaluateWirelessQualityGate(scanId);
+      if (result) await emit("wireless.quality_gate_evaluated", { stageId, status: result.status, failedRules: result.failedRules, warningRules: result.warningRules });
     }
     return "COMPLETED";
   }

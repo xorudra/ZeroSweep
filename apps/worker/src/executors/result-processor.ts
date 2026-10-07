@@ -242,6 +242,13 @@ export interface ProcessedFinding {
   binaryReachability?: string;
   binaryFingerprint?: string;
   staticConfidence?: string;
+  /** Prompt 19 §52/§53: wireless identity — the registered
+   *  environment, the AP (BSSID) and the §53 canonical fingerprint. */
+  wirelessEnvironmentId?: string;
+  wirelessBssid?: string;
+  wirelessFindingType?: string;
+  wirelessFingerprint?: string;
+  wirelessRogueClassification?: string;
 }
 
 /** Prompt 12 §45: component inventory passthrough (PURL identity). */
@@ -355,6 +362,10 @@ export interface ProcessedResult {
   /** Prompt 18: binary static-analysis payload passthrough — the
    *  stores persist it into the binary artifact inventory tables. */
   binary: import("@dsrclone/security-sdk").NormalizedBinaryData;
+  /** Prompt 19: wireless passive-inventory payload passthrough — the
+   *  stores persist it into the wireless environment tables (APs,
+   *  stations, observations, events). */
+  wireless: import("@dsrclone/security-sdk").NormalizedWirelessData;
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];
@@ -687,6 +698,12 @@ export function processNormalizedResult(
       ...(f.binaryReachability ? { binaryReachability: f.binaryReachability } : {}),
       ...(f.binaryFingerprint ? { binaryFingerprint: f.binaryFingerprint } : {}),
       ...(f.staticConfidence ? { staticConfidence: f.staticConfidence } : {}),
+      // Prompt 19 passthrough (§52/§53): wireless identity fields.
+      ...(f.wirelessEnvironmentId ? { wirelessEnvironmentId: f.wirelessEnvironmentId } : {}),
+      ...(f.wirelessBssid ? { wirelessBssid: f.wirelessBssid } : {}),
+      ...(f.wirelessFindingType ? { wirelessFindingType: f.wirelessFindingType } : {}),
+      ...(f.wirelessFingerprint ? { wirelessFingerprint: f.wirelessFingerprint } : {}),
+      ...(f.wirelessRogueClassification ? { wirelessRogueClassification: f.wirelessRogueClassification } : {}),
       verificationStatus: "UNVERIFIED",
     };
   });
@@ -864,7 +881,17 @@ export function processNormalizedResult(
     discoveredReferences: [], source: ctx.toolSlug ?? "unknown",
   };
 
-  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, mobile, binary, suppressedEndpoints, isMock: result.mock };
+  // --- Wireless payload (Prompt 19): passive inventory passes
+  //     through with provenance intact; the stores persist it into
+  //     the wireless tables (APs, pseudonymized stations,
+  //     observations, channel observations, security events).
+  const wireless: ProcessedResult["wireless"] = result.wireless ?? {
+    accessPoints: [], stations: [], observations: [], channelObservations: [],
+    securityEvents: [], authenticationMaterialCount: 0, framesProcessed: 0,
+    source: ctx.toolSlug ?? "unknown",
+  };
+
+  return { assets, endpoints, services, technologies: [...techByKey.values()], findings, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, cloudNative, cloud, directory, mobile, binary, wireless, suppressedEndpoints, isMock: result.mock };
 }
 
 /** Deterministic correlation grouping (Prompt 4 §36) — no AI, original

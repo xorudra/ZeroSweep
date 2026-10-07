@@ -67,6 +67,10 @@ export const SCAN_EVENT_TYPES = [
   "binary.dependencies_inventoried", "binary.sbom_generated",
   "binary.debug_session_evaluated", "binary.debug_session_skipped",
   "binary.quality_gate_evaluated", "binary.scan_completed",
+  "wireless.environment_validated", "wireless.collection_skipped",
+  "wireless.posture_analyzed", "wireless.security_event_detected",
+  "wireless.drift_detected", "wireless.quality_gate_evaluated",
+  "wireless.scan_completed",
 ] as const;
 export type ScanEventType = (typeof SCAN_EVENT_TYPES)[number];
 

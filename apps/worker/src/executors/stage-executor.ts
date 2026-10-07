@@ -1,5 +1,5 @@
 import {
-  ALL_DIRECTORY_SLUGS, API_SLUGS, BINARY_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, MOBILE_DYNAMIC_SLUGS, MOBILE_SLUGS, MOBILE_STATIC_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, ScopeMatcher, ToolRegistry,
+  ALL_DIRECTORY_SLUGS, API_SLUGS, BINARY_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, MOBILE_DYNAMIC_SLUGS, MOBILE_SLUGS, MOBILE_STATIC_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, WIRELESS_SLUGS, WIRELESS_TOOL_STAGES, ScopeMatcher, ToolRegistry,
   activeKillSwitch, approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext, type KillSwitchContext, type KillSwitchRecord,
 } from "@dsrclone/security-sdk";
 import type { ScopeRules } from "@dsrclone/validation";
@@ -24,7 +24,7 @@ import { processNormalizedResult, type ProcessedResult } from "./result-processo
  * orchestration degrades the capability instead of crashing (§55–§56).
  */
 
-export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS, ...MOBILE_SLUGS, ...BINARY_SLUGS] as const;
+export const EXECUTABLE_SLUGS = ["mock", "local-echo", ...RECON_SLUGS, ...WEB_DISCOVERY_SLUGS, ...VULN_SLUGS, ...PROXY_SLUGS, ...API_SLUGS, ...NETWORK_SLUGS, ...VULN_SCANNER_SLUGS, ...CODE_SLUGS, ...CLOUD_NATIVE_SLUGS, ...CLOUD_SEC_SLUGS, ...ALL_DIRECTORY_SLUGS, ...MOBILE_SLUGS, ...BINARY_SLUGS, ...WIRELESS_SLUGS] as const;
 
 /** Prompt 18 §10: binary-only slugs (checksec / radare2). "ghidra" is
  *  shared with the mobile family — its binary mode is selected by the
@@ -178,6 +178,21 @@ export interface ExecutionContextRecord {
     artifactName?: string;
     format?: string;
     environment?: string;
+  };
+  /** Prompt 19: the scan's wireless context, resolved by the STORE
+   *  from the registered WirelessEnvironment / WirelessSensor /
+   *  WirelessCapture rows — environment identity (§3), the approved
+   *  sensor (reference + interface, §12) and the approved capture
+   *  artifact (§26). Never client input. No wireless context =
+   *  NOT_CONFIGURED for sensor/capture-bound adapters. */
+  wireless?: {
+    environmentId?: string;
+    environmentRef?: string;
+    environmentKind?: string;
+    sensorRef?: string;
+    sensorInterface?: string;
+    captureId?: string;
+    captureReference?: string;
   };
   /** Deterministic test/simulation hooks (never set by clients). */
   simulation?: { delayMs?: number; failWith?: "TOOL_ERROR" | "TIMEOUT"; fixture?: boolean };
@@ -433,6 +448,34 @@ export class StageExecutor {
       if (isBinaryStatic && !ctx.binary?.artifactId) {
         await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
         await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no binary artifact is registered for this scan (NOT_CONFIGURED)`);
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      // Prompt 19 gates (§13/§14/§64): wireless adapters run ONLY on
+      // WIRELESS_PASSIVE_ANALYSIS workers, ONLY in the wireless tool
+      // stages, and ONLY against store-resolved context — Kismet
+      // needs a registered approved sensor, capture analysis needs a
+      // registered approved capture (absent = NOT_CONFIGURED).
+      // Wifite / hcxdumptool / Wireshark have no adapter at all
+      // (§21/§22/§25), so no job can ever reach them.
+      const isWireless = (WIRELESS_SLUGS as readonly string[]).includes(ctx.adapterSlug);
+      if (isWireless && !(WIRELESS_TOOL_STAGES as readonly string[]).includes(ctx.stageId)) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "ADAPTER_DISABLED" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: wireless adapters execute only in WIRELESS_PASSIVE_DISCOVERY / WIRELESS_PCAP_ANALYSIS (§15)`);
+        return { status: "DENIED", reasonCode: "ADAPTER_DISABLED" };
+      }
+      if (isWireless && !this.workerCapabilities.includes("WIRELESS_PASSIVE_ANALYSIS")) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "UNAVAILABLE_FOR_WORKER" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: wireless collection/analysis runs only on dedicated WIRELESS_PASSIVE_ANALYSIS sensor workers (§13/§14) — this worker does not hold it`);
+        return { status: "DENIED", reasonCode: "UNAVAILABLE_FOR_WORKER" };
+      }
+      if (ctx.adapterSlug === "kismet" && !ctx.wireless?.sensorRef) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", "kismet: no approved wireless sensor is registered for this scan (NOT_CONFIGURED, §12)");
+        return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
+      }
+      if (isWireless && ctx.adapterSlug !== "kismet" && ctx.stageId === "WIRELESS_PCAP_ANALYSIS" && !ctx.wireless?.captureId && !ctx.wireless?.captureReference) {
+        await emit("policy.denied", { stageId: ctx.stageId, reasonCode: "TOOL_UNAVAILABLE" });
+        await this.failExecution(ctx, "POLICY", `${ctx.adapterSlug}: no approved wireless capture is registered for this scan (NOT_CONFIGURED, §26)`);
         return { status: "DENIED", reasonCode: "TOOL_UNAVAILABLE" };
       }
       if ((PRIVILEGED_CLOUD_SLUGS as readonly string[]).includes(ctx.adapterSlug)
@@ -734,6 +777,22 @@ export class StageExecutor {
           if (declared.has("binaryArtifactName") && binCtx.artifactName) config.binaryArtifactName = binCtx.artifactName;
         }
         if (declared.has("binaryAnalysisProfile")) config.binaryAnalysisProfile = "STANDARD";
+      }
+      // Prompt 19 derived configuration — worker-computed from the
+      // scan's wireless context (store-resolved), never client input
+      // (§12/§26): environment identity, the approved sensor
+      // (reference + interface) and the approved capture artifact.
+      // No command, filter or credential is ever derived here (§78).
+      if ((WIRELESS_SLUGS as readonly string[]).includes(ctx.adapterSlug)) {
+        const wlCtx = ctx.wireless;
+        if (wlCtx) {
+          if (declared.has("wirelessEnvironmentId") && wlCtx.environmentId) config.wirelessEnvironmentId = wlCtx.environmentId;
+          if (declared.has("wirelessSensorRef") && wlCtx.sensorRef) config.wirelessSensorRef = wlCtx.sensorRef;
+          if (declared.has("wirelessSensorInterface") && wlCtx.sensorInterface) config.wirelessSensorInterface = wlCtx.sensorInterface;
+          if (declared.has("wirelessCaptureId") && wlCtx.captureId) config.wirelessCaptureId = wlCtx.captureId;
+          if (declared.has("wirelessCaptureRef") && wlCtx.captureReference) config.wirelessCaptureRef = wlCtx.captureReference;
+        }
+        if (declared.has("workspaceKey")) config.workspaceKey = ctx.workspaceId;
       }
       const plan = await adapter.buildExecutionPlan(target, config);
 

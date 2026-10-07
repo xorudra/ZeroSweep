@@ -133,6 +133,21 @@ export const CAPABILITIES = [
   "FUNCTION_ANALYSIS", "IMPORT_EXPORT_ANALYSIS", "STRING_REFERENCE_ANALYSIS",
   "STATIC_BINARY_ANALYSIS", "FUNCTION_INVENTORY", "STRING_ANALYSIS",
   "DYNAMIC_DEBUGGING",
+  // Prompt 19: wireless capabilities. The PASSIVE/OFFLINE set is what
+  // adapters implement (passive discovery, inventory, capture metadata
+  // and offline inspection). ACTIVE_WIRELESS_TESTING and
+  // ACTIVE_WIRELESS_CAPTURE exist ONLY so the registry/policy can name
+  // Wifite and active hcxdumptool modes and keep them DISABLED outside
+  // a governed lab workflow (§21/§22/§64) — no adapter implements them
+  // and no baseline stage requires them. There is deliberately NO
+  // credential-cracking, key-recovery, deauthentication, rogue-AP,
+  // evil-twin or jamming capability anywhere in this list (§99).
+  "PASSIVE_WIFI_DISCOVERY", "ACCESS_POINT_INVENTORY", "STATION_OBSERVATION",
+  "CHANNEL_OBSERVATION", "WIRELESS_SECURITY_METADATA",
+  "CAPTURE_METADATA_ANALYSIS", "WIRELESS_CONFIGURATION_ANALYSIS", "OFFLINE_CAPTURE_INSPECTION",
+  "OFFLINE_CAPTURE_PROCESSING", "CAPTURE_METADATA_EXTRACTION",
+  "PCAP_ANALYSIS", "FRAME_ANALYSIS_80211", "WIRELESS_PROTOCOL_METADATA",
+  "ACTIVE_WIRELESS_TESTING", "ACTIVE_WIRELESS_CAPTURE",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 

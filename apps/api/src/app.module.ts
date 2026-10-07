@@ -33,6 +33,7 @@ import { ActiveDirectoryModule } from "./modules/active-directory/active-directo
 import { SecurityValidationModule } from "./modules/security-validation/security-validation.module";
 import { MobileSecurityModule } from "./modules/mobile-security/mobile-security.module";
 import { BinarySecurityModule } from "./modules/binary-security/binary-security.module";
+import { WirelessSecurityModule } from "./modules/wireless-security/wireless-security.module";
 
 @Module({
   imports: [
@@ -41,7 +42,7 @@ import { BinarySecurityModule } from "./modules/binary-security/binary-security.
     ScansModule, FindingsModule, ReportsModule, ToolsModule, IntegrationsModule,
     CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule, ScannersModule,
     ApiSecurityModule, NetworkModule, VulnerabilitiesModule, RepositoriesModule, CloudNativeModule, CloudSecurityModule, ActiveDirectoryModule,
-    SecurityValidationModule, MobileSecurityModule, BinarySecurityModule,
+    SecurityValidationModule, MobileSecurityModule, BinarySecurityModule, WirelessSecurityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

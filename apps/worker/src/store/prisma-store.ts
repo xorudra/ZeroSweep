@@ -2,7 +2,7 @@ import { prisma } from "@dsrclone/database";
 import { scopeRulesSchema } from "@dsrclone/validation";
 import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
 import {
-  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, analyzeMobilePosture, extractMobileArtifacts, buildSpdxSbom, emptyMobileData, evaluateMobileSecurityGate, mergeMobileData, planMobileRetest, summarizeMobileForGate, analyzeBinaryPlatform, binaryFindingFingerprint, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders, planBinaryRetest, type CvssRecord, type KillSwitchRecord, type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData,
+  CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, analyzeMobilePosture, extractMobileArtifacts, buildSpdxSbom, emptyMobileData, evaluateMobileSecurityGate, mergeMobileData, planMobileRetest, summarizeMobileForGate, analyzeBinaryPlatform, binaryFindingFingerprint, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders, planBinaryRetest, analyzeWirelessPosture, detectWirelessDrift, evaluateWirelessGate, type ApprovedWirelessProfileShape, type CvssRecord, type KillSwitchRecord, type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type NormalizedWirelessAccessPoint, type NormalizedWirelessData,
 } from "@dsrclone/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
@@ -10,6 +10,7 @@ import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, processNormalizedResult, type ProcessedFinding, type ProcessedResult } from "../executors/result-processor";
 import { isMobileProcessedFinding, stampMobileFindings, type MobileScanIdentity } from "../executors/mobile-stamp";
 import { isBinaryProcessedFinding, stampBinaryFindings, type BinaryScanIdentity } from "../executors/binary-stamp";
+import { isWirelessProcessedFinding, stampWirelessFindings, type WirelessScanIdentity } from "../executors/wireless-stamp";
 
 /**
  * Prisma implementation of the worker stores. Workers load ALL trusted state
@@ -117,6 +118,10 @@ export class PrismaWorkerStore implements ScanRunStore {
       // BinaryArtifact row — the artifact's SHA-256 identity, object
       // reference, format and environment. Never client input.
       binary: await this.loadBinaryContext(graph.workspaceId, target.id, target.type),
+      // Prompt 19 (§3/§12/§26): wireless context resolved from the
+      // registered WirelessEnvironment + approved sensor + approved
+      // capture rows — references only. Never client input.
+      wireless: await this.loadWirelessContext(graph.workspaceId, target.id, target.type, target.value),
       networkCapable: planned?.networkCapable ?? false,
       profile: plan.profile,
       assessmentId: graph.assessmentId,
@@ -311,6 +316,52 @@ export class PrismaWorkerStore implements ScanRunStore {
     };
   }
 
+  /** Prompt 19: wireless context for a scan's target — the registered
+   *  WirelessEnvironment the target references (the API binds the
+   *  WIRELESS_LAB target's value to the environment id at scan start),
+   *  its newest APPROVED+ACTIVE sensor (§12) and newest APPROVED
+   *  capture (§26). References only — never credentials. */
+  private async loadWirelessContext(workspaceId: string, _targetId: string, targetType: string, targetValue: string): Promise<ExecutionContextRecord["wireless"]> {
+    if (targetType !== "WIRELESS_LAB") return undefined;
+    const environment = await prisma.wirelessEnvironment.findFirst({
+      where: { workspaceId, id: targetValue },
+    });
+    if (!environment) return {};
+    const [sensor, capture] = await Promise.all([
+      prisma.wirelessSensor.findFirst({
+        where: { workspaceId, environmentId: environment.id, status: "ACTIVE" },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.wirelessCapture.findFirst({
+        where: { workspaceId, environmentId: environment.id, status: "APPROVED" },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+    return {
+      environmentId: environment.id,
+      environmentRef: environment.name,
+      environmentKind: environment.environment,
+      ...(sensor ? { sensorRef: sensor.id, ...(sensor.interfaceName ? { sensorInterface: sensor.interfaceName } : {}) } : {}),
+      ...(capture ? { captureId: capture.id, ...(capture.artifactReference ? { captureReference: capture.artifactReference } : {}) } : {}),
+    };
+  }
+
+  /** Prompt 19: the scan's registered wireless environment (shared by
+   *  the wireless hooks and payload persistence). */
+  private async wirelessEnvironmentForScan(scanId: string) {
+    const graph = await loadScanGraph(scanId);
+    if (!graph?.assessment || graph.assessment.target.type !== "WIRELESS_LAB") return null;
+    const environment = await prisma.wirelessEnvironment.findFirst({
+      where: { workspaceId: graph.workspaceId, id: graph.assessment.target.value },
+    });
+    if (!environment) return null;
+    return { graph, environment };
+  }
+
+  private wirelessIdentityOf(environment: { id: string; name: string }): WirelessScanIdentity {
+    return { environmentId: environment.id, environmentRef: environment.name };
+  }
+
   /** Prompt 17: the scan's registered application + latest build rows
    *  (shared by the mobile hooks and payload persistence). */
   private async mobileBuildForScan(scanId: string) {
@@ -456,6 +507,16 @@ export class PrismaWorkerStore implements ScanRunStore {
       const binaryCtx = await this.binaryArtifactForScan(scanId);
       if (binaryCtx) {
         processed = { ...processed, findings: stampBinaryFindings(processed.findings, this.binaryIdentityOf(binaryCtx.artifact)) };
+      }
+    }
+    // Prompt 19 §52/§53: wireless findings are stamped with their
+    // canonical identity (environment + BSSID + §53 fingerprint)
+    // BEFORE persistence so correlation, drift and retests key on the
+    // same fingerprint across sensors and captures.
+    if (processed.findings.some(isWirelessProcessedFinding)) {
+      const wirelessCtx = await this.wirelessEnvironmentForScan(scanId);
+      if (wirelessCtx) {
+        processed = { ...processed, findings: stampWirelessFindings(processed.findings, this.wirelessIdentityOf(wirelessCtx.environment)) };
       }
     }
     const assetIdByHost = new Map<string, string>();
@@ -839,6 +900,12 @@ export class PrismaWorkerStore implements ScanRunStore {
           binaryFindingType: f.binaryFindingType, binaryComponent: f.binaryComponent,
           binaryReachability: f.binaryReachability, binaryFingerprint: f.binaryFingerprint,
           staticConfidence: f.staticConfidence,
+          // Prompt 19 (§52/§53): wireless identity — environment row +
+          // BSSID, §52 type and the §53 canonical fingerprint. (The
+          // §44 rogue classification persists on the AP row's
+          // approvedStatus, updated by the posture stage.)
+          wirelessEnvironmentId: f.wirelessEnvironmentId, wirelessBssid: f.wirelessBssid,
+          wirelessFindingType: f.wirelessFindingType, wirelessFingerprint: f.wirelessFingerprint,
           ...(f.secret ? {
             secretMetadata: {
               create: {
@@ -1114,7 +1181,8 @@ export class PrismaWorkerStore implements ScanRunStore {
     const directoryCounts = await this.persistDirectoryPayload(scan, processed);
     const mobileCounts = await this.persistMobilePayload(scan, processed);
     const binaryCounts = await this.persistBinaryPayload(scan, processed);
-    return { assets: processed.assets.length, findings: findings + directoryCounts.findings + mobileCounts.findings + binaryCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
+    const wirelessCounts = await this.persistWirelessPayload(scan, processed);
+    return { assets: processed.assets.length, findings: findings + directoryCounts.findings + mobileCounts.findings + binaryCounts.findings + wirelessCounts.findings, endpoints, services, technologies, parameters, forms, transactions, webSockets, apiServices, graphqlServices, jwtProfiles, packetCaptures, components, directoryUsers: directoryCounts.users, directoryGroups: directoryCounts.groups, directoryComputers: directoryCounts.computers, directoryRelationships: directoryCounts.relationships };
   }
 
   /** Reconstruct the normalized directory inventory for a domain from
@@ -1401,6 +1469,130 @@ export class PrismaWorkerStore implements ScanRunStore {
    *  canonical fingerprint) and OWASP MASVS control assessments.
    *  Extracted endpoints persist as DISCOVERED_REFERENCE — they never
    *  expand scope (§30). */
+
+  /** Prompt 19 wireless payload persistence (§5–§10/§54/§55):
+   *  passive inventory upserts keyed by environment + BSSID /
+   *  address fingerprint (multi-sensor dedup onto ONE AP row);
+   *  observations append against the canonical AP; a §55 history
+   *  row is written whenever the posture-relevant state changes.
+   *  Stations arrive pseudonymized from the parsers — no raw client
+   *  address ever reaches this code (§9). Security events dedupe on
+   *  (environment, type, BSSID, evidence summary). */
+  private async persistWirelessPayload(
+    scan: { id: string; workspaceId: string },
+    processed: ProcessedResult,
+  ): Promise<{ findings: number }> {
+    const payload = processed.wireless;
+    const has = payload.accessPoints.length + payload.stations.length + payload.observations.length
+      + payload.channelObservations.length + payload.securityEvents.length > 0 || payload.framesProcessed > 0;
+    if (!has) return { findings: 0 };
+    const ctx = await this.wirelessEnvironmentForScan(scan.id);
+    if (!ctx) return { findings: 0 };
+    const { environment } = ctx;
+    const ws = scan.workspaceId;
+    const apIdByBssid = new Map<string, string>();
+    for (const ap of payload.accessPoints) {
+      const data = {
+        ssid: ap.ssid, ssidHidden: ap.ssidHidden, vendor: ap.vendor, channel: ap.channel,
+        frequencyMhz: ap.frequencyMhz, band: ap.band, securityMode: ap.securityMode,
+        encryption: ap.encryption, authentication: ap.authentication, pmf: ap.pmf,
+        wpsAdvertised: ap.wpsAdvertised, signalDbm: ap.signalDbm, lastSeen: new Date(ap.lastSeen),
+      };
+      const existing = await prisma.wirelessAccessPoint.findUnique({
+        where: { environmentId_bssid: { environmentId: environment.id, bssid: ap.bssid } },
+      });
+      const row = existing
+        ? await prisma.wirelessAccessPoint.update({ where: { id: existing.id }, data })
+        : await prisma.wirelessAccessPoint.create({
+            data: { environmentId: environment.id, workspaceId: ws, bssid: ap.bssid, firstSeen: new Date(ap.firstSeen), ...data },
+          });
+      apIdByBssid.set(ap.bssid.toLowerCase(), row.id);
+      // §55 history: append the new state when it differs from the
+      // latest recorded state (the posture stage diffs the previous
+      // row against the current one).
+      const lastHist = await prisma.wirelessAccessPointHistory.findFirst({
+        where: { accessPointId: row.id }, orderBy: { observedAt: "desc" },
+      });
+      const changed = !lastHist
+        || lastHist.ssid !== row.ssid || lastHist.channel !== row.channel
+        || lastHist.securityMode !== row.securityMode
+        || (lastHist.authentication ?? undefined) !== (row.authentication ?? undefined)
+        || lastHist.approvedStatus !== row.approvedStatus;
+      if (changed) {
+        await prisma.wirelessAccessPointHistory.create({
+          data: {
+            accessPointId: row.id, ssid: row.ssid, channel: row.channel,
+            securityMode: row.securityMode, authentication: row.authentication,
+            approvedStatus: row.approvedStatus, observedAt: new Date(),
+          },
+        });
+      }
+    }
+    for (const st of payload.stations) {
+      const existing = await prisma.wirelessStation.findUnique({
+        where: { environmentId_addressFingerprint: { environmentId: environment.id, addressFingerprint: st.addressFingerprint } },
+      });
+      const data = {
+        associatedBssid: st.associatedBssid, signalDbm: st.signalDbm, source: st.source,
+        accessPointId: st.associatedBssid ? apIdByBssid.get(st.associatedBssid.toLowerCase()) : undefined,
+        lastSeen: new Date(st.lastSeen),
+      };
+      if (existing) await prisma.wirelessStation.update({ where: { id: existing.id }, data });
+      else await prisma.wirelessStation.create({
+        data: { environmentId: environment.id, workspaceId: ws, addressFingerprint: st.addressFingerprint, firstSeen: new Date(st.firstSeen), ...data },
+      });
+    }
+    // Resolve sensor/capture FKs from the parser-context references
+    // (store-resolved ids; anything else stays unlinked).
+    const sensorIds = new Map<string, string>();
+    const captureIds = new Map<string, string>();
+    for (const obs of payload.observations) {
+      const apId = apIdByBssid.get(obs.bssid.toLowerCase());
+      if (!apId) continue; // observations always accompany their AP in a payload; defensive skip
+      if (obs.sensorRef && !sensorIds.has(obs.sensorRef)) {
+        const s = await prisma.wirelessSensor.findFirst({ where: { id: obs.sensorRef, environmentId: environment.id } });
+        if (s) sensorIds.set(obs.sensorRef, s.id);
+      }
+      if (obs.captureRef && !captureIds.has(obs.captureRef)) {
+        const c = await prisma.wirelessCapture.findFirst({ where: { id: obs.captureRef, environmentId: environment.id } });
+        if (c) captureIds.set(obs.captureRef, c.id);
+      }
+      await prisma.wirelessObservation.create({
+        data: {
+          environmentId: environment.id, workspaceId: ws, accessPointId: apId,
+          sensorId: obs.sensorRef ? sensorIds.get(obs.sensorRef) : undefined,
+          captureId: obs.captureRef ? captureIds.get(obs.captureRef) : undefined,
+          timestamp: new Date(obs.timestamp), channel: obs.channel, bssid: obs.bssid,
+          ssid: obs.ssid, securityMode: obs.securityMode, signalDbm: obs.signalDbm, source: obs.source,
+        },
+      });
+    }
+    for (const ch of payload.channelObservations) {
+      await prisma.wirelessChannelObservation.create({
+        data: {
+          environmentId: environment.id, workspaceId: ws, scanId: scan.id,
+          channel: ch.channel, band: ch.band, accessPointCount: ch.apCount, source: ch.source,
+        },
+      });
+    }
+    for (const e of payload.securityEvents) {
+      const existing = await prisma.wirelessSecurityEvent.findFirst({
+        where: { environmentId: environment.id, type: e.type, bssid: e.bssid ?? null, evidenceSummary: e.evidenceSummary },
+      });
+      if (!existing) {
+        await prisma.wirelessSecurityEvent.create({
+          data: {
+            environmentId: environment.id, workspaceId: ws,
+            accessPointId: e.bssid ? apIdByBssid.get(e.bssid.toLowerCase()) : undefined,
+            type: e.type, timestamp: new Date(e.timestamp), bssid: e.bssid,
+            confidence: e.confidence, evidenceSummary: e.evidenceSummary, source: e.source,
+          },
+        });
+      }
+    }
+    return { findings: 0 };
+  }
+
   private async persistMobilePayload(
     scan: { id: string; workspaceId: string },
     processed: ProcessedResult,
@@ -2812,6 +3004,168 @@ export class PrismaWorkerStore implements ScanRunStore {
       },
     }).catch(() => undefined);
     return { status, failedRules: failed.length, warningRules: warnings.length };
+  }
+
+  /** Reconstruct the normalized wireless inventory of an environment
+   *  from its persisted rows — the read path the wireless hooks share. */
+  private async loadWirelessInventory(environmentId: string): Promise<NormalizedWirelessData> {
+    const [aps, stations, events] = await Promise.all([
+      prisma.wirelessAccessPoint.findMany({ where: { environmentId } }),
+      prisma.wirelessStation.findMany({ where: { environmentId } }),
+      prisma.wirelessSecurityEvent.findMany({ where: { environmentId } }),
+    ]);
+    return {
+      accessPoints: aps.map((r) => ({
+        bssid: r.bssid, ssid: r.ssid, ssidHidden: r.ssidHidden,
+        ...(r.vendor ? { vendor: r.vendor } : {}),
+        ...(r.channel !== null ? { channel: r.channel } : {}),
+        ...(r.frequencyMhz !== null ? { frequencyMhz: r.frequencyMhz } : {}),
+        ...(r.band ? { band: r.band as never } : {}),
+        securityMode: r.securityMode as never,
+        ...(r.encryption ? { encryption: r.encryption } : {}),
+        ...(r.authentication ? { authentication: r.authentication } : {}),
+        pmf: r.pmf as never, wpsAdvertised: r.wpsAdvertised,
+        ...(r.signalDbm !== null ? { signalDbm: r.signalDbm } : {}),
+        firstSeen: r.firstSeen.toISOString(), lastSeen: r.lastSeen.toISOString(), source: "persisted-inventory",
+      })),
+      stations: stations.map((r) => ({
+        addressFingerprint: r.addressFingerprint,
+        ...(r.associatedBssid ? { associatedBssid: r.associatedBssid } : {}),
+        firstSeen: r.firstSeen.toISOString(), lastSeen: r.lastSeen.toISOString(),
+        ...(r.signalDbm !== null ? { signalDbm: r.signalDbm } : {}),
+        source: r.source ?? "persisted-inventory",
+      })),
+      observations: [], channelObservations: [],
+      securityEvents: events.map((r) => ({
+        type: r.type as never, timestamp: r.timestamp.toISOString(),
+        ...(r.bssid ? { bssid: r.bssid } : {}),
+        confidence: r.confidence as never, evidenceSummary: r.evidenceSummary, source: r.source,
+      })),
+      authenticationMaterialCount: 0, framesProcessed: 0, source: "persisted-inventory",
+    };
+  }
+
+  private async wirelessAnalysisContext(environment: { id: string; environment: string }) {
+    const profiles = await prisma.approvedWirelessProfile.findMany({ where: { environmentId: environment.id } });
+    return {
+      environmentId: environment.id,
+      environmentKind: environment.environment,
+      approvedProfiles: profiles.map((p): ApprovedWirelessProfileShape => ({
+        ssid: p.ssid, ...(p.bssid ? { bssid: p.bssid } : {}),
+        securityMode: p.securityMode as never,
+        ...(p.authentication ? { authentication: p.authentication } : {}),
+        allowedChannels: (p.allowedChannels as number[]) ?? [],
+        allowedBands: (p.allowedBands as string[]) ?? [],
+      })),
+      sourceTool: "wireless-posture",
+    };
+  }
+
+  /** WIRELESS_CAPTURE_INTAKE (§3/§4): the scan's environment must be
+   *  registered — null fails the scan honestly as NOT_CONFIGURED. */
+  async validateWirelessEnvironment(scanId: string): Promise<{ environmentId: string; environmentRef?: string } | null> {
+    const ctx = await this.wirelessEnvironmentForScan(scanId);
+    if (!ctx) return null;
+    return { environmentId: ctx.environment.id, environmentRef: ctx.environment.name };
+  }
+
+  /** WIRELESS_POSTURE_ANALYSIS (§32–§60): the deterministic posture
+   *  pass over the persisted inventory — encryption/auth findings,
+   *  rogue classification (persisted onto the AP rows' approvedStatus),
+   *  §56 drift against the pre-scan history state, and §47 events.
+   *  Findings persist through the ordinary result path. */
+  async analyzeWirelessPosture(scanId: string): Promise<{ findings: number; events: number; drift: number; accessPoints: number } | null> {
+    const ctx = await this.wirelessEnvironmentForScan(scanId);
+    if (!ctx) return null;
+    const { environment } = ctx;
+    const data = await this.loadWirelessInventory(environment.id);
+    const analysisCtx = await this.wirelessAnalysisContext(environment);
+    const analysis = analyzeWirelessPosture(data, analysisCtx);
+    // §56 drift: previous state = the history row BEFORE the latest
+    // one per AP (the latest reflects the current scan's state).
+    const apRows = await prisma.wirelessAccessPoint.findMany({ where: { environmentId: environment.id } });
+    const previous: NormalizedWirelessAccessPoint[] = [];
+    for (const row of apRows) {
+      const hist = await prisma.wirelessAccessPointHistory.findMany({
+        where: { accessPointId: row.id }, orderBy: { observedAt: "desc" }, take: 2,
+      });
+      const prev = hist.length >= 2 ? hist[1]! : undefined;
+      if (prev) {
+        previous.push({
+          bssid: row.bssid, ssid: prev.ssid, ssidHidden: prev.ssid === "",
+          ...(prev.channel !== null ? { channel: prev.channel } : {}),
+          securityMode: prev.securityMode as never,
+          ...(prev.authentication ? { authentication: prev.authentication } : {}),
+          pmf: "UNKNOWN", wpsAdvertised: false,
+          firstSeen: prev.observedAt.toISOString(), lastSeen: prev.observedAt.toISOString(), source: "history",
+        });
+      }
+    }
+    const driftResult = previous.length > 0
+      ? detectWirelessDrift(previous, data.accessPoints, analysisCtx)
+      : { drift: [], findings: [], events: [] };
+    const allFindings = [...analysis.findings, ...driftResult.findings];
+    if (allFindings.length > 0) {
+      const processedPosture = processNormalizedResult({
+        assets: [], services: [], endpoints: [], technologies: [], findings: allFindings,
+        artifacts: [], metrics: {}, mock: false,
+      }, { scopeRules: { includeHosts: [], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] }, toolExecutionId: "platform-wireless-posture", toolSlug: "wireless-posture" });
+      await this.persistResult(scanId, "platform-wireless-posture", processedPosture);
+    }
+    // §44 classifications persist onto the AP rows.
+    for (const c of analysis.classifications) {
+      await prisma.wirelessAccessPoint.updateMany({
+        where: { environmentId: environment.id, bssid: c.bssid }, data: { approvedStatus: c.classification },
+      });
+    }
+    // §47/§56 events + drift rows (deduped like payload events).
+    let eventsCreated = 0;
+    for (const e of [...analysis.events.filter((x) => x.source === "wireless-posture"), ...driftResult.events]) {
+      const existing = await prisma.wirelessSecurityEvent.findFirst({
+        where: { environmentId: environment.id, type: e.type, bssid: e.bssid ?? null, evidenceSummary: e.evidenceSummary },
+      });
+      if (!existing) {
+        await prisma.wirelessSecurityEvent.create({
+          data: {
+            environmentId: environment.id, workspaceId: environment.workspaceId,
+            accessPointId: e.bssid ? apRows.find((r) => r.bssid.toLowerCase() === e.bssid!.toLowerCase())?.id : undefined,
+            type: e.type, timestamp: new Date(e.timestamp), bssid: e.bssid,
+            confidence: e.confidence, evidenceSummary: e.evidenceSummary, source: e.source,
+          },
+        });
+        eventsCreated++;
+      }
+    }
+    for (const d of driftResult.drift) {
+      await prisma.wirelessDriftEvent.create({
+        data: {
+          environmentId: environment.id, workspaceId: environment.workspaceId,
+          accessPointId: apRows.find((r) => r.bssid.toLowerCase() === d.bssid.toLowerCase())?.id,
+          kind: d.kind, bssid: d.bssid, ssid: d.ssid, field: d.field,
+          fromValue: d.fromValue, toValue: d.toValue, securityDowngrade: d.securityDowngrade,
+        },
+      });
+    }
+    return { findings: allFindings.length, events: eventsCreated, drift: driftResult.drift.length, accessPoints: data.accessPoints.length };
+  }
+
+  /** QUALITY_GATE — wireless gate (§60) over the persisted inventory
+   *  and the scan's canonical wireless findings. */
+  async evaluateWirelessQualityGate(scanId: string): Promise<{ status: string; failedRules: number; warningRules: number } | null> {
+    const ctx = await this.wirelessEnvironmentForScan(scanId);
+    if (!ctx) return null;
+    const data = await this.loadWirelessInventory(ctx.environment.id);
+    if (data.accessPoints.length === 0) return null;
+    const rows = await prisma.finding.findMany({ where: { scanId, duplicateOfId: null, wirelessEnvironmentId: ctx.environment.id } });
+    const gate = evaluateWirelessGate(data.accessPoints, rows as never, await this.wirelessAnalysisContext(ctx.environment));
+    await prisma.qualityGateResult.create({
+      data: {
+        scanId, policyVersion: "wireless-gate-v1", status: gate.status as never,
+        summary: { failedRules: gate.failedRules, warningRules: gate.warningRules } as never,
+        failedRules: gate.failedRules as never, warningRules: gate.warningRules as never,
+      },
+    });
+    return { status: gate.status, failedRules: gate.failedRules.length, warningRules: gate.warningRules.length };
   }
 
   /** NORMALIZATION stage hook (§45/§46): counts from persisted findings. */
