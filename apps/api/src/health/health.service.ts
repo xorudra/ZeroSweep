@@ -54,7 +54,7 @@ export class HealthService {
 
     try {
       const aiUrl = new URL(env.AI_SERVICE_URL);
-      const up = await tcpCheck(aiUrl.hostname, Number(aiUrl.port || 8000));
+      const up = await tcpCheck(aiUrl.hostname, Number(aiUrl.port || (aiUrl.protocol === "https:" ? 443 : 8000)));
       checks.ai = up ? { status: "ok" } : { status: "down", detail: "ai service unreachable" };
     } catch {
       checks.ai = { status: "skipped" };

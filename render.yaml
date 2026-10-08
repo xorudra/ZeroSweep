@@ -25,6 +25,12 @@ databases:
     postgresMajorVersion: "16"
     region: oregon
 
+envVarGroups:
+  - name: dsrclone-shared
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+
 services:
   - type: keyvalue
     name: dsrclone-redis
@@ -57,7 +63,7 @@ services:
           name: dsrclone-redis
           property: connectionString
       - key: JWT_SECRET
-        generateValue: true
+        fromGroup: dsrclone-shared
       - key: API_CORS_ORIGIN
         value: https://dsrclone-web.onrender.com
       - key: AI_SERVICE_URL
@@ -86,6 +92,8 @@ services:
           type: keyvalue
           name: dsrclone-redis
           property: connectionString
+      - key: JWT_SECRET
+        fromGroup: dsrclone-shared
 
   - type: web
     name: dsrclone-ai
