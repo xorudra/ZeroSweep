@@ -4,6 +4,7 @@ import { HealthModule } from "../../health/health.module";
 import { PlatformController } from "./platform.controller";
 import { PlatformControlService } from "./platform-control.service";
 import { PlatformOverviewService } from "./platform-overview.service";
+import { AdminDashboardService } from "./admin-dashboard.service";
 import { BackupService } from "./backup.service";
 import { ProductionConfigurationService } from "./production-config.service";
 
@@ -16,7 +17,7 @@ import { ProductionConfigurationService } from "./production-config.service";
 @Module({
   imports: [AuditModule, HealthModule],
   controllers: [PlatformController],
-  providers: [PlatformControlService, PlatformOverviewService, BackupService, ProductionConfigurationService],
+  providers: [AdminDashboardService, PlatformControlService, PlatformOverviewService, BackupService, ProductionConfigurationService],
   exports: [PlatformControlService, ProductionConfigurationService],
 })
 export class PlatformOpsModule {}

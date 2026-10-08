@@ -52,7 +52,7 @@ export class AuthService {
     const workspace = await this.prisma.workspace.create({ data: { organizationId: org.id, name: "Default Workspace" } });
     await this.audit.record({ actorId: user.id, organizationId: org.id, workspaceId: workspace.id, action: "REGISTER", resourceType: "User", resourceId: user.id });
     const session = await this.createSession(user.id as string, org.id as string, "AAL1");
-    return { user: { id: user.id, email: user.email, name: user.name }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER"), ...session };
+    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.isPlatformAdmin }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER", user.isPlatformAdmin), ...session };
   }
 
   async login(raw: unknown, ip = "unknown") {
@@ -104,6 +104,17 @@ export class AuthService {
    *  fresh server-side session — no pre-auth identifier is ever honored. */
   async completeLogin(user: Record<string, unknown>, membership: Record<string, unknown>, ip = "unknown", breakGlass = false, assurance = "AAL1") {
     const organizationId = membership.organizationId as string;
+    // Prompt 40 §96 reconciliation: the platform-admin flag is granted or
+    // revoked ONLY from the trusted deployment allowlist. Registration
+    // stamps it at signup; reconciling at login lets an operator promote
+    // (or demote) an existing account by changing deployment config —
+    // never via any tenant API or request payload.
+    const envAdmin = isPlatformAdminEmail(user.email as string, loadEnv());
+    let isPlatformAdmin = user.isPlatformAdmin === true;
+    if (envAdmin !== isPlatformAdmin) {
+      isPlatformAdmin = envAdmin;
+      await this.prisma.user.update({ where: { id: user.id as string }, data: { isPlatformAdmin: envAdmin } });
+    }
     await this.prisma.user.update({ where: { id: user.id as string }, data: { lastLoginAt: new Date() } });
     await this.event(user.id as string, organizationId, "LOGIN_SUCCESS", ip);
     await this.audit.record({ actorId: user.id as string, organizationId, action: "USER_LOGIN_SUCCEEDED", resourceType: "User", resourceId: user.id as string, ipAddress: ip === "unknown" ? undefined : ip });
@@ -112,7 +123,7 @@ export class AuthService {
     }
     await this.audit.record({ actorId: user.id as string, organizationId, action: "LOGIN", resourceType: "User", resourceId: user.id as string });
     const session = await this.createSession(user.id as string, organizationId, assurance);
-    return { user: { id: user.id, email: user.email, name: user.name }, ...this.issueToken(user.id as string, user.email as string, organizationId, membership.role as string), ...session };
+    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin }, ...this.issueToken(user.id as string, user.email as string, organizationId, membership.role as string, isPlatformAdmin), ...session };
   }
 
   private async createSession(userId: string, organizationId: string, assurance: string) {
@@ -173,7 +184,7 @@ export class AuthService {
     });
   }
 
-  private issueToken(sub: string, email: string, organizationId: string, role: string) {
-    return { accessToken: this.jwt.sign({ sub, email, organizationId, role }) };
+  private issueToken(sub: string, email: string, organizationId: string, role: string, isPlatformAdmin = false) {
+    return { accessToken: this.jwt.sign({ sub, email, organizationId, role, isPlatformAdmin }) };
   }
 }

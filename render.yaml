@@ -69,6 +69,8 @@ services:
         value: https://dsrclone-ai.onrender.com
       - key: PRODUCT_MODE
         value: SELF_HOSTED
+      - key: PRODUCT_PLATFORM_ADMIN_EMAILS
+        value: forapikeyonly2008@gmail.com
 
   - type: web
     name: dsrclone-worker

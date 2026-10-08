@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
+import { apiFetch, getToken } from "@/lib/api-client";
 
 export const NAV = [
   { href: "/", label: "Overview" },
@@ -94,10 +95,20 @@ export const NAV = [
   { href: "/settings", label: "Settings" },
 ] as const;
 
+interface MeInfo { role?: string; isPlatformAdmin?: boolean; }
+
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { logout } = useAuth();
+  const [me, setMe] = useState<MeInfo | null>(null);
+  useEffect(() => {
+    if (pathname === "/login" || !getToken()) return;
+    let cancelled = false;
+    apiFetch<MeInfo>("/auth/me").then((m) => { if (!cancelled) setMe(m); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [pathname]);
   if (pathname === "/login") return <>{children}</>;
+  const canAdmin = Boolean(me?.isPlatformAdmin) || me?.role === "OWNER" || me?.role === "ADMIN";
   return (
     <div className="flex min-h-screen bg-slate-950">
       <aside className="hidden w-60 shrink-0 border-r border-slate-800 bg-slate-900/40 md:block">
@@ -116,6 +127,14 @@ export function Shell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        {canAdmin ? (
+          <div className="px-3 pt-2">
+            <Link href="/admin"
+              className={`block rounded-lg px-3 py-2 text-sm ${pathname.startsWith("/admin") ? "bg-[#CB3CFF]/15 font-semibold text-[#E9B8FF]" : "font-medium text-[#C9A7EB] hover:bg-[#CB3CFF]/10"}`}>
+              ◆ Admin Panel
+            </Link>
+          </div>
+        ) : null}
         <div className="px-5 py-6">
           <button type="button" onClick={logout} className="text-sm text-slate-400 hover:text-slate-200">Sign out</button>
         </div>

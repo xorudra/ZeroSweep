@@ -11,6 +11,10 @@ export interface RequestUser {
   email: string;
   organizationId: string;
   role: Role;
+  /** Deployment-level platform administrator (Prompt 40 §96). Carried in
+   *  the token from the user row, which login reconciles against the
+   *  trusted deployment allowlist — never from request input. */
+  isPlatformAdmin?: boolean;
 }
 
 export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext): RequestUser => {

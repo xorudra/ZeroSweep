@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
+import { AdminDashboardService } from "./admin-dashboard.service";
 import { PlatformControlService } from "./platform-control.service";
 import { PlatformOverviewService } from "./platform-overview.service";
 import { BackupService } from "./backup.service";
@@ -16,11 +17,17 @@ import { requirePlatformPermission } from "./permissions";
 @Controller("platform")
 export class PlatformController {
   constructor(
+    private readonly dashboardSvc: AdminDashboardService,
     private readonly overviewSvc: PlatformOverviewService,
     private readonly control: PlatformControlService,
     private readonly backups: BackupService,
     private readonly productionConfig: ProductionConfigurationService,
   ) {}
+
+  @Get("dashboard")
+  dashboard(@CurrentUser() user: RequestUser) {
+    return this.dashboardSvc.dashboard(user);
+  }
 
   @Get("overview")
   overview(@CurrentUser() user: RequestUser) {
