@@ -39,10 +39,12 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @dsrclone/database exec prisma generate && pnpm --filter @dsrclone/api... build
+    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @dsrclone/database exec prisma generate && corepack pnpm --filter @dsrclone/api... build
     startCommand: bash scripts/render/api-start.sh
     healthCheckPath: /api/v1/health/live
     envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
@@ -68,9 +70,11 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @dsrclone/database exec prisma generate && pnpm --filter @dsrclone/worker... build
+    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @dsrclone/database exec prisma generate && corepack pnpm --filter @dsrclone/worker... build
     startCommand: bash scripts/render/worker-start.sh
     envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
@@ -99,9 +103,11 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @dsrclone/web... build
+    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @dsrclone/web... build
     startCommand: cd apps/web && ./node_modules/.bin/next start -p $PORT
     envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_BASE_URL
