@@ -10,6 +10,26 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
+## Live deployment (Render)
+
+Deployed from this repository via the `render.yaml` blueprint (free tier, Oregon):
+
+| Piece | URL |
+|---|---|
+| Web console | https://dsrclone-web.onrender.com |
+| API | https://dsrclone-api.onrender.com (`/api/v1/health`) |
+| AI copilot service | https://dsrclone-ai.onrender.com (`/health`) |
+| Worker | https://dsrclone-worker.onrender.com (background jobs; health via API) |
+| Database / cache | Render Postgres 16 + Key Value, wired by the blueprint |
+
+Verified live 2026-10-08: API health reports api / postgres / redis / ai **ok**.
+Object storage reports **down** — the free tier has no S3 bucket attached, so the
+overall status reads *degraded* for that reason alone; attach any S3-compatible
+bucket via the `S3_*` env vars to close it. Free-tier realities: services spin
+down after ~15 minutes idle (slow first wake) and free Postgres expires after
+30 days. For a real production topology (HA, DR, observability), see `deploy/`
+instead — the Render deployment is the public demo, not that path.
+
 > **Status — Phase 40 complete (Prompts 1–40).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
