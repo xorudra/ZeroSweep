@@ -62,8 +62,7 @@ services:
           type: keyvalue
           name: dsrclone-redis
           property: connectionString
-      - key: JWT_SECRET
-        fromGroup: dsrclone-shared
+      - fromGroup: dsrclone-shared
       - key: API_CORS_ORIGIN
         value: https://dsrclone-web.onrender.com
       - key: AI_SERVICE_URL
@@ -92,8 +91,7 @@ services:
           type: keyvalue
           name: dsrclone-redis
           property: connectionString
-      - key: JWT_SECRET
-        fromGroup: dsrclone-shared
+      - fromGroup: dsrclone-shared
 
   - type: web
     name: dsrclone-ai
