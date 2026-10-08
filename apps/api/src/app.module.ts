@@ -43,6 +43,7 @@ import { SecurityAnalyticsModule } from "./modules/security-analytics/security-a
 import { SocModule } from "./modules/soc/soc.module";
 import { EasmModule } from "./modules/easm/easm.module";
 import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelligence/vulnerability-intelligence.module";
+import { RemediationModule } from "./modules/remediation/remediation.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelli
     // ":cveId" lookup and "sync/:source" patterns do not overlap any
     // P30 route and keep working unchanged.
     VulnerabilityIntelligenceModule,
+    RemediationModule,
     VulnerabilitiesModule, RepositoriesModule, CloudNativeModule, CloudSecurityModule, ActiveDirectoryModule,
     SecurityValidationModule, MobileSecurityModule, BinarySecurityModule, WirelessSecurityModule, VulnerabilityManagementModule,
     AiSecurityModule,

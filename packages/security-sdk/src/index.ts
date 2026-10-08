@@ -287,4 +287,5 @@ export * from "./grc/index";
 // tenant-safe cache keys (all pure, fixture-verified).
 export * from "./analytics/index";
 export * from "./soc/index";
+export * from "./remediation/index";
 export * from "./easm/index";

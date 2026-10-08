@@ -558,6 +558,28 @@ enum AuditAction {
   RETEST_COMPLETED
   VULNERABILITY_RESOLVED
   VULNERABILITY_REOPENED
+  // Prompt 31 §123: remediation orchestration audit actions.
+  REMEDIATION_CASE_CREATED
+  REMEDIATION_TRIAGED
+  REMEDIATION_ASSIGNED
+  REMEDIATION_REASSIGNED
+  REMEDIATION_PLAN_CREATED
+  REMEDIATION_SLA_ASSIGNED
+  REMEDIATION_SLA_PAUSED
+  REMEDIATION_SLA_BREACHED
+  REMEDIATION_FIX_CLAIMED
+  REMEDIATION_VERIFICATION_REQUESTED
+  REMEDIATION_VERIFICATION_STARTED
+  REMEDIATION_VERIFICATION_PASSED
+  REMEDIATION_VERIFICATION_FAILED
+  REMEDIATION_VERIFICATION_INCONCLUSIVE
+  REMEDIATION_VERIFIED_FIXED
+  REMEDIATION_CLOSED
+  VULNERABILITY_REGRESSION_DETECTED
+  REMEDIATION_EXCEPTION_CREATED
+  REMEDIATION_EXCEPTION_APPROVED
+  REMEDIATION_EXCEPTION_EXPIRED
+  REMEDIATION_CAMPAIGN_CREATED
   SCANNER_REPORT_IMPORTED
   INTELLIGENCE_UPDATED
   // Prompt 12 §110: source code security audit actions. Metadata for
@@ -2289,6 +2311,19 @@ model RemediationSlaPolicy {
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Prompt 31 §21/§23/§54: orchestration policy extensions. `conditions`
+  // carries the resolver matchers (severity/priority sets, KEV,
+  // internet-exposure, asset criticality, finding category) plus the
+  // target duration in hours; `version` is snapshotted onto every case
+  // SLA so a historical due date stays explainable (§24). The flat
+  // P0..P4 `rules` map remains the fallback duration source.
+  version                     Int     @default(1)
+  conditions                  Json? // { severities?, priorities?, kevOnly?, internetExposed?, criticalities?, categories?, targetHours, verificationRequired?, requiredCleanObservations?, dualApprovalForHighRisk? }
+  warningThresholds           Json? // { warningPct?, atRiskPct? } of target duration elapsed
+  escalation                  Json? // { escalateTo?, managementRoute? }
+  verificationRequired        Boolean @default(true)
+  requiredCleanObservations   Int     @default(1)
+  active                      Boolean @default(true)
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -8954,6 +8989,328 @@ model EasmReportSnapshot {
   workspaceId String
   programId   String?
   type        String // EXTERNAL_ATTACK_SURFACE | NEW_ASSET | EXPOSURE_DRIFT | CERTIFICATE_HEALTH | TECHNOLOGY_EXPOSURE | UNKNOWN_ASSET | EXECUTIVE_EASM
+  content     Json     @default("{}")
+  contentHash String
+  generatedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, type, createdAt])
+}
+
+// ============================ Prompt 31: Remediation Orchestration ============================
+// One ACTIVE case per canonical finding (§4); history is append-oriented
+// (§9) — status changes land in RemediationStatusHistory, never rewrites.
+// A case reaches VERIFIED_FIXED only through the verification engine
+// (§52–§65) and CLOSED only through the closure engine (§68) — ticket
+// state and AI output can never move it there (§157).
+
+model RemediationCase {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  workspaceId         String
+  findingId           String
+  status              String    @default("NEW") // RemediationStatus (§5)
+  priority            String? // P0..P4 — mirrors the finding priority at triage
+  ownerType           String? // USER | TEAM | APPLICATION_OWNER | REPOSITORY_OWNER | ASSET_OWNER (§18)
+  ownerId             String?
+  teamId              String?
+  ownershipConfidence String? // VERIFIED | HIGH | MEDIUM | LOW | UNKNOWN (§16)
+  slaPolicyId         String?
+  dueAt               DateTime?
+  remediationPlanId   String?
+  verificationState   String    @default("NOT_REQUESTED") // NOT_REQUESTED | PENDING | RUNNING | PASSED | FAILED | INCONCLUSIVE | ERROR
+  regressionCount     Int       @default(0)
+  lastRegressionAt    DateTime?
+  verifiedFixedAt     DateTime?
+  closureSnapshot     Json? // §70: reason/method/evidence/risk/ticket state at closure
+  createdBy           String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  closedAt            DateTime?
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, findingId])
+  @@index([workspaceId, dueAt])
+  @@index([workspaceId, ownerId])
+}
+
+model RemediationStatusHistory {
+  id         String   @id @default(uuid())
+  caseId     String
+  workspaceId String
+  fromStatus String?
+  toStatus   String
+  actorId    String
+  reason     String?
+  evidence   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([workspaceId])
+}
+
+model RemediationTriage {
+  id        String   @id @default(uuid())
+  caseId    String
+  workspaceId String
+  decision  String // ACTION_REQUIRED | FALSE_POSITIVE | DUPLICATE | ACCEPT_RISK_CANDIDATE | NEEDS_MORE_EVIDENCE | NOT_APPLICABLE (§11)
+  analystId String
+  priority  String?
+  reason    String
+  notes     String?
+  evidence  Json?
+  canonicalFindingId String? // DUPLICATE: the canonical primary (§13)
+  reviewAt  DateTime? // FALSE_POSITIVE optional expiration/review (§12)
+  createdAt DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([workspaceId])
+}
+
+model RemediationAssignment {
+  id         String   @id @default(uuid())
+  caseId     String
+  workspaceId String
+  ownerType  String
+  ownerId    String?
+  teamId     String?
+  confidence String? // ownership confidence at assignment time (§16)
+  assignedBy String
+  reason     String?
+  source     String // EXPLICIT_FINDING_ASSIGNMENT | APPLICATION_OWNER | REPOSITORY_OWNER | ASSET_OWNER | WORKSPACE_DEFAULT | MANUAL | AI_SUGGESTION_CONFIRMED
+  createdAt  DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([workspaceId, ownerId])
+}
+
+// §24: the SLA decision is snapshotted — policy version, target and the
+// exact inputs used — so a historical due date stays explainable even
+// after the policy changes.
+model RemediationSlaSnapshot {
+  id              String    @id @default(uuid())
+  caseId          String
+  workspaceId     String
+  policyId        String?
+  policyVersion   Int?
+  inputs          Json // { priority, severity, kevListed, internetExposed, criticality, category }
+  targetHours     Float
+  startedAt       DateTime
+  dueAt           DateTime
+  state           String    @default("ON_TRACK") // ON_TRACK | WARNING | AT_RISK | BREACHED | PAUSED | COMPLETED (§26)
+  pausedDurationMs Int      @default(0)
+  pausedAt        DateTime?
+  pauseReason     String?
+  completedAt     DateTime?
+  lastEvaluatedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([caseId])
+  @@index([workspaceId, state])
+  @@index([workspaceId, dueAt])
+}
+
+model RemediationSlaPause {
+  id         String    @id @default(uuid())
+  snapshotId String
+  caseId     String
+  workspaceId String
+  reason     String // WAITING_VENDOR | APPROVED_EXCEPTION | ENVIRONMENT_UNAVAILABLE | OTHER_APPROVED_REASON (§28)
+  startedBy  String
+  approvedBy String?
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  endedBy    String?
+
+  @@index([snapshotId])
+  @@index([workspaceId])
+}
+
+model RemediationPlan {
+  id                String   @id @default(uuid())
+  caseId            String
+  workspaceId       String
+  summary           String
+  recommendedAction String // PATCH | UPGRADE | CONFIGURATION_CHANGE | CODE_FIX | DEPENDENCY_UPDATE | REMOVE_COMPONENT | REDUCE_EXPOSURE | COMPENSATING_CONTROL | OTHER (§36)
+  source            String // PATCH_INTELLIGENCE | VENDOR_ADVISORY | SCANNER_RECOMMENDATION | ANALYST | APPROVED_GUIDANCE (§33)
+  patchReference    String?
+  fixedVersion      String? // must trace to trusted Patch Intelligence (§34)
+  targetVersion     String?
+  mitigation        String? // temporary mitigation — tracked separately from the fix (§37)
+  permanentFix      String?
+  ownerId           String?
+  plannedAt         DateTime?
+  targetDate        DateTime?
+  status            String   @default("DRAFT") // DRAFT | APPROVED | SUPERSEDED
+  createdBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([caseId, createdAt])
+  @@index([workspaceId])
+}
+
+// §38: the canonical work item exists BEFORE any provider ticket.
+model RemediationWorkItem {
+  id             String    @id @default(uuid())
+  caseId         String
+  workspaceId    String
+  findingId      String
+  idempotencyKey String    @unique // stable key — retries never duplicate (§46)
+  provider       String // JIRA | GITHUB | GITLAB | SERVICENOW | INTERNAL
+  integrationId  String?
+  ticketId       String? // linked P24 RemediationTicket when one exists
+  status         String    @default("PENDING") // PENDING | CREATED | SYNCED | FAILED | CLOSED | STALE (§39)
+  externalId     String?
+  externalUrl    String?
+  externalStatus String?
+  assignee       String?
+  payload        Json? // the REDACTED payload actually sent (§45)
+  failureCount   Int       @default(0)
+  lastError      String?
+  nextRetryAt    DateTime?
+  lastSyncedAt   DateTime?
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([caseId])
+  @@index([workspaceId, status])
+}
+
+model RemediationFixClaim {
+  id            String   @id @default(uuid())
+  caseId        String
+  workspaceId   String
+  claimedBy     String
+  claimSource   String // MANUAL | TICKET_SYNC | CI_CD | REPOSITORY_EVENT | DEPLOYMENT_EVENT (§51)
+  description   String
+  workItemId    String?
+  deploymentRef String?
+  commitRef     String?
+  patchRef      String?
+  evidence      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([workspaceId])
+}
+
+model RemediationVerificationJob {
+  id                        String    @id @default(uuid())
+  caseId                    String
+  workspaceId               String
+  method                    String // SAFE_RESCAN | TARGETED_RETEST | SAST_RESCAN | SCA_RESCAN | SBOM_REEVALUATION | CONFIGURATION_RECHECK | CLOUD_POSTURE_RECHECK | MANUAL_EVIDENCE_REVIEW (§53)
+  status                    String    @default("QUEUED") // QUEUED | RUNNING | PASSED | FAILED | INCONCLUSIVE | ERROR | CANCELLED (§58)
+  requestedBy               String
+  scannerProfile            String?
+  scope                     Json? // smallest sufficient scope (§56)
+  retestRequestId           String? // governed P11 retest, when the method rides it (§55)
+  requiredCleanObservations Int       @default(1)
+  cleanObservations         Int       @default(0)
+  result                    Json?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  @@index([caseId, createdAt])
+  @@index([workspaceId, status])
+}
+
+model RemediationVerificationEvidence {
+  id               String   @id @default(uuid())
+  jobId            String
+  caseId           String
+  workspaceId      String
+  beforeObservation Json? // observation of the finding before the fix (§59/§60)
+  afterObservation  Json? // observation after the fix
+  tool             String?
+  toolVersion      String?
+  comparisonResult String // STILL_PRESENT | ABSENT | INSUFFICIENT | SCANNER_ERROR
+  evidenceRefs     Json?
+  recordedBy       String
+  createdAt        DateTime @default(now())
+
+  @@index([jobId, createdAt])
+  @@index([workspaceId])
+}
+
+model RemediationException {
+  id                   String    @id @default(uuid())
+  caseId               String
+  workspaceId          String
+  findingId            String
+  type                 String // RISK_ACCEPTANCE | TEMPORARY_DEFERRAL | FALSE_POSITIVE_EXCEPTION | BUSINESS_EXCEPTION (§78)
+  status               String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  reason               String
+  scope                Json?
+  ownerId              String
+  requestedBy          String
+  approverId           String?
+  compensatingControls Json? // required where applicable (§79)
+  riskExceptionId      String? // the P20 RiskException row — acceptance is NOT duplicated (§81)
+  startsAt             DateTime  @default(now())
+  expiresAt            DateTime // exceptions always expire or face review (§80)
+  reviewAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([caseId])
+  @@index([workspaceId, status])
+  @@index([expiresAt])
+}
+
+model RemediationCampaign {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  name           String
+  scope          Json // { cve?, componentPurl?, product?, technology?, kevOnly? } (§87)
+  ownerId        String?
+  targetDate     DateTime?
+  status         String    @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED
+  idempotencyKey String?   @unique
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+model RemediationCampaignCase {
+  id         String   @id @default(uuid())
+  campaignId String
+  caseId     String
+  workspaceId String
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, caseId])
+  @@index([workspaceId, caseId])
+}
+
+model RemediationRegressionEvent {
+  id                 String   @id @default(uuid())
+  caseId             String
+  workspaceId        String
+  findingId          String
+  fingerprint        String? // regression identity (§72)
+  detectedAt         DateTime @default(now())
+  previousVerifiedAt DateTime?
+  source             String // RETEST | SCAN_OBSERVATION | SCHEDULED_CHECK
+  riskRecalculation  Json?
+  createdAt          DateTime @default(now())
+
+  @@index([caseId, detectedAt])
+  @@index([workspaceId, detectedAt])
+}
+
+// §129: an issued report preserves the finding/risk/SLA/ticket/
+// verification/exception state at generation time.
+model RemediationReportSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  type        String // REMEDIATION_STATUS | SLA_COMPLIANCE | OVERDUE_VULNERABILITIES | KEV_REMEDIATION | REGRESSION | CAMPAIGN | EXECUTIVE_REMEDIATION (§128)
   content     Json     @default("{}")
   contentHash String
   generatedBy String?
