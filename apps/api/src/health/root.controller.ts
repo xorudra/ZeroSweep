@@ -1,5 +1,6 @@
 import { Controller, Get } from "@nestjs/common";
 import { API_PREFIX } from "@dsrclone/config";
+import { Public } from "../common/decorators/auth.decorators";
 
 /**
  * Root info route (outside the API prefix): opening the bare service URL
@@ -9,6 +10,7 @@ import { API_PREFIX } from "@dsrclone/config";
  */
 @Controller()
 export class RootController {
+  @Public()
   @Get()
   root(): { service: string; status: string; health: string; liveness: string } {
     return {
