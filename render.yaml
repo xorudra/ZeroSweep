@@ -1,0 +1,105 @@
+# DSRclone — Render Blueprint (free-tier demo deployment)
+# Deploys the full platform from this repo: API + worker + web console + AI
+# service, backed by a free Render Postgres and a free Render Key Value
+# (Redis-compatible) instance.
+#
+# Honest free-tier notes (see docs/operations for the production paths):
+# - Free web services spin down after ~15 min idle (first hit wakes them,
+#   expect a slow first response) and share 750 free instance hours/month.
+# - Free Postgres expires after 30 days; this is a demo deployment, not the
+#   production topology (Helm/compose under deploy/ are the production path).
+# - The worker runs as a free web service with a tiny health-port shim
+#   (scripts/render/worker-start.sh) because Render has no free worker tier.
+# - No S3 object storage is attached on Render's free tier, so the API
+#   health endpoint honestly reports object storage as down; every other
+#   check is live. Attach any S3-compatible bucket via the S3_* env vars
+#   to close that gap.
+# - PRODUCT_MODE is SELF_HOSTED: one deployment, one operator — matching
+#   how this instance is run.
+
+databases:
+  - name: dsrclone-db
+    databaseName: dsrclone
+    user: dsrclone
+    plan: free
+    postgresMajorVersion: "16"
+    region: oregon
+
+services:
+  - type: keyvalue
+    name: dsrclone-redis
+    plan: free
+    region: oregon
+
+  - type: web
+    name: dsrclone-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @dsrclone/database exec prisma generate && pnpm --filter @dsrclone/api... build
+    startCommand: bash scripts/render/api-start.sh
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dsrclone-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: dsrclone-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_CORS_ORIGIN
+        value: https://dsrclone-web.onrender.com
+      - key: AI_SERVICE_URL
+        value: https://dsrclone-ai.onrender.com
+      - key: PRODUCT_MODE
+        value: SELF_HOSTED
+
+  - type: web
+    name: dsrclone-worker
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @dsrclone/database exec prisma generate && pnpm --filter @dsrclone/worker... build
+    startCommand: bash scripts/render/worker-start.sh
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dsrclone-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: dsrclone-redis
+          property: connectionString
+
+  - type: web
+    name: dsrclone-ai
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r apps/ai/requirements.txt
+    startCommand: cd apps/ai && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  - type: web
+    name: dsrclone-web
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @dsrclone/web... build
+    startCommand: cd apps/web && ./node_modules/.bin/next start -p $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://dsrclone-api.onrender.com/api/v1
