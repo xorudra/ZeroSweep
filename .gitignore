@@ -12,6 +12,7 @@ turbo/
 .env
 .env.*
 !.env.example
+!deploy/compose/.env.production.example
 *.key
 *.pem
 credentials*
@@ -30,3 +31,6 @@ pgdata/
 .idea/
 .vscode/
 *.log
+
+# generated release artifact (deploy/scripts/release-manifest.mjs)
+release-manifest.json

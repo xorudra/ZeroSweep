@@ -1,0 +1,36 @@
+# Scrape configuration (Prompt 25 §102). The API exposes Prometheus text at
+# /api/v1/metrics; workers expose their telemetry on their metrics port in
+# pool deployments that enable it.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dsrclone-api
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  selector:
+    matchLabels: { app: api }
+  endpoints:
+    - port: http
+      path: /api/v1/metrics
+      interval: 30s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dsrclone-dashboards
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: dsrclone
+data:
+  README.md: |
+    # DSRclone Grafana dashboards (Prompt 25 §109)
+    Provision these dashboards (JSON in the platform repo's Grafana folder
+    in the operations workspace) from the metrics in prometheus-rules.yaml:
+    1. Platform overview — request rate/errors/latency, dependency_up,
+       queue depth and wait time, scan throughput and failure rate.
+    2. Scanner operations — per-pool utilization, stage durations, tool
+       availability (UNAVAILABLE counts), capability-policy violations.
+    3. Tenant safety — authorization denials, scope violations, audit
+       write failures, break-glass events.
+    4. Backup & DR — last verified backup age, restore-verification
+       status, scheduler lease heartbeat.

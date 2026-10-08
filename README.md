@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 24 complete (Prompts 1–24).** Production monorepo, backend and
+> **Status — Phase 25 complete (Prompts 1–25).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -252,9 +252,33 @@ and the AI health endpoint.
 22. ✅ Continuous monitoring, intelligent scheduler & change detection (Prompt 22)
 23. ✅ Enterprise authentication, SSO, MFA, SCIM & organization management (Prompt 23)
 24. ✅ Enterprise integrations, DevSecOps & security workflow engine (Prompt 24)
+25. ✅ Enterprise deployment, Kubernetes, high availability, backup/DR & production hardening (Prompt 25) — incl. the first fully live end-to-end run: Docker-less local PostgreSQL/Redis, all migrations + seed applied, register→verify→approve→scan→findings proven (see `scripts/local-stack/`)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 25: Enterprise Deployment, High Availability &
+  Disaster Recovery.** New `deploy/` tree: hardened multi-stage production
+  images (digest-pinned bases, non-root), production Compose profile
+  (secrets from external env only), canonical Kustomize base + dev/staging/
+  production overlays (Helm chart as equivalent subset), worker pools per
+  the ScannerCapabilityPolicy, default-deny NetworkPolicies, restricted
+  Pod Security, admission policies (Kyverno), Prometheus rules for the
+  operational + security alert lists, backup tooling with automated
+  restore verification (incl. tenant-isolation checks), DR design +
+  runbooks, production config fail-fast gate (`validateProductionConfig`),
+  `/health/live` + `/health/ready` probe endpoints, `/metrics`, and a
+  standalone lease-guarded scheduler process. **First live end-to-end
+  verification in the project's history**: a Docker-less local stack
+  (PostgreSQL 16.2 via pgserver binaries, Redis 7.2.5 from source) ran all
+  22 migrations + the seed (fixing two latent seed bugs found in the
+  process), booted API/worker/AI, and passed a 13/13 register→login→
+  target→verify→scope→assessment→approve→scan→COMPLETED smoke with real
+  persisted findings, a 4/4 resilience subset (API restart durability,
+  Redis-pause readiness/liveness split, scheduler-lease exclusivity,
+  production config refusal), and a RESTORE_VERIFIED backup cycle.
+  Reproduce with `scripts/local-stack/`. MinIO's binary could not be
+  fetched in this environment (410/404 from both official channels), so
+  object storage reports `down` honestly in the local stack.
 - **2026-10-08 — Prompt 24: Enterprise Integrations, DevSecOps &
   Security Workflow Engine.** The `Integration` registry was extended
   in place (P20 connectors keep working): GitHub/GitLab/Bitbucket

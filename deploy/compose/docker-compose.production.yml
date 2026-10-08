@@ -1,0 +1,225 @@
+# DSRclone — production Docker Compose (Prompt 25 §20–§23).
+#
+# Rules for this file:
+# - NO real credentials live here or anywhere in the repo. Every secret comes
+#   from the operator's environment / an external .env file that is never
+#   committed (`deploy/compose/.env.production`, git-ignored), or from Docker
+#   secrets. `.env.production.example` documents the variables with
+#   PLACEHOLDER values only.
+# - Images are referenced by immutable version tag (never `latest`); set
+#   DSRCLONE_VERSION in the environment (release manifest, §144).
+# - Migrations run ONCE as a dedicated one-shot service before the API
+#   starts — API replicas never race migrations (§36).
+# - Every service is hardened: non-root (image USER), read-only root
+#   filesystem, all capabilities dropped, no-new-privileges, bounded tmpfs,
+#   CPU/memory limits, structured json-file logging with rotation.
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be supplied via the external env file}
+  DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-10}
+  DATABASE_REQUIRE_TLS: ${DATABASE_REQUIRE_TLS:-false}
+  REDIS_URL: ${REDIS_URL:?REDIS_URL must be supplied via the external env file}
+  REDIS_REQUIRE_TLS: ${REDIS_REQUIRE_TLS:-false}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+  AI_SERVICE_URL: http://ai:8000
+  API_CORS_ORIGIN: ${API_CORS_ORIGIN:?public origin of the web console}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be supplied via the external env file}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dsrclone}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be supplied externally}
+      POSTGRES_DB: ${POSTGRES_DB:-dsrclone}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-dsrclone}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    <<: *hardening
+    # Postgres needs to write its data dir + /tmp + run dir only.
+    tmpfs: ["/tmp", "/var/run/postgresql"]
+    read_only: false
+    deploy:
+      resources:
+        limits: { cpus: "2.0", memory: 2G }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be supplied externally}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be supplied externally}
+    <<: *hardening
+    read_only: false
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?object storage root user supplied externally}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?object storage root password supplied externally}
+    volumes:
+      - object-data:/data
+    <<: *hardening
+    read_only: false
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+  # One-shot controlled migration (§36–§39): preflight + `prisma migrate
+  # deploy` under an advisory lock; exits before app services start.
+  migrate:
+    image: ghcr.io/xorudra/dsrclone-migrate:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/migrate.Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be supplied via the external env file}
+      NODE_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    <<: *hardening
+    tmpfs: ["/tmp"]
+
+  api:
+    image: ghcr.io/xorudra/dsrclone-api:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      API_PORT: 4000
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    <<: *hardening
+    tmpfs: ["/tmp"]
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+  scheduler:
+    image: ghcr.io/xorudra/dsrclone-scheduler:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/scheduler.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      SCHEDULER_TICK_MS: ${SCHEDULER_TICK_MS:-15000}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    <<: *hardening
+    tmpfs: ["/tmp"]
+    deploy:
+      # Exactly one replica by default; the Prompt 22 database lease keeps a
+      # single active control plane even if this is scaled (§129).
+      replicas: 1
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
+
+  worker-general:
+    image: ghcr.io/xorudra/dsrclone-worker:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/worker.Dockerfile
+      args: { DSRCLONE_WORKER_TYPE: GENERAL_WEB }
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DSRCLONE_WORKER_TYPE: GENERAL_WEB
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    <<: *hardening
+    tmpfs: ["/tmp"]
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "2.0", memory: 2G }
+
+  worker-network:
+    image: ghcr.io/xorudra/dsrclone-worker:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/worker.Dockerfile
+      args: { DSRCLONE_WORKER_TYPE: NETWORK_EXTERNAL }
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DSRCLONE_WORKER_TYPE: NETWORK_EXTERNAL
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    <<: *hardening
+    tmpfs: ["/tmp"]
+    deploy:
+      replicas: 1
+      resources:
+        limits: { cpus: "2.0", memory: 2G }
+
+  ai:
+    image: ghcr.io/xorudra/dsrclone-ai:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/ai.Dockerfile
+    restart: unless-stopped
+    <<: *hardening
+    tmpfs: ["/tmp"]
+    deploy:
+      replicas: 1
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+  web:
+    image: ghcr.io/xorudra/dsrclone-web:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [api]
+    <<: *hardening
+    tmpfs: ["/tmp"]
+    deploy:
+      replicas: 2
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
+
+volumes:
+  postgres-data:
+  redis-data:
+  object-data:

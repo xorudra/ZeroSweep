@@ -1,0 +1,102 @@
+# Admission policies (Prompt 25 §136–§142). Ordinary AND scanner workloads:
+# reject privileged pods, host namespaces, unsafe capabilities, untrusted
+# image sources, missing resource limits and mutable tags. Scanner-namespace
+# exceptions (none by default) must be narrow, named, and documented in
+# docs/security/kubernetes-production-hardening.md §exceptions.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: dsrclone-baseline
+  annotations:
+    policies.kyverno.io/title: "DSRclone production baseline"
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: deny-privileged-and-host
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
+      validate:
+        message: "Privileged containers, host namespaces and hostPath are forbidden in DSRclone namespaces."
+        pattern:
+          spec:
+            hostNetwork: false
+            hostPID: false
+            hostIPC: false
+            containers:
+              - securityContext:
+                  privileged: "!true"
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop: ["ALL"]
+            =(volumes):
+              - X(hostPath): "null"
+    - name: require-limits-and-pinned-images
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
+      validate:
+        message: "Containers must set CPU/memory/ephemeral-storage limits and use non-latest images from the approved registry."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
+                    ephemeral-storage: "?*"
+                image: "ghcr.io/xorudra/*"
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.containers[].image }}"
+                operator: AnyIn
+                value: ["*:latest"]
+    - name: deny-docker-sock-mount
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
+      validate:
+        message: "Mounting the container runtime socket is forbidden."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.volumes[].hostPath.path || '' }}"
+                operator: AnyIn
+                value: ["/var/run/docker.sock", "/run/docker.sock", "/var/run/containerd/containerd.sock"]
+---
+# Image signature verification (§18/§141): release images are cosign-signed
+# in CI; unsigned or unverifiable images are not admitted.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: dsrclone-verify-images
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: verify-cosign-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["dsrclone-production"]
+      verifyImages:
+        - imageReferences: ["ghcr.io/xorudra/dsrclone-*"]
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    url: "https://fulcio.sigstore.dev"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"
+          mutateDigest: true
+          verifyDigest: true
+          required: true

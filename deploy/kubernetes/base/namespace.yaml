@@ -1,0 +1,14 @@
+# Production namespace (Prompt 25 §26/§88 of topology: base path canonical).
+# Pod Security Standards: RESTRICTED enforced for the whole namespace;
+# scanner Job exceptions are narrow, documented, and live only in the
+# dedicated scan-jobs namespace pattern described in
+# docs/security/kubernetes-production-hardening.md — never here.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dsrclone-production
+  labels:
+    app.kubernetes.io/part-of: dsrclone
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

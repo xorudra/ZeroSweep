@@ -1,0 +1,150 @@
+# Worker pools (Prompt 25 §53–§60). Pools are separated by worker type and
+# capability declarations — a pool only ever receives stages its
+# ScannerCapabilityPolicy class allows (deploy/policies/).
+#
+# §53 class -> platform mapping:
+#   GENERAL_SAFE / WEB_SAFE   -> DSRCLONE_WORKER_TYPE=GENERAL_WEB
+#   NETWORK_SAFE              -> NETWORK_EXTERNAL (scanner-tainted nodes)
+#   SOURCE                    -> GENERAL_WEB + capabilities SOURCE_*
+#   CLOUD_READONLY            -> CLOUD_ANALYSIS (read-only adapters only)
+#   CONTAINER                 -> CONTAINER_ANALYSIS
+#   KUBERNETES_READONLY       -> CONTAINER_ANALYSIS + KUBERNETES_* caps
+#   MOBILE_STATIC             -> MOBILE_STATIC_ANALYSIS
+#   BINARY_STATIC             -> BINARY_STATIC_ANALYSIS
+#   REPORTING / INTEGRATION   -> GENERAL_WEB (no scanner capabilities)
+#   AI                        -> the ai Deployment (separate, no queue stages)
+# Pools not in this base ship at replicas: 0 and are scaled on demand.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-general
+  labels: { app: worker-general, pool: general, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: worker-general } }
+  template:
+    metadata:
+      labels: { app: worker-general, pool: general, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      serviceAccountName: dsrclone-worker-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/xorudra/dsrclone-worker:25.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: DSRCLONE_WORKER_TYPE, value: "GENERAL_WEB" }
+          envFrom:
+            - configMapRef: { name: dsrclone-config }
+            - secretRef: { name: dsrclone-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
+            limits: { cpu: "2", memory: "2Gi", ephemeral-storage: "4Gi" }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 2Gi }
+      terminationGracePeriodSeconds: 60
+---
+# Network pool: runs on scanner-dedicated nodes (taint
+# dsrclone.io/scanner=true:NoSchedule) so scan egress is isolated from
+# general workloads. Raw-socket tools, if ever governed in, belong ONLY
+# here under the ScannerCapabilityPolicy — never as privileged pods on
+# general nodes (§58/§59).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-network
+  labels: { app: worker-network, pool: network, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: worker-network } }
+  template:
+    metadata:
+      labels: { app: worker-network, pool: network, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      serviceAccountName: dsrclone-worker-controller
+      tolerations:
+        - key: dsrclone.io/scanner
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      nodeSelector:
+        dsrclone.io/pool: scanner
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/xorudra/dsrclone-worker:25.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: DSRCLONE_WORKER_TYPE, value: "NETWORK_EXTERNAL" }
+          envFrom:
+            - configMapRef: { name: dsrclone-config }
+            - secretRef: { name: dsrclone-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
+            limits: { cpu: "2", memory: "2Gi", ephemeral-storage: "4Gi" }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 2Gi }
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-analysis
+  labels: { app: worker-analysis, pool: analysis, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: worker-analysis } }
+  template:
+    metadata:
+      labels: { app: worker-analysis, pool: analysis, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      serviceAccountName: dsrclone-worker-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/xorudra/dsrclone-worker:25.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: DSRCLONE_WORKER_TYPE, value: "CONTAINER_ANALYSIS" }
+          envFrom:
+            - configMapRef: { name: dsrclone-config }
+            - secretRef: { name: dsrclone-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "500m", memory: "512Mi", ephemeral-storage: "1Gi" }
+            limits: { cpu: "2", memory: "2Gi", ephemeral-storage: "8Gi" }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 4Gi }
+      terminationGracePeriodSeconds: 60

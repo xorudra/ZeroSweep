@@ -1,0 +1,98 @@
+# PodDisruptionBudgets, autoscaling bounds, quotas and priorities
+# (Prompt 25 §90–§101).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: api } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: web } }
+---
+# HPAs are BOUNDED: min/max are deliberate capacity decisions, and scanner
+# pools scale on queue depth (KEDA-style external metric
+# dsrclone_queue_waiting) rather than CPU alone (§97/§98).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 300 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-general
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: worker-general }
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 75 } }
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 600 }
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: dsrclone-quota
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "24"
+    limits.memory: 48Gi
+    requests.ephemeral-storage: 20Gi
+    limits.ephemeral-storage: 80Gi
+    persistentvolumeclaims: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: dsrclone-defaults
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  limits:
+    - type: Container
+      default: { cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi }
+      defaultRequest: { cpu: "250m", memory: 256Mi, ephemeral-storage: 256Mi }
+      max: { cpu: "4", memory: 4Gi, ephemeral-storage: 10Gi }
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: dsrclone-critical
+  labels: { app.kubernetes.io/part-of: dsrclone }
+value: 1000
+globalDefault: false
+description: "API + scheduler: user-facing and control-plane workloads."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: dsrclone-scan
+  labels: { app.kubernetes.io/part-of: dsrclone }
+value: 100
+globalDefault: false
+preemptionPolicy: Never
+description: "Scanner workers/jobs: never preempt platform workloads."

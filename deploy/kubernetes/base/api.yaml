@@ -1,0 +1,78 @@
+# API deployment (Prompt 25 §51): STATELESS — session/scan state lives in
+# PostgreSQL/Redis/object storage, so replicas scale horizontally and any
+# replica can serve any request. Readiness gates traffic on REQUIRED
+# dependencies only; liveness is process-only (§86–§89).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels: { app: api, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector: { matchLabels: { app: api } }
+  template:
+    metadata:
+      labels: { app: api, app.kubernetes.io/part-of: dsrclone }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/v1/metrics"
+        prometheus.io/port: "4000"
+    spec:
+      serviceAccountName: dsrclone-api
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app: api } }
+      containers:
+        - name: api
+          image: ghcr.io/xorudra/dsrclone-api:25.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 4000, name: http }]
+          envFrom:
+            - configMapRef: { name: dsrclone-config }
+            - secretRef: { name: dsrclone-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi", ephemeral-storage: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "1Gi" }
+          startupProbe:
+            httpGet: { path: /api/v1/health/live, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet: { path: /api/v1/health/live, port: http }
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /api/v1/health/ready, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels: { app: api, app.kubernetes.io/part-of: dsrclone }
+spec:
+  type: ClusterIP
+  selector: { app: api }
+  ports:
+    - { name: http, port: 4000, targetPort: http }

@@ -1,0 +1,63 @@
+# Scan Job TEMPLATE (Prompt 25 §55–§66) — REFERENCE MANIFEST, not applied
+# directly (it is excluded from kustomization.yaml resources). The worker
+# controller instantiates Jobs of exactly this shape per scan stage:
+#   API -> Queue -> Worker Controller -> Isolated Scan Job -> Artifact
+#   Store -> Parser -> Finding Pipeline.
+# Invariants enforced here and by deploy/policies/ admission rules:
+# - fresh pod per job, runtime-generated name, TTL cleanup
+# - restricted pod security; NO privileged, NO hostNetwork/hostPID/hostIPC
+# - NO docker.sock, NO host root, NO cloud metadata route (NetworkPolicy)
+# - bounded CPU/memory/ephemeral storage and a hard activeDeadlineSeconds
+# - network egress only per the stage's governed destination set
+# - credentials arrive as secret REFERENCES for the stage's credential
+#   version; raw evidence never transits Redis (§42)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: scan-stage-template
+  labels:
+    app: scan-job
+    dsrclone.io/scan-id: "TEMPLATE"
+    dsrclone.io/stage: "TEMPLATE"
+    app.kubernetes.io/part-of: dsrclone
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: scan-job
+        dsrclone.io/scan-id: "TEMPLATE"
+        dsrclone.io/stage: "TEMPLATE"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: dsrclone-worker-controller
+      automountServiceAccountToken: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: scanner
+          image: ghcr.io/xorudra/dsrclone-worker:25.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: DSRCLONE_SCAN_ID, value: "TEMPLATE" }
+            - { name: DSRCLONE_STAGE, value: "TEMPLATE" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
+            limits: { cpu: "2", memory: "2Gi", ephemeral-storage: "4Gi" }
+          volumeMounts:
+            - { name: work, mountPath: /tmp }
+      volumes:
+        - name: work
+          emptyDir: { sizeLimit: 2Gi }

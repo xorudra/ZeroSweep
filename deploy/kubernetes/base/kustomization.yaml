@@ -1,0 +1,39 @@
+# DSRclone Kubernetes base — the CANONICAL deployment path (Prompt 25
+# §24–§26). The Helm chart under deploy/helm renders an equivalent subset
+# for Helm-native shops; semantics live HERE. scan-job.yaml is a template
+# reference for the worker controller and is intentionally NOT a resource.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dsrclone-production
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - rbac.yaml
+  - api.yaml
+  - web.yaml
+  - ai.yaml
+  - scheduler.yaml
+  - workers.yaml
+  - migration-job.yaml
+  - ingress.yaml
+  - networkpolicies.yaml
+  - platform.yaml
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/managed-by: kustomize
+commonAnnotations:
+  dsrclone.io/release-channel: "base"
+images:
+  - name: ghcr.io/xorudra/dsrclone-api
+    newTag: "25.0.0"
+  - name: ghcr.io/xorudra/dsrclone-web
+    newTag: "25.0.0"
+  - name: ghcr.io/xorudra/dsrclone-ai
+    newTag: "25.0.0"
+  - name: ghcr.io/xorudra/dsrclone-worker
+    newTag: "25.0.0"
+  - name: ghcr.io/xorudra/dsrclone-scheduler
+    newTag: "25.0.0"
+  - name: ghcr.io/xorudra/dsrclone-migrate
+    newTag: "25.0.0"

@@ -1,0 +1,63 @@
+# Web console deployment (Prompt 25 §51): stateless Next.js frontend.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: { app: web, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata:
+      labels: { app: web, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      serviceAccountName: dsrclone-web
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: web
+          image: ghcr.io/xorudra/dsrclone-web:25.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 3000, name: http }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "200m", memory: "384Mi", ephemeral-storage: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "1Gi" }
+          startupProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels: { app: web, app.kubernetes.io/part-of: dsrclone }
+spec:
+  type: ClusterIP
+  selector: { app: web }
+  ports:
+    - { name: http, port: 3000, targetPort: http }

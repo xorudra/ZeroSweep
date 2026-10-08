@@ -1,0 +1,47 @@
+# Ingress (Prompt 25 §79–§85): HTTPS-only, host-validated, bounded request
+# sizes and timeouts, security headers via annotations + the app's own
+# helmet/CSP middleware. WebSocket/SSE paths (live scan events) use the
+# dedicated backend timeouts below.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dsrclone
+  labels: { app.kubernetes.io/part-of: dsrclone }
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    # SSE: live scan events stream; buffering off for the API path.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "no-referrer" always;
+      add_header X-Frame-Options "DENY" always;
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["app.example.com"]
+      secretName: dsrclone-tls
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { name: http } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web, port: { name: http } }
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: api, port: { name: http } }

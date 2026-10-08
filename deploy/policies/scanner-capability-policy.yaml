@@ -1,0 +1,88 @@
+# ScannerCapabilityPolicy (Prompt 25 §61) — the governing map between
+# worker pools, the tools they may run, the platform capabilities those
+# tools serve, and the approval class a stage needs. The worker enforces
+# the same data at runtime (worker capability declarations, Prompt 13);
+# this file is the deployment-side source of truth reviewed in change
+# control. A tool not listed for a pool MUST NOT run in that pool.
+apiVersion: dsrclone.io/v1alpha1
+kind: ScannerCapabilityPolicy
+metadata:
+  name: platform-default
+spec:
+  pools:
+    - name: GENERAL_SAFE
+      workerType: GENERAL_WEB
+      tools: [mock, local-echo]
+      capabilities: [SIMULATION, DIAGNOSTICS]
+      approvalClass: STANDARD
+      reason: "Simulation and diagnostics only; safe on any governed node."
+    - name: WEB_SAFE
+      workerType: GENERAL_WEB
+      tools: [subfinder, httpx, naabu, katana, nuclei, nikto, whatweb, wafw00f, testssl, sslscan]
+      capabilities: [RECON, WEB_DISCOVERY, SAFE_VULNERABILITY_SCAN, TLS_ANALYSIS]
+      approvalClass: STANDARD
+      reason: "Governed safe checks against verified, in-scope targets."
+    - name: NETWORK_SAFE
+      workerType: NETWORK_EXTERNAL
+      nodePool: scanner
+      tools: [nmap, masscan, rustscan, arp-scan]
+      capabilities: [HOST_DISCOVERY, PORT_SCANNING, SERVICE_DETECTION]
+      approvalClass: STANDARD
+      reason: "Rate-limited safe discovery; scanner-tainted nodes only."
+    - name: SOURCE
+      workerType: GENERAL_WEB
+      tools: [semgrep, codeql, bandit, brakeman, spotbugs, gitleaks, trufflehog, osv-scanner, trivy]
+      capabilities: [SAST, SECRET_SCANNING, DEPENDENCY_ANALYSIS, SBOM]
+      approvalClass: STANDARD
+      reason: "Uploaded/registered source only; target code is never built or executed."
+    - name: CLOUD_READONLY
+      workerType: CLOUD_ANALYSIS
+      tools: [prowler, scout-suite, cloudmapper]
+      capabilities: [CLOUD_CONFIGURATION_REVIEW]
+      approvalClass: STANDARD
+      reason: "Read-only cloud APIs via credential REFERENCES; no mutation actions exist."
+    - name: CONTAINER
+      workerType: CONTAINER_ANALYSIS
+      tools: [trivy, grype, syft, hadolint, kube-bench, kubesec]
+      capabilities: [IMAGE_ANALYSIS, SBOM, CONTAINER_MISCONFIGURATION]
+      approvalClass: STANDARD
+      reason: "Image/config analysis only; no cluster mutation."
+    - name: KUBERNETES_READONLY
+      workerType: CONTAINER_ANALYSIS
+      tools: [kube-hunter, kubesec]
+      capabilities: [KUBERNETES_REVIEW]
+      approvalClass: ELEVATED
+      reason: "Read-only review against admin-registered clusters."
+    - name: MOBILE_STATIC
+      workerType: MOBILE_STATIC_ANALYSIS
+      tools: [jadx, apktool, mobsf]
+      capabilities: [MOBILE_STATIC_ANALYSIS, MANIFEST_ANALYSIS]
+      approvalClass: STANDARD
+      reason: "Static analysis of authorized artifacts; artifacts never executed."
+    - name: BINARY_STATIC
+      workerType: BINARY_STATIC_ANALYSIS
+      tools: [ghidra, radare2, rabin2, checksec, strings]
+      capabilities: [BINARY_ANALYSIS]
+      approvalClass: STANDARD
+      reason: "Static binary analysis in the sandbox; samples never executed."
+    - name: REPORTING
+      workerType: GENERAL_WEB
+      tools: []
+      capabilities: [REPORT_GENERATION]
+      approvalClass: STANDARD
+      reason: "No scanner tools; renders reports from persisted findings."
+    - name: INTEGRATION
+      workerType: GENERAL_WEB
+      tools: []
+      capabilities: [INTEGRATION_DELIVERY]
+      approvalClass: STANDARD
+      reason: "Outbox delivery (tickets/webhooks) via governed connectors."
+    - name: AI
+      workerType: AI_SERVICE
+      tools: []
+      capabilities: [ANALYST_ASSISTANCE]
+      approvalClass: STANDARD
+      reason: "Advisory only; no execution surface (Prompt 21)."
+  deniedEverywhere:
+    - "Offensive capability families (credential attacks against live services, exploitation frameworks, AD offensive tooling) exist only as DISABLED catalog descriptors and have no pool, no adapter and no approval class that enables execution."
+    - "Raw-socket tooling may only be added to NETWORK_SAFE by a policy change with a recorded reason, an isolated node pool, and an ELEVATED approval class — never via privileged pods or hostNetwork."

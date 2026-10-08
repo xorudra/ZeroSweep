@@ -1,0 +1,57 @@
+# AI copilot service (Prompt 25 §51): OPTIONAL dependency — the platform
+# degrades honestly when it is absent (readiness does not include it).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai
+  labels: { app: ai, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ai } }
+  template:
+    metadata:
+      labels: { app: ai, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      serviceAccountName: dsrclone-ai
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: ai
+          image: ghcr.io/xorudra/dsrclone-ai:25.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8000, name: http }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi", ephemeral-storage: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "1Gi" }
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai
+  labels: { app: ai, app.kubernetes.io/part-of: dsrclone }
+spec:
+  type: ClusterIP
+  selector: { app: ai }
+  ports:
+    - { name: http, port: 8000, targetPort: http }

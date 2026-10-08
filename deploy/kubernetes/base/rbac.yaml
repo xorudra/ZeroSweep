@@ -1,0 +1,74 @@
+# Service accounts and least-privilege RBAC (Prompt 25 §67–§73).
+# - Every workload has its OWN service account.
+# - Tokens are not automounted except where the workload genuinely calls
+#   the Kubernetes API (the worker controller that launches scan Jobs).
+# - No workload receives cluster-admin, secret-reading, or node access.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dsrclone-api
+  labels: { app.kubernetes.io/part-of: dsrclone }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dsrclone-web
+  labels: { app.kubernetes.io/part-of: dsrclone }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dsrclone-ai
+  labels: { app.kubernetes.io/part-of: dsrclone }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dsrclone-scheduler
+  labels: { app.kubernetes.io/part-of: dsrclone }
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dsrclone-worker-controller
+  labels: { app.kubernetes.io/part-of: dsrclone }
+automountServiceAccountToken: true
+---
+# The worker controller may manage scan Jobs ONLY: create/get/list/watch/
+# delete batch Jobs and read their Pods' status, in THIS namespace. It
+# cannot read Secrets, cannot touch other workloads, and cannot create
+# arbitrary Pod types (Jobs only, whose templates the admission policy
+# in deploy/policies/ constrains to the governed scan-job shape).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dsrclone-worker-controller
+  labels: { app.kubernetes.io/part-of: dsrclone }
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dsrclone-worker-controller
+  labels: { app.kubernetes.io/part-of: dsrclone }
+subjects:
+  - kind: ServiceAccount
+    name: dsrclone-worker-controller
+    namespace: dsrclone-production
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dsrclone-worker-controller

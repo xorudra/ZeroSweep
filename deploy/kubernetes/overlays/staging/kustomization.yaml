@@ -1,0 +1,33 @@
+# Staging overlay: production-shaped, smaller scale; staging data is
+# synthetic or minimized — never a copy of production tenant data (§32).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dsrclone-staging
+resources:
+  - ../../base
+patches:
+  - target: { kind: Deployment, name: worker-network }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
+  - target: { kind: HorizontalPodAutoscaler, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+commonAnnotations:
+  dsrclone.io/release-channel: "staging"
+images:
+  - name: ghcr.io/xorudra/dsrclone-api
+    newTag: "25.0.0-rc.1"
+  - name: ghcr.io/xorudra/dsrclone-web
+    newTag: "25.0.0-rc.1"
+  - name: ghcr.io/xorudra/dsrclone-ai
+    newTag: "25.0.0-rc.1"
+  - name: ghcr.io/xorudra/dsrclone-worker
+    newTag: "25.0.0-rc.1"
+  - name: ghcr.io/xorudra/dsrclone-scheduler
+    newTag: "25.0.0-rc.1"
+  - name: ghcr.io/xorudra/dsrclone-migrate
+    newTag: "25.0.0-rc.1"

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: dsrclone
+description: DSRclone — GUI-first automated VAPT / security-assessment platform
+type: application
+version: 25.0.0
+appVersion: "25.0.0"
+home: https://github.com/xorudra/dsrclone
+sources:
+  - https://github.com/xorudra/dsrclone
+annotations:
+  dsrclone.io/canonical-path: "deploy/kubernetes (Kustomize) — this chart renders an equivalent subset for Helm-native environments; security semantics are defined by the Kustomize base + deploy/policies"

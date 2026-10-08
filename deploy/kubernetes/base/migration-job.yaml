@@ -1,0 +1,44 @@
+# Controlled migration Job (Prompt 25 §36–§39): runs ONCE per release,
+# before application rollout (Argo CD PreSync hook / Flux dependsOn /
+# `kubectl apply` ordering in the deployment runbook). Application pods
+# NEVER run migrations, so replicas cannot race DDL. Expand/migrate/
+# contract discipline is documented in docs/operations/deployment-runbook.md.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels: { app: migrate, app.kubernetes.io/part-of: dsrclone }
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app: migrate, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      restartPolicy: Never
+      serviceAccountName: dsrclone-scheduler
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: ghcr.io/xorudra/dsrclone-migrate:25.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: dsrclone-secrets, key: DATABASE_URL }
+            - { name: NODE_ENV, value: "production" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "512Mi" }

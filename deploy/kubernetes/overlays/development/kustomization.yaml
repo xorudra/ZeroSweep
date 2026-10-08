@@ -1,0 +1,40 @@
+# Development overlay: single replicas, dev namespace, relaxed quotas.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dsrclone
+resources:
+  - ../../base
+patches:
+  - target: { kind: Deployment, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: Deployment, name: web }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: Deployment, name: worker-general }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: HorizontalPodAutoscaler, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+images:
+  - name: ghcr.io/xorudra/dsrclone-api
+    newTag: "dev"
+  - name: ghcr.io/xorudra/dsrclone-web
+    newTag: "dev"
+  - name: ghcr.io/xorudra/dsrclone-ai
+    newTag: "dev"
+  - name: ghcr.io/xorudra/dsrclone-worker
+    newTag: "dev"
+  - name: ghcr.io/xorudra/dsrclone-scheduler
+    newTag: "dev"
+  - name: ghcr.io/xorudra/dsrclone-migrate
+    newTag: "dev"

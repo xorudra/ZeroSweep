@@ -1,0 +1,99 @@
+# Network segmentation (Prompt 25 §74–§78): DEFAULT DENY for everything,
+# then narrow allows. The cloud metadata address (169.254.169.254) is never
+# an allowed destination: egress allows name only cluster DNS, the data
+# services, and the ingress/monitoring namespaces — scanner egress to
+# assessment targets is governed per-scan (targets are reached from worker
+# pools through the egress rules in docs/security/kubernetes-production-hardening.md).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  podSelector: { matchLabels: { app: web } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+      ports: [{ port: 3000 }]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: api } }
+      ports: [{ port: 4000 }]
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  podSelector: { matchLabels: { app: api } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+        - podSelector: { matchLabels: { app: web } }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports: [{ port: 4000 }]
+  egress:
+    # Data services are addressed as external/managed endpoints via the
+    # dsrclone-data namespace stand-ins below; in managed-service
+    # deployments these are replaced by the provider's private endpoints
+    # (still never the metadata address, which no rule allows).
+    - to:
+        - podSelector: { matchLabels: { app: ai } }
+      ports: [{ port: 8000 }]
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - to:
+        - ipBlock: { cidr: 0.0.0.0/0, except: ["169.254.169.254/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"] }
+      ports: [{ port: 5432 }, { port: 6379 }, { port: 9000 }, { port: 443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workers
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: pool, operator: Exists }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - to:
+        - ipBlock: { cidr: 0.0.0.0/0, except: ["169.254.169.254/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"] }
+      ports: [{ port: 5432 }, { port: 6379 }, { port: 9000 }]
+    # Governed scan egress: assessment targets only, on web-safe ports by
+    # default. Wider port sets are a ScannerCapabilityPolicy decision per
+    # pool, applied by overlay — never by editing this base ad hoc.
+    - to:
+        - ipBlock: { cidr: 0.0.0.0/0, except: ["169.254.169.254/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"] }
+      ports: [{ port: 80 }, { port: 443 }]

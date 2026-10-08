@@ -1,0 +1,48 @@
+# Standalone scheduler (Prompt 25 §52): its own deployment, exactly one
+# replica by default. The Prompt 22 database lease is the real guard —
+# even during failover or an accidental scale-up, only the lease holder's
+# ticks act, so duplicate scheduled scans cannot occur (§129).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  labels: { app: scheduler, app.kubernetes.io/part-of: dsrclone }
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector: { matchLabels: { app: scheduler } }
+  template:
+    metadata:
+      labels: { app: scheduler, app.kubernetes.io/part-of: dsrclone }
+    spec:
+      serviceAccountName: dsrclone-scheduler
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: scheduler
+          image: ghcr.io/xorudra/dsrclone-scheduler:25.0.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: dsrclone-config }
+            - secretRef: { name: dsrclone-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "128Mi" }
+            limits: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 128Mi }
+      # Graceful shutdown (§90): the process finishes its current tick and
+      # releases cleanly on SIGTERM.
+      terminationGracePeriodSeconds: 30

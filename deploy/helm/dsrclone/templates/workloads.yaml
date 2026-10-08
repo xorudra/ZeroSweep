@@ -1,0 +1,80 @@
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/part-of: dsrclone
+spec:
+  replicas: {{ $svc.replicas }}
+  selector:
+    matchLabels: { app: {{ $name }} }
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        app.kubernetes.io/part-of: dsrclone
+    spec:
+      serviceAccountName: {{ $svc.serviceAccount }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $svc.runAsUser }}
+        fsGroup: {{ $svc.runAsUser }}
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.global.imageRegistry }}/{{ $svc.image }}:{{ $.Values.global.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          {{- if gt (int $svc.port) 0 }}
+          ports: [{ containerPort: {{ $svc.port }}, name: http }]
+          {{- end }}
+          command: {{ toJson $svc.command }}
+          envFrom:
+            - configMapRef: { name: dsrclone-config }
+            - secretRef: { name: {{ $.Values.existingSecret }} }
+          {{- with $svc.env }}
+          env:
+            {{- range $k, $v := . }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          {{- if $svc.healthPath }}
+          livenessProbe:
+            httpGet: { path: {{ $svc.healthPath }}{{ if eq $name "api" }}/live{{ end }}, port: http }
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: {{ $svc.healthPath }}{{ if eq $name "api" }}/ready{{ end }}, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          {{- end }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 512Mi }
+{{- if gt (int $svc.port) 0 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/part-of: dsrclone
+spec:
+  type: ClusterIP
+  selector: { app: {{ $name }} }
+  ports:
+    - { name: http, port: {{ $svc.port }}, targetPort: http }
+{{- end }}
+{{- end }}

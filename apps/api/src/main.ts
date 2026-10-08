@@ -3,22 +3,27 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
-import { loadEnv, API_PREFIX } from "@dsrclone/config";
+import { loadEnv, assertProductionConfig, API_PREFIX } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { MetricsService } from "./health/metrics.service";
 import { rateLimitMiddleware, requestIdMiddleware } from "./common/middleware/request-id.middleware";
 
 const logger = createLogger("dsrclone-api");
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
+  // Prompt 25 §30/§33: fail fast on placeholder secrets / unsafe production config.
+  assertProductionConfig(env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   app.setGlobalPrefix(API_PREFIX);
   app.use(helmet());
   app.enableCors({ origin: env.API_CORS_ORIGIN.split(",").map((s) => s.trim()), credentials: true });
   app.use(requestIdMiddleware);
   app.use(rateLimitMiddleware(300, 60_000));
+  // Prompt 25 §102: Prometheus request counters (bounded labels only).
+  app.use(app.get(MetricsService).middleware());
   // Prompt 24 §15/§82: inbound provider webhooks are authenticated by
   // HMAC over the EXACT bytes received, so the raw body is captured
   // for webhook paths before the JSON parser consumes the stream.

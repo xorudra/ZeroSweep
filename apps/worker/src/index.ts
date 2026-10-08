@@ -1,5 +1,5 @@
 import { Worker, type Job } from "bullmq";
-import { QUEUES } from "@dsrclone/config";
+import { QUEUES, loadEnv, assertProductionConfig } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
 import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters, registerWirelessAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
@@ -34,6 +34,8 @@ import { metrics, METRICS } from "./telemetry/metrics";
  */
 
 const logger = createLogger("dsrclone-worker");
+// Prompt 25 §30/§33: fail fast on placeholder secrets / unsafe production config.
+assertProductionConfig(loadEnv());
 const connection = createRedisConnection();
 const store = new PrismaWorkerStore();
 const registry = new ToolRegistry();

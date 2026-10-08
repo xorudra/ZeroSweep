@@ -1,0 +1,110 @@
+# Prometheus alert rules (Prompt 25 §110 operational, §111 security).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dsrclone
+  labels: { app.kubernetes.io/part-of: dsrclone }
+spec:
+  groups:
+    - name: dsrclone.operational
+      rules:
+        - alert: DsrcloneHighHttpErrorRate
+          expr: sum(rate(dsrclone_http_requests_total{status_class="5xx"}[5m])) / sum(rate(dsrclone_http_requests_total[5m])) > 0.05
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "API 5xx rate above 5% for 10m"
+            runbook: "docs/operations/platform-incident-runbook.md"
+        - alert: DsrcloneDependencyDown
+          expr: dsrclone_dependency_up == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "A platform dependency reports down ({{ $labels.dependency }})"
+            runbook: "docs/operations/platform-incident-runbook.md"
+        - alert: DsrcloneQueueBacklogGrowing
+          expr: dsrclone_queue_waiting_jobs > 100
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Scan queue backlog above threshold — scale the affected worker pool"
+            runbook: "docs/operations/scanner-worker-runbook.md"
+        - alert: DsrcloneScanFailureRateHigh
+          expr: dsrclone_scan_jobs_failed_total / clamp_min(dsrclone_scan_jobs_total, 1) > 0.2
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "More than 20% of scan jobs failing"
+            runbook: "docs/operations/scanner-worker-runbook.md"
+        - alert: DsrcloneSchedulerLeaseStale
+          expr: time() - dsrclone_scheduler_lease_heartbeat_timestamp > 300
+          for: 1m
+          labels: { severity: critical }
+          annotations:
+            summary: "Scheduler lease heartbeat stale — the standby should have taken over; verify exactly one active scheduler"
+            runbook: "docs/operations/disaster-recovery-runbook.md"
+        - alert: DsrcloneBackupStale
+          expr: time() - dsrclone_backup_last_success_timestamp > 90000
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "No successful VERIFIED backup in 25h (an upload alone does not count — §123)"
+            runbook: "docs/operations/backup-restore-runbook.md"
+        - alert: DsrcloneRestoreVerificationFailed
+          expr: dsrclone_restore_verification_success == 0
+          for: 1m
+          labels: { severity: critical }
+          annotations:
+            summary: "Automated restore verification failed — backups are NOT proven restorable"
+            runbook: "docs/operations/backup-restore-runbook.md"
+        - alert: DsrcloneDiskPressureRisk
+          expr: dsrclone_ephemeral_storage_used_ratio > 0.85
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Ephemeral storage above 85% — scans risk disk-limit termination"
+            runbook: "docs/operations/monitoring-alerting-runbook.md"
+    - name: dsrclone.security
+      rules:
+        - alert: DsrcloneAuthorizationDenialsSpike
+          expr: sum(rate(dsrclone_authorization_denied_total[5m])) > 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Spike in authorization/scope denials — possible probing or misconfiguration"
+            runbook: "docs/operations/platform-incident-runbook.md"
+        - alert: DsrcloneScopeViolationAttempt
+          expr: sum(increase(dsrclone_scope_violation_total[5m])) > 0
+          for: 0m
+          labels: { severity: critical }
+          annotations:
+            summary: "A scan was attempted against an out-of-scope target and refused"
+            runbook: "docs/operations/platform-incident-runbook.md"
+        - alert: DsrclonePrivilegedWorkloadDetected
+          expr: dsrclone_privileged_workloads > 0
+          for: 0m
+          labels: { severity: critical }
+          annotations:
+            summary: "A privileged workload exists in a DSRclone namespace — admission should have rejected it"
+            runbook: "docs/security/kubernetes-production-hardening.md"
+        - alert: DsrcloneScannerCapabilityViolation
+          expr: sum(increase(dsrclone_scanner_capability_violation_total[5m])) > 0
+          for: 0m
+          labels: { severity: critical }
+          annotations:
+            summary: "A stage attempted a tool/capability outside its pool's ScannerCapabilityPolicy"
+            runbook: "docs/operations/scanner-worker-runbook.md"
+        - alert: DsrcloneBreakGlassUsed
+          expr: sum(increase(dsrclone_break_glass_total[1h])) > 0
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "Break-glass access was used — confirm the incident record and review within 24h"
+            runbook: "docs/operations/platform-incident-runbook.md"
+        - alert: DsrcloneAuditWriteFailures
+          expr: sum(rate(dsrclone_audit_write_failures_total[5m])) > 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "Audit records are failing to persist — treat as a security incident"
+            runbook: "docs/operations/platform-incident-runbook.md"
