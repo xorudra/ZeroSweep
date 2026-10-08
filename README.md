@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 27 complete (Prompts 1–27).** Production monorepo, backend and
+> **Status — Phase 28 complete (Prompts 1–28).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -255,9 +255,27 @@ and the AI health endpoint.
 25. ✅ Enterprise deployment, Kubernetes, high availability, backup/DR & production hardening (Prompt 25) — incl. the first fully live end-to-end run: Docker-less local PostgreSQL/Redis, all migrations + seed applied, register→verify→approve→scan→findings proven (see `scripts/local-stack/`)
 26. ✅ Compliance, Audit & GRC platform (Prompt 26) — versioned framework catalog (ISO 27001, SOC 2, PCI DSS 4.0, NIST CSF/800-53, CIS Controls, OWASP), control library with cross-framework mappings, snapshot evidence + freshness, continuous control monitoring, risk register, audit packages; assessment evidence, never certification — GRC migration also applied to the live local stack
 27. ✅ Security data lake, advanced analytics, attack-surface intelligence & enterprise search (Prompt 27) — append-only canonical event lake with idempotent ingestion + dead-letter quarantine, lifecycle/risk projections, governed DSL search (tenant + classification enforced before retrieval, secrets redacted at index time), correlation signals, evidence-backed attack-path candidates, MTTR/SLA/regression analytics over real records only; data-lake migration also applied to the live local stack
+28. ✅ Enterprise SOC, SIEM, detection engineering, threat intelligence & incident response (Prompt 28) — canonical telemetry store (scoped ingestion auth, fingerprint idempotency, content hashes, secret redaction before storage), safe declarative detection DSL with immutable rule versions and ATT&CK-mapped templates, fingerprint-deduped alerts with a deterministic priority engine and scoped expiring suppressions, incidents with append-only timelines and hash-anchored access-logged evidence, STIX/fixture threat-intel with provenance + deterministic confidence (live transports NOT_CONFIGURED, honestly), SOC correlation over the Prompt 27 engine, a closed response-action catalog behind single/dual approval with segregation of duties, declarative playbooks, SIEM forwarding only through the Prompt 24 governed outbox, and SOC analytics over recorded rows only; SOC migration also applied to the live local stack
 
 ## Changelog
 
+- **2026-10-08 — Prompt 28: Enterprise SOC, SIEM, Detection Engineering,
+  Threat Intelligence & Incident Response Engine.** A SOC layer over the
+  existing event bus/outbox (P24), data lake + correlation (P27),
+  notifications (P22) and identity (P23): telemetry lands in a canonical
+  store through scoped ingestion auth with fingerprint idempotency and
+  pre-storage secret redaction; a safe declarative DSL (no code can exist
+  in a rule) drives versioned detections with ATT&CK-mapped templates;
+  alerts dedupe by fingerprint under a deterministic priority engine
+  with scoped, expiring suppressions; incidents run append-only
+  timelines, hash-anchored evidence with logged access, and declarative
+  playbooks; threat intelligence is fixture-imported STIX with per-source
+  provenance and deterministic confidence (live transports report
+  NOT_CONFIGURED); response is a closed catalog of nine defensive
+  actions behind single/dual approval with segregation of duties and
+  idempotent execution; SIEM forwarding rides the governed outbox only.
+  SOC GUI at `/soc`, `/soc/alerts`, `/soc/incidents`, `/soc/detections`,
+  `/soc/threat-intelligence` and `/analytics/soc`.
 - **2026-10-08 — Prompt 27: Security Data Lake, Advanced Analytics,
   Attack Surface Intelligence & Enterprise Search Engine.** A logical
   data lake over PostgreSQL: canonical security events land append-only

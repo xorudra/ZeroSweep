@@ -10,6 +10,7 @@ Tooling: `deploy/backup/`. Architecture & retention: `deploy/backup/README.md`.
 | Object storage | `backup-objects.sh` (bucket mirror) | Daily | Destination bucket: versioning + object-lock ON |
 | Configuration | Git (manifests/configmaps) | Every change | Secrets are NOT in git — they live in the secret manager; see key recovery |
 | Release state | `release-manifest.json` per release | Every release | Image digests, migration head, worker version |
+| SOC state (Prompt 28 §159) | Included in the PostgreSQL backup | Daily full | The 27 SOC tables (`SocTelemetrySource`, `SecurityTelemetryEvent`, `DetectionRule` + `DetectionRuleVersion`, `DetectionMatch`, `SecurityAlert`, `AlertTriage`, `AlertSuppressionRule`, `SecurityIncident`, `IncidentLink`, `IncidentTimelineEntry`, `IncidentEvidence`, `IncidentEvidenceAccess`, `InvestigationCase`, `ThreatIntelSource`, `ThreatIndicator`, `IndicatorObservation`, `IndicatorMatch`, `ThreatIntelFeedSync`, `ResponseActionExecution`, `ResponseActionApproval`, `IncidentPlaybookRun`, `IncidentCommunication`, `PostIncidentReview`, `SocSlaConfig`, `TelemetryDataGap`, `SocIncidentReport`) ride the same pg_dump/PITR path — no separate SOC backup job exists or is needed. Restore verification should additionally spot-check: evidence content hashes verify, alert fingerprints are intact (dedupe continuity), and detection rule versions match their pinned matches. |
 
 ## The rule that matters (§123)
 

@@ -824,6 +824,28 @@ enum AuditAction {
   ANALYTICS_REINDEX_RUN
   ANALYTICS_RETENTION_RUN
   SAVED_QUERY_CREATED
+  // Prompt 28 §127: SOC audit actions. Metadata never contains
+  // secrets, raw telemetry bodies or evidence content (§157).
+  TELEMETRY_SOURCE_CONNECTED
+  TELEMETRY_EVENT_REJECTED
+  DETECTION_RULE_CREATED
+  DETECTION_RULE_ACTIVATED
+  DETECTION_RULE_DISABLED
+  DETECTION_MATCHED
+  ALERT_CREATED
+  ALERT_TRIAGED
+  ALERT_SUPPRESSED
+  INCIDENT_DECLARED
+  INCIDENT_STATUS_CHANGED
+  INCIDENT_EVIDENCE_ADDED
+  RESPONSE_ACTION_PROPOSED
+  RESPONSE_ACTION_APPROVED
+  RESPONSE_ACTION_EXECUTED
+  PLAYBOOK_STARTED
+  PLAYBOOK_COMPLETED
+  THREAT_INTEL_SYNCED
+  INDICATOR_MATCHED
+  POST_INCIDENT_REVIEW_COMPLETED
 }
 
 enum NotificationType {
@@ -7551,4 +7573,544 @@ model AnalyticsDashboardSnapshot {
   generatedBy String?
 
   @@index([workspaceId, view, capturedAt])
+}
+
+// ------------------------------- SOC, SIEM, Threat Intelligence & Incident Response (Prompt 28) -------------------------------
+// Defensive operations only (§161): telemetry → detection → alerts →
+// incidents → APPROVED predefined response. No model here can hold a
+// command, script or arbitrary action definition; response actions
+// reference the closed SDK catalog by key.
+
+// §8/§115: a registered telemetry source. authReference is a secret
+// REFERENCE name only (§59) — credential material never lands here.
+model SocTelemetrySource {
+  id                      String    @id @default(uuid())
+  organizationId          String
+  workspaceId             String
+  name                    String
+  sourceCategory          String // TELEMETRY_SOURCE_CATEGORIES (SDK soc/types)
+  authReference           String? // secret reference name, never a value
+  expectedIntervalSeconds Int? // null = no gap expectation (§116)
+  enabled                 Boolean   @default(true)
+  lastEventAt             DateTime?
+  lastIngestedAt          DateTime?
+  eventsIngested          Int       @default(0)
+  parseFailures           Int       @default(0)
+  authFailures            Int       @default(0)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, enabled])
+}
+
+// §3: canonical telemetry event. The raw body stays in approved
+// storage behind rawReference (§6); attributes are secret-scrubbed at
+// ingestion (§157). contentHash is the §7 integrity anchor —
+// historical evidence is verified against it (§143).
+model SecurityTelemetryEvent {
+  id                String   @id @default(uuid())
+  organizationId    String
+  workspaceId       String
+  eventTime         DateTime
+  ingestedAt        DateTime @default(now())
+  source            String
+  sourceCategory    String
+  eventCategory     String
+  eventAction       String
+  assetId           String?
+  identityReference String?
+  severity          String // CRITICAL | HIGH | MEDIUM | LOW | INFO
+  classification    String   @default("INTERNAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED
+  attributes        Json     @default("{}")
+  rawReference      String?
+  schemaVersion     String   @default("1.0")
+  fingerprint       String // §11 idempotency identity (provider id or stable hash)
+  contentHash       String
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, eventTime])
+  @@index([workspaceId, eventCategory, eventAction])
+  @@index([workspaceId, assetId])
+  @@index([workspaceId, identityReference])
+  @@index([workspaceId, source])
+}
+
+// §14: detection rule. The rule row carries lifecycle; the actual
+// definitions live in immutable versions (§16).
+model DetectionRule {
+  id                 String    @id @default(uuid())
+  organizationId     String
+  workspaceId        String? // null = global template (§14)
+  templateKey        String?
+  name               String
+  description        String    @default("")
+  category           String
+  severity           String // CRITICAL | HIGH | MEDIUM | LOW | INFO
+  status             String    @default("DRAFT") // DRAFT | TESTING | ACTIVE | DISABLED | DEPRECATED
+  currentVersion     Int       @default(0)
+  attackMappings     Json      @default("[]") // §26 ATT&CK context only
+  dataSources        Json      @default("[]")
+  matchCount         Int       @default(0)
+  lastMatchedAt      DateTime?
+  lastEvaluatedAt    DateTime?
+  evaluationFailures Int       @default(0)
+  createdBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, category])
+}
+
+// §16: published rule versions are immutable — editing an active rule
+// creates a new version; matches forever cite the version they ran.
+model DetectionRuleVersion {
+  id         String   @id @default(uuid())
+  ruleId     String
+  version    Int
+  definition Json // DetectionRuleDefinition (SDK soc/dsl) — declarative only
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  @@unique([ruleId, version])
+  @@index([ruleId])
+}
+
+// §28: one detection match. Event references are telemetry row ids.
+model DetectionMatch {
+  id                String   @id @default(uuid())
+  organizationId    String
+  workspaceId       String
+  ruleId            String
+  ruleVersion       Int
+  eventIds          Json     @default("[]")
+  matchedAt         DateTime @default(now())
+  severity          String
+  confidence        String // LOW | MEDIUM | HIGH (§29)
+  reason            String
+  assetId           String?
+  identityReference String?
+  indicatorId       String?
+  groupKey          String?
+  alertId           String?
+
+  @@index([workspaceId, ruleId, matchedAt])
+  @@index([workspaceId, alertId])
+}
+
+// §30: security alert. fingerprint dedupes equivalent detections
+// into one lifecycle (§32); occurrenceCount grows instead of storms.
+model SecurityAlert {
+  id                String    @id @default(uuid())
+  organizationId    String
+  workspaceId       String
+  fingerprint       String
+  title             String
+  description       String    @default("")
+  severity          String
+  priority          String // P1 | P2 | P3 | P4 (§35)
+  priorityScore     Int       @default(0)
+  priorityFactors   Json      @default("{}")
+  status            String    @default("NEW") // §31 lifecycle
+  source            String // DETECTION | CORRELATION | INDICATOR_MATCH | MANUAL
+  ruleId            String?
+  assetId           String?
+  identityReference String?
+  indicatorId       String?
+  findingId         String?
+  ownerId           String?
+  firstSeen         DateTime  @default(now())
+  lastSeen          DateTime  @default(now())
+  occurrenceCount   Int       @default(1)
+  acknowledgedAt    DateTime?
+  containedAt       DateTime?
+  resolvedAt        DateTime?
+  slaBreached       Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([workspaceId, status, priority])
+  @@index([workspaceId, fingerprint])
+  @@index([workspaceId, assetId])
+  @@index([workspaceId, ruleId])
+}
+
+// §36: an analyst triage decision on an alert.
+model AlertTriage {
+  id          String   @id @default(uuid())
+  alertId     String
+  workspaceId String
+  analystId   String
+  decision    String // TRUE_POSITIVE | FALSE_POSITIVE | BENIGN_EXPECTED | NEEDS_INVESTIGATION | DUPLICATE
+  reason      String   @default("")
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, alertId])
+}
+
+// §39: scoped, expiring alert suppression. Broad permanent
+// suppression does not exist in this model (§40): expiresAt required.
+model AlertSuppressionRule {
+  id                String   @id @default(uuid())
+  organizationId    String
+  workspaceId       String
+  ruleId            String?
+  assetId           String?
+  identityReference String?
+  reason            String
+  createdBy         String
+  approvedBy        String?
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+
+  @@index([workspaceId, expiresAt])
+}
+
+// §41: security incident.
+model SecurityIncident {
+  id             String    @id @default(uuid())
+  organizationId String
+  workspaceId    String
+  title          String
+  description    String    @default("")
+  severity       String
+  priority       String // P1..P4
+  status         String    @default("DRAFT") // §42 lifecycle
+  category       String    @default("GENERAL")
+  commanderId    String?
+  detectedAt     DateTime  @default(now())
+  declaredAt     DateTime?
+  containedAt    DateTime?
+  recoveredAt    DateTime?
+  closedAt       DateTime?
+  businessImpact String    @default("")
+  classification String    @default("INTERNAL")
+  caseId         String? // originating InvestigationCase (§53)
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId, status, priority])
+  @@index([workspaceId, detectedAt])
+}
+
+// §44: incident relationships — one generic, tenant-scoped link row
+// per related record (alerts, events, assets, identities, findings,
+// attack-path candidates, risks, controls, tickets, reports).
+model IncidentLink {
+  id           String   @id @default(uuid())
+  incidentId   String
+  workspaceId  String
+  resourceType String // ALERT | EVENT | ASSET | IDENTITY | FINDING | ATTACK_PATH | RISK | CONTROL | TICKET | REPORT | INDICATOR
+  resourceId   String
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  @@unique([incidentId, resourceType, resourceId])
+  @@index([workspaceId, incidentId])
+}
+
+// §45: append-oriented incident timeline (§46). Corrections are new
+// entries with amendsEntryId — history is never rewritten.
+model IncidentTimelineEntry {
+  id            String   @id @default(uuid())
+  incidentId    String
+  workspaceId   String
+  entryType     String // §45 types
+  summary       String
+  detail        Json     @default("{}")
+  actorId       String?
+  amendsEntryId String?
+  createdAt     DateTime @default(now())
+
+  @@index([workspaceId, incidentId, createdAt])
+}
+
+// §47: incident evidence. Only references + hashes live here; the
+// content stays in approved storage. No forensic-admissibility claim
+// is made (§48) — this is a chain-of-custody FOUNDATION.
+model IncidentEvidence {
+  id              String   @id @default(uuid())
+  incidentId      String
+  workspaceId     String
+  source          String // TELEMETRY_EVENT | FILE | REPORT | MANUAL
+  classification  String   @default("CONFIDENTIAL")
+  contentHash     String // §49 sha256 of the evidence content/reference body
+  objectReference String // storage reference, never content
+  description     String   @default("")
+  relatedEventId  String?
+  relatedAssetId  String?
+  collectedAt     DateTime @default(now())
+  collectedBy     String
+  chainMetadata   Json     @default("{}") // collection context (§48)
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId, incidentId])
+}
+
+// §48: evidence access/transfer history (chain of custody log).
+model IncidentEvidenceAccess {
+  id          String   @id @default(uuid())
+  evidenceId  String
+  incidentId  String
+  workspaceId String
+  actorId     String
+  action      String // VIEWED | VERIFIED | EXPORTED | TRANSFERRED
+  result      String // ALLOWED | DENIED
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, evidenceId, createdAt])
+}
+
+// §51: investigation case — may exist before/without an incident.
+model InvestigationCase {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  workspaceId         String
+  title               String
+  description         String   @default("")
+  status              String   @default("OPEN") // OPEN | INVESTIGATING | ESCALATED | CLOSED
+  severity            String   @default("MEDIUM")
+  ownerId             String?
+  linkedAlertIds      Json     @default("[]")
+  linkedEventIds      Json     @default("[]")
+  escalatedIncidentId String?
+  createdBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §58: threat intelligence source. authenticationReference is a
+// secret REFERENCE name only (§59) — no provider credentials stored.
+model ThreatIntelSource {
+  id                      String   @id @default(uuid())
+  organizationId          String
+  workspaceId             String
+  name                    String
+  type                    String // STIX_TAXII | COMMERCIAL_FEED | PUBLIC_FEED | INTERNAL | FIXTURE
+  trustLevel              Int      @default(50) // 0..100
+  authenticationReference String?
+  syncFrequencyMinutes    Int?
+  enabled                 Boolean  @default(true)
+  transportStatus         String   @default("NOT_CONFIGURED") // NOT_CONFIGURED | CONFIGURED — live transports unwired in this environment
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, enabled])
+}
+
+// §56: threat indicator. Deduped per workspace+type+value (§62);
+// multi-source provenance lives in IndicatorObservation.
+model ThreatIndicator {
+  id              String    @id @default(uuid())
+  organizationId  String
+  workspaceId     String
+  type            String // IP | DOMAIN | URL | FILE_HASH | EMAIL_DOMAIN | CERTIFICATE_FINGERPRINT
+  valueNormalized String
+  confidence      Int       @default(0) // 0..100, deterministic policy (§63)
+  severity        String    @default("MEDIUM")
+  status          String    @default("ACTIVE") // ACTIVE | EXPIRED | REVOKED | FALSE_POSITIVE
+  firstSeen       DateTime  @default(now())
+  lastSeen        DateTime  @default(now())
+  validUntil      DateTime?
+  tags            Json      @default("[]")
+  references      Json      @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([workspaceId, type, valueNormalized])
+  @@index([workspaceId, status])
+  @@index([workspaceId, type])
+}
+
+// §54/§62: one source's observation of an indicator (provenance).
+model IndicatorObservation {
+  id          String   @id @default(uuid())
+  indicatorId String
+  sourceId    String
+  workspaceId String
+  observedAt  DateTime @default(now())
+  confidence  Int?
+  stixId      String?
+  detail      Json     @default("{}")
+
+  @@index([workspaceId, indicatorId])
+  @@index([workspaceId, sourceId])
+}
+
+// §65: an indicator matched authorized platform telemetry.
+model IndicatorMatch {
+  id                String   @id @default(uuid())
+  organizationId    String
+  workspaceId       String
+  indicatorId       String
+  telemetryEventId  String?
+  assetId           String?
+  identityReference String?
+  matchedAt         DateTime @default(now())
+  confidence        Int // the indicator's confidence at match time
+  context           Json     @default("{}") // provenance: source names/trust (§138)
+
+  @@index([workspaceId, indicatorId, matchedAt])
+  @@index([workspaceId, telemetryEventId])
+}
+
+// §54: a feed sync run. Fixture/imported syncs record mode honestly;
+// live transports report NOT_CONFIGURED and sync nothing.
+model ThreatIntelFeedSync {
+  id           String    @id @default(uuid())
+  sourceId     String
+  workspaceId  String
+  status       String // COMPLETED | NOT_CONFIGURED | FAILED
+  mode         String // FIXTURE_IMPORT | MANUAL_IMPORT | LIVE
+  indicatorsIn Int       @default(0)
+  created      Int       @default(0)
+  updated      Int       @default(0)
+  errors       Json      @default("[]")
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  @@index([workspaceId, sourceId, startedAt])
+}
+
+// §75/§80: one proposed response action on an incident. The action is
+// identified by catalog KEY only (§76); executionId is the §81
+// idempotency identity.
+model ResponseActionExecution {
+  id              String    @id @default(uuid())
+  organizationId  String
+  workspaceId     String
+  incidentId      String
+  actionKey       String
+  targetReference String
+  executionId     String
+  status          String    @default("PROPOSED") // PROPOSED | PENDING_APPROVAL | APPROVED | EXECUTED | FAILED | REJECTED | NOT_CONFIGURED
+  proposedBy      String
+  result          Json      @default("{}")
+  rollback        Json      @default("{}")
+  executedAt      DateTime?
+  executedBy      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([workspaceId, executionId])
+  @@index([workspaceId, incidentId])
+}
+
+// §78/§126: an approval decision on a response action.
+model ResponseActionApproval {
+  id          String   @id @default(uuid())
+  executionId String // ResponseActionExecution.id
+  workspaceId String
+  approverId  String
+  decision    String // APPROVED | REJECTED
+  reason      String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@unique([executionId, approverId])
+  @@index([workspaceId, executionId])
+}
+
+// §88: a playbook run pinned to the exact template version (§87).
+model IncidentPlaybookRun {
+  id              String    @id @default(uuid())
+  organizationId  String
+  workspaceId     String
+  incidentId      String
+  playbookKey     String
+  playbookVersion Int
+  status          String    @default("RUNNING") // RUNNING | COMPLETED | FAILED | CANCELLED
+  currentStepKey  String?
+  stepsState      Json      @default("[]") // [{key, status, completedAt, note}]
+  startedBy       String?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([workspaceId, incidentId])
+}
+
+// §93: structured incident communication (message SNAPSHOT — what was
+// actually sent is what is recorded).
+model IncidentCommunication {
+  id              String   @id @default(uuid())
+  incidentId      String
+  workspaceId     String
+  audience        String // INTERNAL | EXECUTIVE | TECHNICAL | CUSTOMER
+  channel         String // IN_APP | EMAIL | SLACK | TEAMS | WEBHOOK
+  template        String? // INTERNAL_STATUS | EXECUTIVE_UPDATE | TECHNICAL_UPDATE | RESOLUTION_NOTICE (§94)
+  messageSnapshot String
+  authorId        String
+  deliveryStatus  String   @default("RECORDED") // RECORDED | QUEUED — external channels deliver via the P22/P24 routers
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId, incidentId, createdAt])
+}
+
+// §118: post-incident review. Root cause carries an honesty state
+// (§119): CONFIRMED | LIKELY | UNKNOWN — never forced certainty.
+model PostIncidentReview {
+  id              String    @id @default(uuid())
+  incidentId      String    @unique
+  workspaceId     String
+  summary         String    @default("")
+  impact          String    @default("")
+  rootCause       String    @default("")
+  rootCauseState  String    @default("UNKNOWN") // CONFIRMED | LIKELY | UNKNOWN
+  detectionGaps   Json      @default("[]")
+  responseGaps    Json      @default("[]")
+  lessons         Json      @default("[]")
+  followUpActions Json      @default("[]") // §120 links: tickets/controls/risks/rules/findings
+  ownerId         String?
+  status          String    @default("DRAFT") // DRAFT | COMPLETED
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §90: per-workspace SOC SLA targets (minutes) overriding defaults.
+model SocSlaConfig {
+  id          String   @id @default(uuid())
+  workspaceId String   @unique
+  targets     Json     @default("{}") // { P1: {triage, acknowledge, containment, recovery}, ... }
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+// §116: a telemetry data gap — an expected source stopped reporting.
+model TelemetryDataGap {
+  id          String    @id @default(uuid())
+  workspaceId String
+  sourceId    String
+  sourceName  String
+  detectedAt  DateTime  @default(now())
+  lastEventAt DateTime?
+  gapSeconds  Int
+  status      String    @default("OPEN") // OPEN | RESOLVED
+  resolvedAt  DateTime?
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, sourceId])
+}
+
+// §117: generated incident report (redacted content + hash, in the
+// P20 snapshot discipline). PIR documents live in PostIncidentReview.
+model SocIncidentReport {
+  id          String   @id @default(uuid())
+  incidentId  String
+  workspaceId String
+  type        String // INCIDENT_REPORT | EXECUTIVE_SUMMARY | TECHNICAL_INVESTIGATION
+  content     Json     @default("{}")
+  contentHash String
+  generatedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, incidentId, createdAt])
 }

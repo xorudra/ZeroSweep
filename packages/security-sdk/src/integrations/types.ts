@@ -163,6 +163,9 @@ export const SIEM_EVENT_TYPES = [
   "FINDING_CREATED", "FINDING_VERIFIED", "CRITICAL_FINDING", "KEV_DETECTED",
   "ASSET_EXPOSURE_CHANGED", "AUTHENTICATION_SECURITY_EVENT", "SCAN_FAILED",
   "RISK_INCREASED", "SLA_OVERDUE", "POLICY_VIOLATION",
+  // Prompt 28: SOC alert/incident forwarding uses the same governed
+  // outbox + SIEM shape as Prompt 24.
+  "ALERT_CREATED", "INCIDENT_DECLARED",
 ] as const;
 export type SiemEventType = (typeof SIEM_EVENT_TYPES)[number];
 

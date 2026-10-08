@@ -278,3 +278,4 @@ export * from "./grc/index";
 // bounded graph analytics, AI analytics grounding, retention and
 // tenant-safe cache keys (all pure, fixture-verified).
 export * from "./analytics/index";
+export * from "./soc/index";

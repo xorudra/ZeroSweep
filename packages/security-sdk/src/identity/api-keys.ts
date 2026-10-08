@@ -20,6 +20,9 @@ export const API_SCOPES = [
   // identity needs; deliberately no administrator or write scope.
   "pipelines:security-scan",
   "pipelines:gate-read",
+  // Prompt 28 §9: scoped telemetry ingestion — the only scope a
+  // telemetry producer identity needs.
+  "telemetry:ingest",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 
