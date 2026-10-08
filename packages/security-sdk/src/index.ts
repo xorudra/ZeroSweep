@@ -260,3 +260,9 @@ export * from "./identity/index";
 // Prompt 23: the identity module owns the canonical sha256Hex export
 // (the mobile intake helper of the same name stays module-internal).
 export { sha256Hex } from "./identity/crypto";
+
+// Prompt 24: enterprise integrations & DevSecOps ecosystem — connector
+// framework, signed-webhook verification, quality gates, baselines,
+// event bus/outbox reliability, ticketing, messaging, SIEM, SARIF and
+// repository-ingestion safety (all pure, fixture-verified).
+export * from "./integrations/index";

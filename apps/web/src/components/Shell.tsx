@@ -42,6 +42,8 @@ export const NAV = [
   { href: "/dashboard/assets", label: "Asset Risk" },
   { href: "/tools", label: "Tools" },
   { href: "/integrations", label: "Integrations" },
+  { href: "/devsecops", label: "DevSecOps" },
+  { href: "/remediation/tickets", label: "Remediation Tickets" },
   { href: "/audit-logs", label: "Audit Logs" },
   { href: "/settings", label: "Settings" },
 ] as const;

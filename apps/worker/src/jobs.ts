@@ -35,6 +35,13 @@ export interface ValidationJobData {
   workspaceId: string;
 }
 
+/** Prompt 24 §79: integration outbox drain job — no payload beyond an
+ *  optional workspace filter; deliveries are loaded from the store. */
+export interface IntegrationOutboxJobData {
+  kind: "INTEGRATION_OUTBOX";
+  workspaceId?: string;
+}
+
 /** @deprecated Phase 2 placeholder shape, kept so old queued jobs fail safe. */
 export interface OrchestrationJobData {
   kind: "ASSESSMENT_ORCHESTRATION_PLACEHOLDER";

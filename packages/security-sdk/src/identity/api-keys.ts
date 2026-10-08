@@ -16,6 +16,10 @@ export const API_SCOPES = [
   "targets:read",
   "vulnerabilities:read",
   "notifications:read",
+  // Prompt 24 §35: CI/CD pipeline scopes — the only scopes a pipeline
+  // identity needs; deliberately no administrator or write scope.
+  "pipelines:security-scan",
+  "pipelines:gate-read",
 ] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 

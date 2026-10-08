@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 23 complete (Prompts 1–23).** Production monorepo, backend and
+> **Status — Phase 24 complete (Prompts 1–24).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -87,6 +87,32 @@ without verified scope and approval.
 > the Phase 13 compliance framework, snapshot + IaC drift, risk paths,
 > and a /cloud-security GUI. Unconfigured accounts honestly report
 > NOT_CONFIGURED — inventory is never fabricated.
+> And now the **enterprise integrations & DevSecOps layer**: a registry
+> of per-workspace integration instances (GitHub, GitLab, Bitbucket,
+> Jira, Slack, Microsoft Teams, SIEM, generic webhooks) holding secret
+> REFERENCES only — configuration schemas reject secret values
+> outright, and no API or UI surface can display one. Inbound provider
+> webhooks are hostile input: HMAC/token signature verification BEFORE
+> parsing trust, size caps, delivery-id replay protection, tenant
+> binding, and a repository allowlist (the link table) — and a webhook
+> can only trigger a governed scan of a VERIFIED target under an
+> already-APPROVED assessment with fresh-DNS scope revalidation; it
+> can never approve anything. PR/MR assessments classify findings
+> against immutable per-commit baselines (NEW / PRE_EXISTING /
+> REGRESSED) and a typed quality-gate engine (FAIL_CLOSED default)
+> decides merge/deploy readiness; CI pipelines use scoped
+> service-account API keys and receive counts + redacted locations
+> only — never secret values — plus scrubbed SARIF 2.1.0. Jira tickets
+> are created once per finding (duplicates prevented), sync
+> bidirectionally with three-way conflict detection (never silent
+> overwrite), and a CLOSED ticket is never a resolved finding. All
+> outbound delivery (Slack/Teams alerts, SIEM export in JSON/CEF/LEEF,
+> signed generic webhooks) flows through a transactional outbox with
+> bounded retries, backoff, circuit breaking and dead-lettering, and
+> every destination is SSRF-validated — including every redirect hop
+> with fresh DNS. Provider transports are unwired in this environment,
+> so everything honestly reports NOT_CONFIGURED; verification is
+> fixture-payload/mock-transport only.
 
 ## Architecture
 
@@ -225,9 +251,34 @@ and the AI health endpoint.
 21. ✅ AI Security Copilot & intelligent analysis engine (Prompt 21)
 22. ✅ Continuous monitoring, intelligent scheduler & change detection (Prompt 22)
 23. ✅ Enterprise authentication, SSO, MFA, SCIM & organization management (Prompt 23)
+24. ✅ Enterprise integrations, DevSecOps & security workflow engine (Prompt 24)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 24: Enterprise Integrations, DevSecOps &
+  Security Workflow Engine.** The `Integration` registry was extended
+  in place (P20 connectors keep working): GitHub/GitLab/Bitbucket
+  source control, Jira ticketing, Slack/Teams messaging, SIEM export
+  and generic webhooks behind one SDK connector contract; credentials
+  exist only as secret references (schemas reject secret values;
+  rotation swaps references). Inbound webhooks verify signatures
+  before parsing, enforce size caps and delivery-id replay
+  protection, bind to the verifying tenant, and trigger only governed
+  scans (VERIFIED target + pre-existing APPROVED assessment +
+  fresh-DNS scope revalidation — no path approves anything).
+  Diff-aware PR/MR assessments classify findings vs immutable
+  per-commit baselines; the typed quality-gate engine (presets,
+  FAIL_CLOSED/WARN/FAIL_OPEN scanner-failure policy) publishes
+  verdicts to CI through scoped service-account keys
+  (`pipelines:security-scan`, `pipelines:gate-read`) with
+  secret-free sanitized summaries and SARIF 2.1.0. Jira sync is
+  three-way with conflict records and never touches the finding
+  lifecycle. Outbound delivery is transactional-outbox based (bounded
+  retries, backoff, circuit breaker, dead-letter; logically
+  exactly-once after crash) with SSRF validation at subscription
+  creation, at delivery, and at every redirect hop. Fixture/mock
+  verification only — all live provider transports honestly report
+  NOT_CONFIGURED (see docs/architecture/enterprise-integrations.md).
 - **2026-10-08 — Prompt 23: Enterprise Authentication, SSO, MFA, SCIM &
   Organization Management.** Enterprise identity layered on top of the
   existing local auth (never replacing it): server-side sessions with

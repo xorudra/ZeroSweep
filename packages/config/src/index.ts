@@ -40,4 +40,6 @@ export const QUEUES = {
   RETEST_EXECUTION: "retest-execution",
   // Prompt 16 §12: controlled validation sessions (IDs only payloads).
   VALIDATION_EXECUTION: "validation-execution",
+  // Prompt 24 §79: integration outbox draining (IDs only payloads).
+  INTEGRATION_OUTBOX: "integration-outbox",
 } as const;

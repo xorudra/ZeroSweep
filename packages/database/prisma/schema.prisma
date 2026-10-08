@@ -467,6 +467,16 @@ enum IntegrationType {
   SHODAN
   CENSYS
   CUSTOM
+  // Prompt 24 §4: enterprise integrations (source control, ticketing,
+  // messaging, SIEM, generic outbound webhooks).
+  GITHUB
+  GITLAB
+  BITBUCKET
+  JIRA
+  SLACK
+  MICROSOFT_TEAMS
+  SIEM
+  GENERIC_WEBHOOK
 }
 
 enum AuditAction {
@@ -760,6 +770,28 @@ enum AuditAction {
   STEP_UP_REQUIRED
   STEP_UP_SUCCEEDED
   MFA_RESET
+  // Prompt 24 §109: enterprise integrations / DevSecOps audit actions.
+  // Metadata for these actions NEVER contains secrets, webhook payloads
+  // or raw evidence — identifiers, counts and reason codes only.
+  INTEGRATION_CREATED
+  INTEGRATION_UPDATED
+  INTEGRATION_DELETED
+  INTEGRATION_TESTED
+  INTEGRATION_AUTH_FAILED
+  REPOSITORY_CONNECTED
+  REPOSITORY_SYNCED
+  SOURCE_WEBHOOK_RECEIVED
+  PR_SECURITY_SCAN_STARTED
+  PR_SECURITY_SCAN_COMPLETED
+  QUALITY_GATE_PASSED
+  QUALITY_GATE_FAILED
+  REMEDIATION_TICKET_CREATED
+  REMEDIATION_TICKET_SYNCED
+  SIEM_EVENT_EXPORTED
+  WEBHOOK_DELIVERED
+  WEBHOOK_DELIVERY_FAILED
+  PIPELINE_SCAN_REQUESTED
+  TICKET_SYNC_CONFLICT_DETECTED
 }
 
 enum NotificationType {
@@ -1895,16 +1927,32 @@ model Credential {
 }
 
 model Integration {
-  id          String          @id @default(uuid())
-  workspaceId String
-  type        IntegrationType
-  name        String
-  config      Json? // non-secret configuration only
-  enabled     Boolean         @default(false)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                String          @id @default(uuid())
+  workspaceId       String
+  type              IntegrationType
+  name              String
+  config            Json? // non-secret configuration only
+  enabled           Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  // Prompt 24 §3: enterprise integration registry fields. Credentials
+  // exist ONLY as a secret REFERENCE (§7) — there is deliberately no
+  // column that could hold a token, app secret or webhook secret.
+  organizationId    String?
+  status            String          @default("PENDING") // PENDING | CONNECTED | DEGRADED | DISCONNECTED | DISABLED | AUTHENTICATION_FAILED (§5)
+  configuration     Json? // provider-specific NON-SECRET configuration (§3)
+  secretReference   String? // secret reference name only — never a value (§7)
+  secretRotatedAt   DateTime? // §8: UI shows configured + last rotated, never the value
+  credentialType    String? // GITHUB_APP | PAT | OAUTH | PROJECT_TOKEN | WEBHOOK_SECRET | API_TOKEN (§8)
+  capabilities      Json            @default("[]")
+  createdBy         String?
+  lastHealthCheckAt DateTime?
+  lastSyncAt        DateTime?
+  healthDetail      Json? // §95: auth / reachability / rate-limit / webhook-state summary — no secrets
+  lastErrorCategory String? // §95: AUTH | RATE_LIMIT | NETWORK | PROVIDER_ERROR | NOT_CONFIGURED | null
 
   @@index([workspaceId])
+  @@index([organizationId])
 }
 
 // --------------- Proxy scanners: instances, sessions, traffic, approvals (Prompt 8) ---------------
@@ -6171,4 +6219,347 @@ model AccessReviewItem {
   createdAt    DateTime              @default(now())
 
   @@index([reviewId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Prompt 24 — Enterprise integrations, DevSecOps & security workflow
+// engine (§2–§105). Integrations are least-privilege: credentials exist
+// ONLY as secret references, inbound webhooks are verified before any
+// payload is trusted, and no integration can approve an assessment,
+// verify a target, widen scope, or override the finding lifecycle.
+// ─────────────────────────────────────────────────────────────────────
+
+// §30/§29: a SourceRepository linked to an external provider
+// repository. Identity is the provider's immutable repository ID plus
+// the installation/workspace ID — never the mutable name alone (§29).
+model RepositoryIntegrationLink {
+  id                    String    @id @default(uuid())
+  workspaceId           String
+  integrationId         String
+  sourceRepositoryId    String
+  provider              String // GITHUB | GITLAB | BITBUCKET
+  externalRepositoryId  String
+  externalRepositoryRef String // provider URL/reference (display + lookup only)
+  installationId        String? // GitHub installation / GitLab group / Bitbucket workspace (§29)
+  defaultBranch         String?
+  visibility            String    @default("PRIVATE")
+  archived              Boolean   @default(false)
+  languages             Json      @default("[]")
+  lastSyncedAt          DateTime?
+  createdBy             String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([integrationId, externalRepositoryId])
+  @@unique([workspaceId, sourceRepositoryId])
+  @@index([workspaceId])
+  @@index([integrationId])
+}
+
+// §31: per-repository automation policy. Every flag defaults OFF — a
+// webhook alone never enables scanning; an administrator configures
+// the policy, and even then a scan starts only through the ordinary
+// gates (VERIFIED target + existing APPROVED assessment).
+model RepositorySecurityPolicy {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  sourceRepositoryId   String   @unique
+  scanOnPush           Boolean  @default(false)
+  scanOnPullRequest    Boolean  @default(false)
+  scanDefaultBranch    Boolean  @default(false)
+  sastEnabled          Boolean  @default(true)
+  scaEnabled           Boolean  @default(true)
+  secretScanEnabled    Boolean  @default(true)
+  sbomEnabled          Boolean  @default(true)
+  containerScanEnabled Boolean  @default(false)
+  gatePolicyId         String? // SecurityGatePolicy applied to PR/MR assessments
+  prGatePreset         String? // FAIL_ON_NEW_CRITICAL | FAIL_ON_NEW_HIGH | FAIL_ON_NEW_VERIFIED_HIGH | FAIL_ON_NEW_KEV | FAIL_ON_NEW_SECRET | FAIL_ON_POLICY_VIOLATION (§20)
+  autoRetest           Boolean  @default(false) // safe auto-retest of resolved findings only (§31)
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// §18/§26: one PR/MR security assessment record per (repository, PR,
+// head commit). Titles/branch names are UNTRUSTED provider data —
+// stored sanitized, rendered escaped, never interpolated into any
+// command (§83–§85).
+model PullRequestSecurityAssessment {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  integrationId     String
+  repositoryId      String // SourceRepository id
+  provider          String // GITHUB | GITLAB | BITBUCKET
+  prNumber          Int
+  title             String // sanitized (§83/§114)
+  baseBranch        String?
+  headBranch        String? // sanitized (§115)
+  baseCommit        String?
+  headCommit        String
+  scanId            String?
+  scanStatus        String   @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED | BLOCKED | SKIPPED
+  blockReason       String? // why a trigger did not start a scan (authorization gate)
+  gateResult        String? // PASS | FAIL | WARN | ERROR | SKIPPED (§21)
+  gateEvaluationId  String?
+  newFindings       Json     @default("[]") // finding ids classified NEW vs baseline (§19/§40)
+  resolvedFindings  Json     @default("[]") // finding ids resolved vs baseline
+  regressedFindings Json     @default("[]") // finding ids REGRESSED (§122)
+  checkPublished    String   @default("NOT_ATTEMPTED") // NOT_ATTEMPTED | PUBLISHED | NOT_CONFIGURED | FAILED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([workspaceId, repositoryId, prNumber, headCommit])
+  @@index([workspaceId, repositoryId])
+  @@index([scanId])
+}
+
+// §37: a versioned quality-gate policy. Rules are TYPED data (§38) —
+// never code, never expressions evaluated at runtime.
+model SecurityGatePolicy {
+  id                     String   @id @default(uuid())
+  workspaceId            String
+  name                   String
+  repositorySelector     Json     @default("{}") // { repositoryIds?: string[], providers?: string[] }
+  branchSelector         Json     @default("{}") // { branches?: string[], patterns?: string[] }
+  rules                  Json     @default("[]") // typed GateRule[] (§38)
+  scannerFailureBehavior String   @default("FAIL_CLOSED") // FAIL_CLOSED | WARN | FAIL_OPEN (§39)
+  version                Int      @default(1)
+  createdBy              String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// One gate evaluation (§36/§21): the recorded verdict for a PR/MR
+// assessment, pipeline run or scan. Rule results are stored so the
+// verdict is explainable and auditable after the fact.
+model SecurityGateEvaluation {
+  id                      String   @id @default(uuid())
+  workspaceId             String
+  policyId                String?
+  policyVersion           Int?
+  context                 String // PR_ASSESSMENT | PIPELINE_RUN | SCAN
+  pullRequestAssessmentId String?
+  pipelineRunId           String?
+  scanId                  String?
+  result                  String // PASS | FAIL | WARN | ERROR | SKIPPED (§21)
+  ruleResults             Json     @default("[]")
+  summary                 Json     @default("{}") // counts only — no evidence, no secrets (§22/§42)
+  evaluatedBy             String?
+  createdAt               DateTime @default(now())
+
+  @@index([workspaceId, context])
+  @@index([pullRequestAssessmentId])
+  @@index([pipelineRunId])
+}
+
+// §40/§41: a security baseline bound to an IMMUTABLE commit + snapshot
+// + finding-fingerprint set — never to a mutable branch name.
+model SecurityBaseline {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  repositoryId String // SourceRepository id
+  commitSha    String
+  snapshotId   String? // SourceSnapshot the baseline was captured from
+  scanId       String?
+  fingerprints Json     @default("[]") // canonical finding fingerprints present at baseline
+  findingCount Int      @default(0)
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  @@unique([repositoryId, commitSha])
+  @@index([workspaceId, repositoryId])
+}
+
+// §33: a CI/CD pipeline security run. Requested via a scoped API key
+// or service account (§34/§35) — never an administrator credential.
+model SecurityPipelineRun {
+  id                   String    @id @default(uuid())
+  workspaceId          String
+  integrationId        String?
+  provider             String // GITHUB | GITLAB | BITBUCKET | GENERIC_CI
+  repositoryId         String? // SourceRepository id
+  externalRepositoryId String?
+  commitSha            String
+  branch               String? // sanitized (§115)
+  prNumber             Int?
+  externalPipelineId   String
+  scanIds              Json      @default("[]")
+  gateResult           String? // PASS | FAIL | WARN | ERROR | SKIPPED
+  gateEvaluationId     String?
+  status               String    @default("REQUESTED") // REQUESTED | RUNNING | COMPLETED | FAILED | BLOCKED
+  blockReason          String?
+  requestedByKind      String // API_KEY | SERVICE_ACCOUNT | USER
+  requestedById        String
+  summary              Json      @default("{}") // sanitized summary (§32/§42): ids + counts + redacted locations only
+  startedAt            DateTime  @default(now())
+  completedAt          DateTime?
+
+  @@unique([workspaceId, provider, externalPipelineId])
+  @@index([workspaceId, repositoryId])
+  @@index([workspaceId, status])
+}
+
+// §47: workspace finding-routing → Jira project/issue-type mapping.
+model JiraProjectMapping {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  integrationId String
+  findingType   String? // vulnClass / sourceDomain selector; null = default mapping
+  team          String?
+  assetGroup    String?
+  projectKey    String
+  issueType     String   @default("Task")
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId, integrationId])
+}
+
+// §48: a finding's external remediation ticket. One ticket per
+// (finding, integration) — creation is idempotent (§49/§124).
+model RemediationTicket {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  findingId          String
+  integrationId      String
+  externalId         String?
+  externalKey        String? // e.g. SEC-123
+  externalUrl        String?
+  status             String    @default("OPEN") // mapped internal status: OPEN | IN_PROGRESS | RESOLVED | CLOSED (§51)
+  externalStatus     String? // raw provider status (data, never trusted for lifecycle)
+  assigneeReference  String?
+  syncState          String    @default("IN_SYNC") // IN_SYNC | PENDING | CONFLICT | NOT_CONFIGURED
+  lastSyncedStatus   String? // status at last successful sync (conflict baseline, §53)
+  lastSyncedAssignee String?
+  createdBy          String
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([integrationId, findingId])
+  @@index([workspaceId, findingId])
+  @@index([workspaceId, status])
+}
+
+// §54: a ticket sync conflict. Conflicts are surfaced for an analyst
+// decision — the platform NEVER silently overwrites either side (§53).
+model TicketSyncConflict {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  ticketId      String
+  findingId     String?
+  field         String // status | assignee
+  localValue    String?
+  externalValue String?
+  status        String    @default("OPEN") // OPEN | RESOLVED_KEEP_LOCAL | RESOLVED_TAKE_EXTERNAL
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([workspaceId, status])
+  @@index([ticketId])
+}
+
+// §74: outbound webhook subscription. The signing secret is a
+// REFERENCE (§71) — the value never appears in this table.
+model WebhookSubscription {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  endpoint        String
+  events          Json     @default("[]") // subscribed event types (§73)
+  secretReference String?
+  enabled         Boolean  @default(true)
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// §76–§78: transactional outbox row. The business change and this
+// event commit in the SAME database transaction; the outbox processor
+// delivers at-least-once with idempotent consumers (§79/§131).
+model SecurityEventOutbox {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  eventId           String    @unique // stable envelope id (§67/§76)
+  eventType         String
+  resourceType      String
+  resourceId        String
+  schemaVersion     String    @default("1.0") // §77
+  payload           Json      @default("{}") // sanitized envelope payload — no secrets (§64)
+  status            String    @default("PENDING") // PENDING | DELIVERED | DEAD_LETTER
+  attempts          Int       @default(0)
+  nextAttemptAt     DateTime?
+  lastErrorCategory String?
+  createdAt         DateTime  @default(now())
+  deliveredAt       DateTime?
+
+  @@index([workspaceId, status])
+  @@index([status, nextAttemptAt])
+}
+
+// §80: one delivery attempt of an outbox event to one destination
+// (integration or webhook subscription). Response metadata records
+// status codes/categories ONLY — never response secrets (§80).
+model IntegrationDelivery {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  outboxId         String?
+  eventId          String
+  integrationId    String?
+  subscriptionId   String?
+  destinationKind  String // WEBHOOK | SIEM | SLACK | TEAMS | JIRA
+  attempt          Int       @default(1)
+  status           String    @default("PENDING") // PENDING | DELIVERED | FAILED | DEAD_LETTER | NOT_CONFIGURED | SKIPPED
+  responseMetadata Json      @default("{}") // { httpStatus?, category?, durationMs? } — no bodies, no secrets
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([workspaceId, status])
+  @@index([eventId])
+  @@index([integrationId])
+}
+
+// §81: an inbound provider webhook delivery. Recorded for EVERY
+// delivery — including rejected ones — with signature status; the
+// payload itself is NOT stored (summary metadata only, §82/§83).
+model InboundIntegrationEvent {
+  id               String   @id @default(uuid())
+  workspaceId      String?
+  integrationId    String?
+  provider         String // GITHUB | GITLAB | BITBUCKET
+  deliveryId       String
+  eventType        String
+  signatureStatus  String // VALID | INVALID | MISSING
+  processingStatus String   @default("RECEIVED") // RECEIVED | PROCESSED | IGNORED_DUPLICATE | REJECTED | BLOCKED | ERROR
+  detail           String? // reason code / summary — never payload content
+  receivedAt       DateTime @default(now())
+
+  @@unique([integrationId, deliveryId])
+  @@index([workspaceId, provider])
+  @@index([processingStatus])
+}
+
+// §99: incremental-sync checkpoint per integration + resource kind.
+model IntegrationSyncCheckpoint {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  integrationId     String
+  resourceKind      String // REPOSITORIES | TICKETS | PULL_REQUESTS
+  cursor            String?
+  lastSyncedAt      DateTime?
+  lastSuccessAt     DateTime?
+  lastErrorCategory String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([integrationId, resourceKind])
+  @@index([workspaceId])
 }
