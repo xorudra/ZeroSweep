@@ -19,6 +19,12 @@ export const REPORT_TYPES = [
   "EXECUTIVE", "TECHNICAL_VAPT", "WEB", "NETWORK", "API", "CLOUD",
   "CONTAINER_KUBERNETES", "SOURCE_SCA", "IDENTITY", "MOBILE", "BINARY",
   "WIRELESS", "COMPLIANCE", "REMEDIATION", "RETEST",
+  // Prompt 37 §65: the V2 report-type vocabulary. Each name maps onto
+  // the same governed source domains below — no new report engine.
+  "WEB_VAPT", "API_VAPT", "NETWORK_VAPT", "CLOUD_SECURITY",
+  "CONTAINER_SECURITY", "KUBERNETES_SECURITY", "MOBILE_VAPT",
+  "BINARY_SECURITY", "SAST", "EASM", "FULL_SECURITY_ASSESSMENT",
+  "REMEDIATION_VERIFICATION", "CUSTOM",
 ] as const;
 export type ReportType = (typeof REPORT_TYPES)[number];
 
@@ -44,6 +50,19 @@ export const REPORT_TYPE_DOMAINS: Record<ReportType, string[]> = {
   COMPLIANCE: [],
   REMEDIATION: [],
   RETEST: [],
+  WEB_VAPT: ["WEB"],
+  API_VAPT: ["API"],
+  NETWORK_VAPT: ["NETWORK"],
+  CLOUD_SECURITY: ["CLOUD"],
+  CONTAINER_SECURITY: ["CONTAINER"],
+  KUBERNETES_SECURITY: ["KUBERNETES"],
+  MOBILE_VAPT: ["MOBILE"],
+  BINARY_SECURITY: ["BINARY"],
+  SAST: ["SAST"],
+  EASM: ["EASM"],
+  FULL_SECURITY_ASSESSMENT: [],
+  REMEDIATION_VERIFICATION: [],
+  CUSTOM: [],
 };
 
 export interface ReportFindingInput {
@@ -90,6 +109,12 @@ export interface ReportTemplateView {
 export const REPORT_SECTION_CATALOG = [
   "COVER", "EXECUTIVE_SUMMARY", "SCOPE", "METHODOLOGY", "RISK_SUMMARY",
   "FINDING_SUMMARY", "DETAILED_FINDINGS", "EVIDENCE", "REMEDIATION", "APPENDICES",
+  // Prompt 37 §68: the full V2 section catalog (additive — templates
+  // written against the Prompt 20 catalog remain valid).
+  "DOCUMENT_CONTROL", "CONFIDENTIALITY", "ENGAGEMENT_OVERVIEW", "OUT_OF_SCOPE",
+  "TOOLS", "COVERAGE", "RISK_MODEL", "FINDINGS_SUMMARY", "ATTACK_SURFACE",
+  "ATTACK_PATHS", "REMEDIATION_SUMMARY", "VERIFICATION_RESULTS", "LIMITATIONS",
+  "CONCLUSION",
 ] as const;
 
 export type TemplateValidation = { ok: true } | { ok: false; error: string };
@@ -186,7 +211,14 @@ const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 export function redactReportText(text: string): string {
   return redactEvidenceText(text)
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED PRIVATE KEY]")
-    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*$/g, "[REDACTED PRIVATE KEY]");
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*$/g, "[REDACTED PRIVATE KEY]")
+    // Prompt 37 §90: assignment-shaped secrets (password: x, token: x,
+    // api-key: x) are masked HERE, at snapshot-build time, so every
+    // rendering and every client exposure inherits the protection and
+    // the §91 redaction preview passes for platform-built snapshots.
+    .replace(/\b(password|passwd|pwd)\s*[:=]\s*\S+/gi, "$1: [REDACTED]")
+    .replace(/\b(api[-_ ]?key|access[-_ ]?token|secret[-_ ]?key|auth[-_ ]?token|token)\s*[:=]\s*\S+/gi, "$1: [REDACTED]")
+    .replace(/\bcookie\s*[:=]\s*[^\n;]+/gi, "cookie: [REDACTED]");
 }
 
 /**

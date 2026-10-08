@@ -17,6 +17,12 @@ enum Role {
   MEMBER
   ANALYST
   VIEWER
+  // Prompt 37 §128: client-portal roles. These are membership roles for
+  // portal users linked to exactly one ClientOrganization; they hold no
+  // internal permission in any internal permission map.
+  CLIENT_VIEWER
+  CLIENT_REMEDIATOR
+  CLIENT_MANAGER
 }
 
 enum MembershipStatus {
@@ -971,6 +977,33 @@ enum AuditAction {
   KUBERNETES_BASELINE_CREATED
   KUBERNETES_RUNTIME_EVENT_INGESTED
   RUNTIME_EVENT_CORRELATED
+  // Prompt 37 §129: vulnerability-management V2, reporting workflow,
+  // client-portal and sync audit actions. REPORT_DOWNLOADED,
+  // REPORT_APPROVED, FINDING_TRIAGED and FINDING_ASSIGNED already exist
+  // above and are reused, not duplicated.
+  FINDING_STATE_CHANGED
+  FALSE_POSITIVE_SET
+  RISK_ACCEPTANCE_CREATED
+  SECURITY_EXCEPTION_CREATED
+  SLA_EXCEPTION_CREATED
+  FIX_CLAIMED
+  VERIFICATION_REQUESTED
+  CLIENT_COMMENT_ADDED
+  REPORT_CREATED
+  REPORT_REVIEWED
+  REPORT_FINALIZED
+  REPORT_SHARED
+  CLIENT_FINDING_PUBLISHED
+  CLIENT_FINDING_UNPUBLISHED
+  CLIENT_PORTAL_ACCESSED
+  VULNERABILITY_SYNC_STARTED
+  VULNERABILITY_SYNC_COMPLETED
+  VULNERABILITY_SYNC_CONFLICT
+  FINDING_COMMENT_ADDED
+  EVIDENCE_VISIBILITY_CHANGED
+  FINDING_TEMPLATE_CREATED
+  REPORT_TEMPLATE_VERSION_CREATED
+  REPORT_ARCHIVED
 }
 
 enum NotificationType {
@@ -1825,6 +1858,10 @@ model FindingEvidence {
   // signature family, redacted request/response snippets, checksums).
   matchedAt        String?
   metadata         Json?
+  // Prompt 37 §39: exposure class — INTERNAL | CLIENT | REPORT |
+  // RESTRICTED. Only CLIENT/REPORT rows may reach the portal/reports,
+  // and only after redaction (§40).
+  visibility       String   @default("INTERNAL")
   finding          Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
 
@@ -2369,6 +2406,10 @@ model FindingComment {
   workspaceId String
   authorId    String
   text        String // sanitized at the API boundary (§45)
+  // Prompt 37 §34: INTERNAL comments must never leak into the client
+  // portal or a client report; only CLIENT rows cross that boundary.
+  visibility  String   @default("INTERNAL") // INTERNAL | CLIENT
+  mentions    Json     @default("[]") // [{ kind: USER|TEAM, ref }] (§35)
   finding     Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
 
@@ -5663,6 +5704,15 @@ model ExternalFindingReference {
   externalUrl      String?
   externalStatus   String?
   externalSeverity String?
+  // Prompt 37 §56: full external identity (workspace/project on the
+  // external side) alongside the external finding id.
+  externalWorkspace String?
+  externalProject   String?
+  // §59 loop prevention: SHA-256 of the canonical content last moved
+  // across the boundary; an inbound record whose hash matches was
+  // originated here and is skipped, never re-applied.
+  contentHash      String?
+  origin           String   @default("EXTERNAL") // EXTERNAL | DSRCLONE
   syncVersion      Int      @default(1)
   lastSyncedAt     DateTime @default(now())
   finding          Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
@@ -5725,11 +5775,22 @@ model ReportTemplate {
   footer              String?
   classification      String   @default("CONFIDENTIAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED (§64)
   customBlocks        Json     @default("[]") // static text blocks only
+  // Prompt 37 §66/§67/§80: template versions are first-class — a
+  // PUBLISHED version is immutable; an edit produces the next version.
+  version             Int      @default(1)
+  status              String   @default("PUBLISHED") // DRAFT | PUBLISHED | ARCHIVED
+  // §80 branding: client identity + presentation. Logo values are
+  // object-storage REFERENCE names only (validated at write, §81).
+  clientName          String?
+  clientLogoRef       String?
+  accentColor         String?
+  confidentialityText String?
+  contactDetails      Json?
   createdBy           String
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  @@unique([workspaceId, name])
+  @@unique([workspaceId, name, version])
   @@index([workspaceId])
 }
 
@@ -5752,6 +5813,15 @@ model SecurityReport {
   classification String          @default("CONFIDENTIAL")
   changeNotes    String?
   approvedBy     String?
+  versions       ReportVersion[]
+  shareLinks     ReportShareLink[]
+  // Prompt 37: review/finalization workflow + portal binding.
+  reviewedBy     String?
+  finalizedAt    DateTime?
+  clientOrganizationId String? // set when the report serves a client engagement (§96)
+  engagementId   String?
+  watermark      String? // CONFIDENTIAL | DRAFT | INTERNAL | CLIENT COPY (§92)
+  requireSeparateApprover Boolean @default(false) // §85 separation of duties policy
   snapshot       ReportSnapshot?
   exports        ReportExport[]
   createdAt      DateTime        @default(now())
@@ -10441,4 +10511,221 @@ model RuntimeEventCorrelation {
 
   @@index([workspaceId])
   @@index([clusterId])
+}
+
+// =====================================================================
+// Prompt 37 — Enterprise Reporting, Vulnerability Management & Client
+// Portal V2. Everything here EXTENDS the Prompt 11/20/31 substrate:
+// the canonical Finding, the P20 SecurityReport/ReportSnapshot, the
+// P31 remediation case machine and the P20 RiskException remain the
+// single sources of truth. No parallel finding/report system exists.
+// =====================================================================
+
+// §83: one immutable row per FINALIZED revision of a report. The
+// snapshot document is copied in at finalization; later live changes
+// (or even later report versions) can never alter it (§64).
+model ReportVersion {
+  id                String   @id @default(uuid())
+  reportId          String
+  workspaceId       String
+  version           String // mirrors SecurityReport.version at finalization
+  snapshotId        String?
+  document          Json // the immutable ReportSnapshotDocument copy
+  contentHash       String // SHA-256 of the snapshot document
+  artifactHash      String // §93: SHA-256 of the rendered finalized artifact
+  signatureMetadata Json? // §94: optional signing metadata — no legal validity is claimed
+  finalizedBy       String
+  finalizedAt       DateTime @default(now())
+  report            SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, version])
+  @@index([workspaceId])
+  @@index([reportId])
+}
+
+// §106: revocable, expiring share links. Only the SHA-256 hash of the
+// token is stored — the raw token is shown exactly once at creation.
+model ReportShareLink {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  reportId       String
+  reportVersionId String?
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  maxDownloads   Int?
+  downloadCount  Int       @default(0)
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  report         SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([reportId])
+}
+
+// §41–§43: organization-level reusable vulnerability templates.
+// Versioned like report templates; findings created from a template
+// record the template name+version so historical reports keep the
+// original wording (§43).
+model FindingTemplate {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  name            String
+  version         Int      @default(1)
+  status          String   @default("PUBLISHED") // DRAFT | PUBLISHED | ARCHIVED
+  title           String
+  category        String
+  description     String
+  impact          String?
+  remediation     String?
+  references      Json     @default("[]")
+  cwe             String?
+  owaspCategory   String?
+  defaultSeverity String   @default("MEDIUM")
+  tags            String[] @default([])
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([workspaceId, name, version])
+  @@index([workspaceId])
+}
+
+// §19/§20: the unified security-exception registry. Finding-scoped
+// types (RISK_ACCEPTANCE, FALSE_POSITIVE_SUPPRESSION) delegate their
+// lifecycle effect to the existing RiskException machinery via
+// riskExceptionId — the same wrap pattern Prompt 31 established — so
+// there is exactly one enforcement path. SLA_EXCEPTION and
+// CONTROL_EXCEPTION are policy records that never touch finding state.
+model SecurityException {
+  id                   String    @id @default(uuid())
+  workspaceId          String
+  findingId            String?
+  type                 String // RISK_ACCEPTANCE | FALSE_POSITIVE_SUPPRESSION | SLA_EXCEPTION | CONTROL_EXCEPTION
+  status               String    @default("PENDING") // PENDING | ACTIVE | REJECTED | EXPIRED
+  reason               String
+  businessJustification String?
+  requestedBy          String
+  approverId           String?
+  startDate            DateTime  @default(now())
+  expiryDate           DateTime?
+  reviewDate           DateTime?
+  compensatingControls Json?
+  riskExceptionId      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([findingId])
+  @@index([expiryDate])
+}
+
+// §95: a client organization served through the portal. Distinct from
+// the internal Organization (the consultancy tenant); it is bound to
+// the internal workspace that performs its assessments.
+model ClientOrganization {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  slug        String
+  status      String   @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED
+  contactName String?
+  contactEmail String?
+  createdBy   String
+  engagements ClientEngagement[]
+  portalUsers ClientPortalUser[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+// §96: one engagement = one assessment programme for one client.
+model ClientEngagement {
+  id                String    @id @default(uuid())
+  clientOrganizationId String
+  workspaceId       String
+  assessmentId      String?
+  name              String
+  startDate         DateTime?
+  endDate           DateTime?
+  status            String    @default("ACTIVE") // ACTIVE | COMPLETED | ARCHIVED
+  clientContacts    Json      @default("[]")
+  reportVisibility  String    @default("FINALIZED_ONLY") // FINALIZED_ONLY — only finalized versions are ever client-visible (§105)
+  createdBy         String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  client            ClientOrganization @relation(fields: [clientOrganizationId], references: [id], onDelete: Cascade)
+  publications      ClientFindingPublication[]
+
+  @@index([workspaceId])
+  @@index([clientOrganizationId])
+}
+
+// §97: the portal identity binding. A platform user reaches the portal
+// ONLY through this row, which pins them to exactly one client
+// organization and one portal role. Created by internal admins only.
+model ClientPortalUser {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  clientOrganizationId String
+  workspaceId          String
+  portalRole           String // CLIENT_VIEWER | CLIENT_REMEDIATOR | CLIENT_MANAGER
+  status               String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdBy            String
+  createdAt            DateTime @default(now())
+  client               ClientOrganization @relation(fields: [clientOrganizationId], references: [id], onDelete: Cascade)
+
+  @@index([clientOrganizationId])
+  @@index([workspaceId])
+}
+
+// Publication is the ONLY path by which a finding becomes visible in
+// the portal (§100). Revoking the row's publication (revokedAt set)
+// removes it from every portal view immediately.
+model ClientFindingPublication {
+  id           String    @id @default(uuid())
+  engagementId String
+  findingId    String
+  workspaceId  String
+  publishedBy  String
+  publishedAt  DateTime  @default(now())
+  revokedAt    DateTime?
+  revokedBy    String?
+  engagement   ClientEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+
+  @@unique([engagementId, findingId])
+  @@index([workspaceId])
+  @@index([findingId])
+}
+
+// §108/§109: portal notifications. Title/body are built ONLY from
+// client-visible fields at creation time, so a notification can never
+// carry internal data into the portal.
+model ClientNotification {
+  id                   String    @id @default(uuid())
+  clientOrganizationId String
+  engagementId         String?
+  type                 String // REPORT_PUBLISHED | FINDING_PUBLISHED | SLA_APPROACHING | VERIFICATION_RESULT | COMMENT_MENTION
+  title                String
+  body                 String
+  findingId            String?
+  reportId             String?
+  readAt               DateTime?
+  createdAt            DateTime  @default(now())
+
+  @@index([clientOrganizationId, createdAt])
+}
+
+// §119: point-in-time vulnerability metrics. Trend charts read THESE
+// rows; history is never reconstructed from current state (§75).
+model VulnerabilityMetricsSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  metrics     Json
+  capturedBy  String?
+  capturedAt  DateTime @default(now())
+
+  @@index([workspaceId, capturedAt])
 }

@@ -1,7 +1,10 @@
 // Shared application types. Keep API contracts explicit here; never import
 // backend implementation details into the frontend.
 
-export const ROLES = ["OWNER", "ADMIN", "SECURITY_ADMIN", "SECURITY_ENGINEER", "MEMBER", "ANALYST", "VIEWER"] as const;
+export const ROLES = ["OWNER", "ADMIN", "SECURITY_ADMIN", "SECURITY_ENGINEER", "MEMBER", "ANALYST", "VIEWER",
+  // Prompt 37 §128: client-portal roles (portal access additionally
+  // requires a ClientPortalUser binding to one client organization).
+  "CLIENT_VIEWER", "CLIENT_REMEDIATOR", "CLIENT_MANAGER"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const TARGET_TYPES = [

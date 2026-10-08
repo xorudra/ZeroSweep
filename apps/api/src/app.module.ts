@@ -35,6 +35,7 @@ import { MobileSecurityModule } from "./modules/mobile-security/mobile-security.
 import { BinarySecurityModule } from "./modules/binary-security/binary-security.module";
 import { WirelessSecurityModule } from "./modules/wireless-security/wireless-security.module";
 import { VulnerabilityManagementModule } from "./modules/vulnerability-management/vulnerability-management.module";
+import { ClientPortalModule } from "./modules/client-portal/client-portal.module";
 import { AiSecurityModule } from "./modules/ai-security/ai-security.module";
 import { ContinuousSecurityModule } from "./modules/continuous-security/continuous-security.module";
 import { IdentityModule } from "./modules/identity/identity.module";
@@ -68,7 +69,7 @@ import { MobileBinaryV2Module } from "./modules/mobile-binary-v2/mobile-binary-v
     VulnerabilityIntelligenceModule,
     RemediationModule,
     VulnerabilitiesModule, RepositoriesModule, CloudNativeModule, CloudSecurityModule, ActiveDirectoryModule,
-    SecurityValidationModule, MobileSecurityModule, BinarySecurityModule, WirelessSecurityModule, VulnerabilityManagementModule,
+    SecurityValidationModule, MobileSecurityModule, BinarySecurityModule, WirelessSecurityModule, VulnerabilityManagementModule, ClientPortalModule,
     AiSecurityModule,
     ContinuousSecurityModule,
     IdentityModule,
