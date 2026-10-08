@@ -12,7 +12,9 @@ datasource db {
 enum Role {
   OWNER
   ADMIN
+  SECURITY_ADMIN
   SECURITY_ENGINEER
+  MEMBER
   ANALYST
   VIEWER
 }
@@ -21,6 +23,7 @@ enum MembershipStatus {
   ACTIVE
   INVITED
   SUSPENDED
+  REVOKED
 }
 
 enum TargetType {
@@ -711,6 +714,52 @@ enum AuditAction {
   WORKFLOW_ACTION_EXECUTED
   NOTIFICATION_SENT
   NOTIFICATION_POLICY_UPDATED
+  USER_LOGIN_SUCCEEDED
+  USER_LOGIN_FAILED
+  MFA_ENABLED
+  MFA_DISABLED
+  MFA_CHALLENGE_ISSUED
+  PASSKEY_REGISTERED
+  PASSKEY_REMOVED
+  RECOVERY_CODE_USED
+  RECOVERY_CODES_REGENERATED
+  SESSION_REVOKED
+  SESSIONS_REVOKED_ALL
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  SSO_PROVIDER_CREATED
+  SSO_PROVIDER_UPDATED
+  SSO_PROVIDER_DISABLED
+  SSO_LOGIN_SUCCEEDED
+  SSO_LOGIN_FAILED
+  SCIM_TOKEN_CREATED
+  SCIM_TOKEN_ROTATED
+  SCIM_USER_CREATED
+  SCIM_USER_UPDATED
+  SCIM_USER_DEACTIVATED
+  SCIM_GROUP_UPSERTED
+  SERVICE_ACCOUNT_CREATED
+  SERVICE_ACCOUNT_UPDATED
+  SERVICE_ACCOUNT_DISABLED
+  SERVICE_ACCOUNT_CREDENTIAL_CREATED
+  API_KEY_CREATED
+  API_KEY_ROTATED
+  API_KEY_REVOKED
+  SECURITY_POLICY_CHANGED
+  BREAK_GLASS_LOGIN
+  BREAK_GLASS_ENROLLED
+  INVITATION_CREATED
+  INVITATION_ACCEPTED
+  INVITATION_REVOKED
+  DOMAIN_VERIFICATION_STARTED
+  DOMAIN_VERIFIED
+  ACCESS_REVIEW_CREATED
+  ACCESS_REVIEW_DECIDED
+  ACCESS_REVIEW_COMPLETED
+  STEP_UP_REQUIRED
+  STEP_UP_SUCCEEDED
+  MFA_RESET
 }
 
 enum NotificationType {
@@ -722,43 +771,87 @@ enum NotificationType {
 }
 
 // ------------------------------- Identity & tenancy -------------------------------
+enum UserAccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
 model User {
-  id           String       @id @default(uuid())
-  email        String       @unique
-  name         String
-  passwordHash String // bcrypt hash only — never a plaintext password
-  isActive     Boolean      @default(true)
-  memberships  Membership[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  deletedAt    DateTime?
+  id              String            @id @default(uuid())
+  email           String            @unique
+  normalizedEmail String            @unique @default("")
+  name            String
+  passwordHash    String // bcrypt hash only — never a plaintext password
+  isActive        Boolean           @default(true)
+  status          UserAccountStatus @default(ACTIVE)
+  lastLoginAt     DateTime?
+  memberships     Membership[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
 
   @@index([email])
 }
 
-model Organization {
-  id          String       @id @default(uuid())
-  name        String
-  slug        String       @unique
-  memberships Membership[]
-  workspaces  Workspace[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  deletedAt   DateTime?
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
 }
 
+model Organization {
+  id               String                @id @default(uuid())
+  name             String
+  slug             String                @unique
+  status           OrganizationStatus    @default(ACTIVE)
+  securityContact  String?
+  dataRegion       String?
+  memberships      Membership[]
+  workspaces       Workspace[]
+  workspaceMembers WorkspaceMembership[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  deletedAt        DateTime?
+}
+
+// OrganizationMembership (Prompt 23 §7): organization-level role + status.
+// The pre-existing Membership model is this record; Prompt 23 extends it
+// (invitedBy/joinedAt/REVOKED) rather than creating a parallel system.
 model Membership {
   id             String           @id @default(uuid())
   userId         String
   organizationId String
   role           Role             @default(VIEWER)
   status         MembershipStatus @default(ACTIVE)
+  invitedBy      String?
+  joinedAt       DateTime?
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
   @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model WorkspaceMembership {
+  id             String           @id @default(uuid())
+  userId         String
+  workspaceId    String
+  role           Role             @default(VIEWER)
+  status         MembershipStatus @default(ACTIVE)
+  invitedBy      String?
+  joinedAt       DateTime?
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
   @@index([organizationId])
 }
 
@@ -780,6 +873,7 @@ model Workspace {
   wirelessSensors             WirelessSensor[]
   wirelessCaptures            WirelessCapture[]
   wirelessChannelObservations WirelessChannelObservation[]
+  workspaceMemberships        WorkspaceMembership[]
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   deletedAt                   DateTime?
@@ -5706,4 +5800,375 @@ model AiDailySecuritySummary {
 
   @@unique([workspaceId, date])
   @@index([workspaceId, createdAt])
+}
+
+// --------------------- Enterprise identity (Prompt 23) ---------------------
+// Layered ON TOP of the existing User/Organization/Membership/Workspace
+// models above — no parallel identity system. All secrets below are hashes
+// or platform-encrypted values or secret REFERENCES; never plaintext.
+
+enum MfaMethodType {
+  TOTP
+  WEBAUTHN
+  PASSKEY
+  RECOVERY_CODES
+}
+
+enum MfaRequirement {
+  OPTIONAL
+  REQUIRED_FOR_ADMINS
+  REQUIRED_FOR_ALL
+}
+
+enum AuthenticationAssurance {
+  AAL1
+  AAL2
+  PHISHING_RESISTANT
+}
+
+enum SsoProviderType {
+  OIDC
+  SAML
+}
+
+enum AuthChallengeType {
+  MFA_TOTP
+  WEBAUTHN_REGISTRATION
+  WEBAUTHN_AUTHENTICATION
+  PASSWORD_RESET
+  STEP_UP
+  OIDC_FLOW
+  SAML_FLOW
+}
+
+enum AccessReviewStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum AccessReviewDecision {
+  KEEP
+  REVOKE
+  CHANGE_ROLE
+  DISABLE
+}
+
+// Server-side session record (§38). Only the SHA-256 hash of the opaque
+// session token is stored (§39); revocation is a timestamp, enforced on
+// every authenticated request by the session guard.
+model UserSession {
+  id             String                  @id @default(uuid())
+  userId         String
+  organizationId String
+  workspaceId    String?
+  tokenHash      String                  @unique
+  assurance      AuthenticationAssurance @default(AAL1)
+  deviceSummary  String?
+  createdAt      DateTime                @default(now())
+  lastSeenAt     DateTime                @default(now())
+  expiresAt      DateTime
+  idleExpiresAt  DateTime
+  revokedAt      DateTime?
+  stepUpAt       DateTime?
+
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model AuthChallenge {
+  id         String            @id @default(uuid())
+  userId     String
+  type       AuthChallengeType
+  tokenHash  String            @unique
+  expiresAt  DateTime
+  attempts   Int               @default(0)
+  consumedAt DateTime?
+  metadata   Json?
+  createdAt  DateTime          @default(now())
+
+  @@index([userId, type])
+}
+
+model MfaMethod {
+  id              String        @id @default(uuid())
+  userId          String
+  type            MfaMethodType
+  // TOTP: AES-256-GCM encrypted secret (platform key) — never plaintext,
+  // never logged, never returned after enrollment (§27).
+  secretEncrypted String?
+  credentialId    String? // WebAuthn credential id (public identifier)
+  lastUsedStep    BigInt? // TOTP replay protection (§28)
+  isActive        Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  lastUsedAt      DateTime?
+
+  @@index([userId])
+}
+
+model RecoveryCode {
+  id        String    @id @default(uuid())
+  userId    String
+  codeHash  String // SHA-256 hash only (§29)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model WebAuthnCredential {
+  id           String    @id @default(uuid())
+  userId       String
+  credentialId String    @unique
+  publicKey    String // COSE public key, base64url — public material only (§33)
+  counter      BigInt    @default(0)
+  transports   String?
+  friendlyName String?
+  isPasskey    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
+}
+
+model AuthenticationEvent {
+  id             String   @id @default(uuid())
+  userId         String?
+  organizationId String?
+  eventType      String
+  ipAddress      String?
+  deviceSummary  String?
+  riskSignals    Json?
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model EnterpriseSsoProvider {
+  id             String          @id @default(uuid())
+  organizationId String
+  name           String
+  type           SsoProviderType
+  enabled        Boolean         @default(false)
+  enforceSso     Boolean         @default(false)
+  jitEnabled     Boolean         @default(false)
+  jitDefaultRole Role            @default(VIEWER)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+}
+
+model OidcProviderConfig {
+  id              String @id @default(uuid())
+  providerId      String @unique
+  issuer          String
+  clientId        String
+  clientSecretRef String // secret REFERENCE only (§48)
+  scopes          String @default("openid email profile")
+  emailClaim      String @default("email")
+  nameClaim       String @default("name")
+  groupsClaim     String @default("groups")
+  subjectClaim    String @default("sub")
+
+  @@index([providerId])
+}
+
+model SamlProviderConfig {
+  id                      String  @id @default(uuid())
+  providerId              String  @unique
+  idpEntityId             String
+  ssoUrl                  String
+  certificate             String // IdP signing certificate (PUBLIC material)
+  spEntityId              String
+  emailAttribute          String  @default("email")
+  nameAttribute           String  @default("displayName")
+  groupsAttribute         String  @default("groups")
+  wantEncryptedAssertions Boolean @default(false)
+
+  @@index([providerId])
+}
+
+// Consumed SAML assertion ids — replay protection (§55).
+model SamlAssertionConsumption {
+  id          String   @id @default(uuid())
+  assertionId String   @unique
+  expiresAt   DateTime
+  consumedAt  DateTime @default(now())
+}
+
+model OrganizationDomain {
+  id                    String    @id @default(uuid())
+  organizationId        String
+  domain                String
+  verificationTokenHash String
+  status                String    @default("PENDING") // PENDING | VERIFIED
+  verifiedAt            DateTime?
+  createdAt             DateTime  @default(now())
+
+  @@unique([organizationId, domain])
+  @@index([domain])
+}
+
+model OrganizationInvitation {
+  id              String    @id @default(uuid())
+  organizationId  String
+  email           String
+  normalizedEmail String
+  role            Role      @default(VIEWER)
+  workspaceIds    Json?
+  tokenHash       String    @unique
+  status          String    @default("PENDING") // PENDING | ACCEPTED | REVOKED | EXPIRED
+  invitedBy       String
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([normalizedEmail])
+}
+
+model ScimCredential {
+  id             String    @id @default(uuid())
+  organizationId String    @unique
+  tokenPrefix    String
+  tokenHash      String // SHA-256 hash only (§67)
+  createdAt      DateTime  @default(now())
+  rotatedAt      DateTime?
+  lastUsedAt     DateTime?
+}
+
+model ScimGroupMapping {
+  id               String  @id @default(uuid())
+  organizationId   String
+  externalGroup    String
+  organizationRole Role
+  workspaceId      String?
+  workspaceRole    Role?
+
+  @@unique([organizationId, externalGroup])
+  @@index([organizationId])
+}
+
+// Records the external (IdP) identity of a SCIM-provisioned user/group so
+// updates/deactivation address the right local record.
+model ScimExternalRecord {
+  id             String  @id @default(uuid())
+  organizationId String
+  resourceType   String // USER | GROUP
+  externalId     String?
+  localId        String
+  displayName    String?
+
+  @@unique([organizationId, resourceType, localId])
+  @@index([organizationId, resourceType])
+}
+
+model ServiceAccount {
+  id             String    @id @default(uuid())
+  organizationId String
+  workspaceId    String? // null = organization-scoped (still least-privilege scopes)
+  name           String
+  status         String    @default("ACTIVE") // ACTIVE | DISABLED
+  scopes         Json // typed API scopes only (§79)
+  createdBy      String
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId])
+}
+
+enum ApiKeyOwnerKind {
+  USER
+  SERVICE_ACCOUNT
+}
+
+model ApiKey {
+  id             String          @id @default(uuid())
+  ownerKind      ApiKeyOwnerKind
+  ownerId        String // user id or service-account id
+  organizationId String
+  name           String
+  prefix         String // safe identification prefix only (§78)
+  secretHash     String // SHA-256 hash only (§77)
+  scopes         Json
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@index([ownerId])
+  @@index([organizationId])
+  @@index([prefix])
+}
+
+model OrganizationSecurityPolicy {
+  id                     String         @id @default(uuid())
+  organizationId         String         @unique
+  mfaRequirement         MfaRequirement @default(OPTIONAL)
+  ssoRequirement         String         @default("OPTIONAL") // OPTIONAL | SSO_REQUIRED
+  passwordLoginAllowed   Boolean        @default(true)
+  sessionIdleMinutes     Int            @default(30)
+  sessionAbsoluteMinutes Int            @default(720)
+  apiKeyMaxLifetimeDays  Int?
+  patAllowed             Boolean        @default(true)
+  scimEnabled            Boolean        @default(false)
+  jitEnabled             Boolean        @default(false)
+  stepUpActions          Json? // action names requiring step-up (§36)
+  updatedAt              DateTime       @updatedAt
+  createdAt              DateTime       @default(now())
+}
+
+model PasswordPolicy {
+  id                      String   @id @default(uuid())
+  organizationId          String   @unique
+  minLength               Int      @default(12)
+  maxLength               Int      @default(128)
+  historyCount            Int      @default(5)
+  compromisedCheckEnabled Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model BreakGlassEnrollment {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String
+  status         String    @default("ACTIVE") // ACTIVE | DISABLED
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+}
+
+model AccessReview {
+  id             String             @id @default(uuid())
+  organizationId String
+  title          String
+  status         AccessReviewStatus @default(OPEN)
+  createdBy      String
+  dueAt          DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId])
+}
+
+model AccessReviewItem {
+  id           String                @id @default(uuid())
+  reviewId     String
+  subjectType  String // MEMBERSHIP | WORKSPACE_MEMBERSHIP | SERVICE_ACCOUNT | API_KEY
+  subjectId    String
+  subjectLabel String
+  decision     AccessReviewDecision?
+  decidedBy    String?
+  decidedAt    DateTime?
+  createdAt    DateTime              @default(now())
+
+  @@index([reviewId])
 }

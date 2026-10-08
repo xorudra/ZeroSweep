@@ -255,3 +255,8 @@ export * from "./continuous/workflow";
 export * from "./continuous/notifications";
 export * from "./continuous/webhook";
 export * from "./continuous/retest-policy";
+export * from "./identity/index";
+
+// Prompt 23: the identity module owns the canonical sha256Hex export
+// (the mobile intake helper of the same name stays module-internal).
+export { sha256Hex } from "./identity/crypto";

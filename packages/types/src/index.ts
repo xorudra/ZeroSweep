@@ -1,7 +1,7 @@
 // Shared application types. Keep API contracts explicit here; never import
 // backend implementation details into the frontend.
 
-export const ROLES = ["OWNER", "ADMIN", "SECURITY_ENGINEER", "ANALYST", "VIEWER"] as const;
+export const ROLES = ["OWNER", "ADMIN", "SECURITY_ADMIN", "SECURITY_ENGINEER", "MEMBER", "ANALYST", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const TARGET_TYPES = [

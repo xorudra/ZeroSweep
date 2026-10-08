@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 22 complete (Prompts 1–22).** Production monorepo, backend and
+> **Status — Phase 23 complete (Prompts 1–23).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -224,9 +224,32 @@ and the AI health endpoint.
 20. ✅ Unified vulnerability management, reporting & executive dashboard (Prompt 20)
 21. ✅ AI Security Copilot & intelligent analysis engine (Prompt 21)
 22. ✅ Continuous monitoring, intelligent scheduler & change detection (Prompt 22)
+23. ✅ Enterprise authentication, SSO, MFA, SCIM & organization management (Prompt 23)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 23: Enterprise Authentication, SSO, MFA, SCIM &
+  Organization Management.** Enterprise identity layered on top of the
+  existing local auth (never replacing it): server-side sessions with
+  hashed opaque tokens, idle/absolute policy lifetimes, immediate
+  revocation and current-membership role resolution; MFA with
+  AES-256-GCM-encrypted TOTP secrets, replay-protected verification,
+  single-use hashed recovery codes and passkeys (WebAuthn, counter
+  clone detection); OIDC (Authorization Code + PKCE, strict RS256
+  ID-token validation) and SAML (dependency-free validator: XXE refused,
+  enveloped rsa-sha256 only, assertion replay consumption) with JIT
+  provisioning whose roles come only from approved group mappings;
+  break-glass admins whose audited password logins survive SSO
+  enforcement, which itself cannot be enabled without a recovery path;
+  SCIM 2.0 provisioning with dedicated per-organization bearer tokens,
+  a strict filter parser and disable-never-delete deprovisioning;
+  service accounts and API keys with a closed typed scope catalog
+  (shown once, hash-only at rest); identity governance — security and
+  password policies, domain verification, single-use invitations and
+  access reviews whose decisions execute real revocations. Unconfigured
+  organizations honestly report SSO/SCIM NOT_CONFIGURED; verification is
+  fixture-IdP only (no live IdP exists in this environment) and SAML
+  encrypted assertions report NOT_SUPPORTED.
 - **2026-10-08 — Prompt 22: Continuous Monitoring, Intelligent
   Scheduler & Change Detection.** Governed recurrence over the
   existing platform: monitoring policies bound to SAFE_AUTOMATED

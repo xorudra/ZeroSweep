@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, Req } from "@nestjs/common";
 import { CurrentUser, Public, type RequestUser } from "../../common/decorators/auth.decorators";
 import { QueueService } from "../../queue/queue.service";
 import { AuthService } from "./auth.service";
@@ -13,7 +13,7 @@ export class AuthController {
 
   @Public()
   @Post("login")
-  async login(@Body() body: unknown) { return this.auth.login(body); }
+  async login(@Body() body: unknown, @Req() req: { ip?: string }) { return this.auth.login(body, req?.ip ?? "unknown"); }
 
   @Get("me")
   async me(@CurrentUser() user: RequestUser) { return user; }

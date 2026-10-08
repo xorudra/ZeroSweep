@@ -16,6 +16,21 @@ export default function SettingsPage() {
             never plaintext secrets. Manage them via the API under <code className="text-cyan-300">/api/v1/credentials</code> (Owner/Admin).
           </p>
         </Card>
+        <Card eyebrow="Identity" title="Members, SSO & SCIM">
+          <p className="text-sm text-slate-400">
+            Enterprise identity (Prompt 23): organization members and invitations, OIDC/SAML single sign-on with
+            break-glass recovery, SCIM provisioning with approved group → role mappings, access reviews, MFA and
+            passkeys, device sessions, API keys and service accounts. Secrets are references only — never values.
+          </p>
+          <p className="mt-2 text-sm"><Link href="/settings/organization/members" className="text-sky-300 hover:underline">Members →</Link>{" · "}
+          <Link href="/settings/organization/sso" className="text-sky-300 hover:underline">SSO & policy →</Link>{" · "}
+          <Link href="/settings/organization/scim" className="text-sky-300 hover:underline">SCIM →</Link>{" · "}
+          <Link href="/settings/organization/access-reviews" className="text-sky-300 hover:underline">Access reviews →</Link></p>
+          <p className="mt-1 text-sm"><Link href="/settings/security/mfa" className="text-sky-300 hover:underline">My MFA & passkeys →</Link>{" · "}
+          <Link href="/settings/security/sessions" className="text-sky-300 hover:underline">My sessions →</Link>{" · "}
+          <Link href="/settings/api-keys" className="text-sky-300 hover:underline">API keys →</Link>{" · "}
+          <Link href="/settings/service-accounts" className="text-sky-300 hover:underline">Service accounts →</Link></p>
+        </Card>
         <Card eyebrow="Scanners" title="Scanner instances">
           <p className="text-sm text-slate-400">
             OWASP ZAP, Burp Suite Professional and Caido connect as admin-registered instances (Prompt 8).
