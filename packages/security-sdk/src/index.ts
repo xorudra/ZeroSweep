@@ -296,3 +296,12 @@ export * from "./easm/index";
 // foundations, coverage honesty, and the governed detection-only
 // adapters (Dalfox/XSStrike/SQLmap/Commix/SSTImap/WPScan).
 export * from "./webvapt/index";
+
+// Prompt 33 — Advanced Network VAPT V2: governed targets/preflight/
+// plans on the Prompt 10 engine, V2 NSE categories over the V1 catalog,
+// protocol/TLS/OS analysis over recorded evidence, scanner
+// normalization + multi-scanner correlation (Prompt 11 parsers),
+// defensive exploit references, the Metasploit verification POLICY
+// (transport NOT_PROVISIONED), packet-capture governance, topology/
+// exposure, drift, coverage honesty, Risk V3 signals, fix verification.
+export * from "./netvapt/index";

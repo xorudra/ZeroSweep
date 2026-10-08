@@ -908,6 +908,23 @@ enum AuditAction {
   HIGH_RISK_TEST_APPROVED
   WEB_VAPT_FINDING_CREATED
   WEB_VAPT_FINDING_VERIFIED
+  // Prompt 33 §131: Network VAPT V2 audit actions. NETWORK_SCAN_COMPLETED
+  // already exists above (Prompt 10 §85) and is reused, not duplicated.
+  // Metadata for these actions never contains credentials (§59/§62).
+  NETWORK_TARGET_CREATED
+  NETWORK_PREFLIGHT_COMPLETED
+  NETWORK_SCAN_PLANNED
+  NETWORK_SCAN_STARTED
+  NETWORK_SCAN_PARTIAL
+  NETWORK_SCAN_CANCELLED
+  NETWORK_HOST_DISCOVERED
+  NETWORK_SERVICE_DISCOVERED
+  NETWORK_VULNERABILITY_FOUND
+  NETWORK_VULNERABILITY_VERIFIED
+  NETWORK_DRIFT_DETECTED
+  PACKET_CAPTURE_STARTED
+  PACKET_CAPTURE_COMPLETED
+  CONTROLLED_METASPLOIT_VERIFICATION_REQUESTED
 }
 
 enum NotificationType {
@@ -9578,4 +9595,253 @@ model WebToolHealth {
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
+}
+
+// =====================================================================
+// Prompt 33 — Advanced Network VAPT V2.
+// V2 deepens the Prompt 10 network engine on the SAME canonical data:
+// targets bind a VERIFIED parent Target + APPROVED assessment (the
+// authorization record), plans freeze an immutable ScanScopeSnapshot,
+// host/service/OS observations accumulate per workspace, and packet
+// captures + Metasploit verification requests are governed records.
+// Credentials are secret REFERENCES only — no plaintext secret column
+// exists anywhere in this block.
+// =====================================================================
+
+// §3: a governed network VAPT target.
+model NetworkVaptTarget {
+  id              String   @id @default(uuid())
+  organizationId  String
+  workspaceId     String
+  assetId         String
+  targetId        String
+  targetType      String // IP | CIDR | HOSTNAME | AUTHORIZED_ASSET_GROUP
+  targetValue     String // canonical value (normalization precedes scope, §6)
+  authorizationId String // the APPROVED Assessment (the authorization record)
+  environment     String   @default("PRODUCTION")
+  criticality     String   @default("UNSPECIFIED")
+  scanProfileId   String   @default("NETWORK_SAFE")
+  status          String   @default("ACTIVE")
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workspaceId, targetType])
+  @@index([workspaceId, assetId])
+}
+
+// §8/§9: one preflight evaluation per run — real authorization facts,
+// transport honestly NOT_CONFIGURED where unwired.
+model NetworkVaptPreflightResult {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  targetId       String
+  status         String // READY | READY_WITH_WARNINGS | BLOCKED | UNREACHABLE | TOOL_UNAVAILABLE
+  checks         Json     @default("[]")
+  probeTransport String   @default("NOT_CONFIGURED")
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@index([workspaceId, targetId, createdAt])
+}
+
+// §10/§11/§17/§27/§37: a scan plan over a frozen scope snapshot, with
+// the exact tools/scripts/budget and every blocked item visible.
+model NetworkVaptScanPlan {
+  id                     String   @id @default(uuid())
+  workspaceId            String
+  targetId               String
+  scanId                 String?
+  profile                String
+  stages                 Json     @default("[]")
+  tools                  Json     @default("[]")
+  portPolicy             Json     @default("{}")
+  rateLimits             Json     @default("{}")
+  timeouts               Json     @default("{}")
+  serviceDetection       Boolean  @default(true)
+  vulnerabilityScanners  Json     @default("[]")
+  verificationPolicy     Json     @default("{}")
+  estimatedWorkloadClass String   @default("SMALL")
+  budget                 Json     @default("{}")
+  scopeSnapshotId        String?
+  scriptsUsed            Json     @default("[]")
+  blockedItems           Json     @default("[]")
+  status                 String   @default("PLANNED") // PLANNED | BLOCKED | STARTED | CANCELLED
+  createdById            String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([workspaceId, targetId, createdAt])
+  @@index([workspaceId, scanId])
+}
+
+// §22: host observations from every discovery method — merged into
+// canonical assets by the Asset service; observations never authorize
+// scanning (§21).
+model NetworkHostObservation {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  assetId         String?
+  ip              String
+  hostname        String?
+  macAddress      String?
+  vendorHint      String?
+  discoveryMethod String // NMAP | NETDISCOVER | ARP_SCAN | DNS | IMPORT
+  hostStatus      String   @default("UNKNOWN") // UP | DOWN | UNKNOWN | FILTERED
+  scopeStatus     String // IN_SCOPE | CANDIDATE | EXCLUDED
+  confidence      Float    @default(0)
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([workspaceId, ip, discoveryMethod])
+  @@index([workspaceId, scopeStatus])
+}
+
+// §40: OS fingerprint observations — confidence preserved, weak
+// fingerprints never become confirmed OS facts.
+model OsFingerprintObservation {
+  id          String   @id @default(uuid())
+  workspaceId String
+  assetId     String?
+  host        String
+  family      String
+  versionHint String?
+  confidence  Float
+  band        String // LOW | MEDIUM | HIGH | VERIFIED
+  source      String
+  observedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, host])
+}
+
+// §95: a named network segment with zone + ownership.
+model NetworkSegment {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  cidr        String
+  environment String   @default("PRODUCTION")
+  zone        String   @default("UNKNOWN") // INTERNET | DMZ | INTERNAL | RESTRICTED | MANAGEMENT | UNKNOWN
+  criticality String   @default("MEDIUM")
+  owner       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, cidr])
+  @@index([workspaceId, zone])
+}
+
+// §104: baselines are immutable + versioned (no updatedAt by design).
+model NetworkBaseline {
+  id          String   @id @default(uuid())
+  workspaceId String
+  segmentId   String?
+  version     Int
+  hosts       Json     @default("[]")
+  hash        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, segmentId, version])
+  @@index([workspaceId, createdAt])
+}
+
+// §102: drift events from snapshot comparison — contextual signals.
+model NetworkDriftEvent {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  baselineId   String?
+  host         String
+  assetId      String?
+  kind         String // HOST_ADDED | SERVICE_ADDED | VERSION_CHANGED | …
+  detail       String
+  riskSignal   String   @default("STANDARD") // ELEVATED | STANDARD
+  signalReason String?
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, host])
+}
+
+// §121: per-scan V2 coverage — gaps make COMPLETED_WITH_GAPS (§123).
+model NetworkVaptCoverage {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  scanId               String   @unique
+  authorizedHosts      Int      @default(0)
+  discoveredHosts      Int      @default(0)
+  scannedHosts         Int      @default(0)
+  portCoverage         Float?
+  serviceCoverage      Float?
+  vulnScannerCoverage  Float?
+  credentialedCoverage Float?
+  limitations          Json     @default("[]")
+  completion           String   @default("COMPLETED_WITH_GAPS")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// §86: packet capture jobs — bounded, permissioned, passive. PCAP
+// bytes live in restricted object storage (§88); this row is metadata.
+model NetworkPacketCaptureJob {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  targetId           String?
+  scanId             String?
+  interfaceReference String
+  filter             String?
+  durationSeconds    Int
+  sizeLimitBytes     Int
+  status             String    @default("REQUESTED") // REQUESTED | RUNNING | COMPLETED | FAILED | DENIED
+  evidenceRef        String?
+  summary            Json      @default("{}")
+  transport          String    @default("NOT_CONFIGURED")
+  createdById        String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([workspaceId, createdAt])
+}
+
+// §72: defensive exploit-reference metadata ONLY (global intel table,
+// populated solely by governed dataset imports — never by execution).
+model DefensiveExploitReference {
+  id              String    @id @default(uuid())
+  referenceId     String    @unique
+  title           String
+  affectedProduct String
+  cveIds          Json      @default("[]")
+  source          String
+  referenceUrl    String
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([affectedProduct])
+}
+
+// §77: controlled Metasploit verification requests — evaluated against
+// the allowlist + payload policy + scope, recorded, NEVER executed by
+// an automated path (transport NOT_PROVISIONED in this build).
+model MetasploitVerificationRequest {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  targetId      String?
+  findingId     String
+  host          String
+  moduleId      String
+  decision      String // APPROVED_FOR_MANUAL_CONTROLLED_RUN | REJECTED | BLOCKED
+  reasons       Json     @default("[]")
+  transport     String   @default("NOT_PROVISIONED")
+  requestedById String?
+  createdAt     DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
 }

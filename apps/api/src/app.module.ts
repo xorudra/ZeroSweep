@@ -43,6 +43,7 @@ import { SecurityAnalyticsModule } from "./modules/security-analytics/security-a
 import { SocModule } from "./modules/soc/soc.module";
 import { EasmModule } from "./modules/easm/easm.module";
 import { WebVaptModule } from "./modules/web-vapt/web-vapt.module";
+import { NetworkVaptModule } from "./modules/network-vapt/network-vapt.module";
 import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelligence/vulnerability-intelligence.module";
 import { RemediationModule } from "./modules/remediation/remediation.module";
 
@@ -72,6 +73,7 @@ import { RemediationModule } from "./modules/remediation/remediation.module";
     SocModule,
     EasmModule,
     WebVaptModule,
+    NetworkVaptModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

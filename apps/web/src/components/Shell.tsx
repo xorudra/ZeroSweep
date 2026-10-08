@@ -60,6 +60,7 @@ export const NAV = [
   { href: "/easm/certificates", label: "Certificates" },
   { href: "/vapt/web", label: "Web VAPT V2" },
   { href: "/vapt/api", label: "API VAPT V2" },
+  { href: "/vapt/network", label: "Network VAPT V2" },
   { href: "/soc", label: "SOC" },
   { href: "/soc/alerts", label: "SOC Alerts" },
   { href: "/soc/incidents", label: "Incidents" },
