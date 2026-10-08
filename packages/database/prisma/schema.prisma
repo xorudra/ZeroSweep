@@ -732,6 +732,19 @@ enum AuditAction {
   AI_POLICY_BLOCKED
   AI_ACTION_PROPOSED
   AI_FEEDBACK_SUBMITTED
+  // Prompt 36 §133: AI Security Copilot V2 audit actions. Same rule:
+  // metadata carries ids, counts and reason codes only — never raw
+  // prompts, raw evidence, tool arguments or secrets (§129–§132).
+  AI_RETRIEVAL_PERFORMED
+  AI_PLAN_CREATED
+  AI_PLAN_REJECTED
+  AI_ACTION_APPROVAL_REQUESTED
+  AI_ACTION_APPROVED
+  AI_ACTION_REJECTED
+  AI_WORKFLOW_STARTED
+  AI_WORKFLOW_COMPLETED
+  AI_TOOL_CALLED
+  AI_FEEDBACK_RECEIVED
   AI_PROVIDER_CHANGED
   AI_MODEL_CHANGED
   AI_KNOWLEDGE_DOCUMENT_ADDED
@@ -5882,7 +5895,8 @@ model AiProviderConfig {
 }
 
 // §4: model registry — capabilities, context limit, allowed tasks,
-// health. Business logic never hard-codes a vendor (§3).
+// health. Business logic never hard-codes a vendor (§3). Prompt 36 §4
+// adds the V2 capability/cost/latency tracking the model router uses.
 model AiModel {
   id            String    @id @default(uuid())
   workspaceId   String
@@ -5896,6 +5910,12 @@ model AiModel {
   costMetadata  Json?
   healthStatus  String    @default("UNKNOWN")
   lastCheckedAt DateTime?
+  // Prompt 36 §4: V2 routing capabilities.
+  structuredOutputSupport Boolean @default(false)
+  toolCallingSupport      Boolean @default(false)
+  embeddingSupport        Boolean @default(false)
+  costClass               String  @default("LOW") // FREE | LOW | MEDIUM | HIGH
+  latencyClass            String  @default("STANDARD") // FAST | STANDARD | SLOW
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -5916,6 +5936,16 @@ model AiWorkspacePolicy {
   chatRetentionDays Int      @default(30)
   primaryModelId    String?
   fallbackModelId   String?
+  // Prompt 36 §139/§6/§143/§159: V2 workspace AI settings — allowed
+  // models, data residency, approval policy, per-kind retention.
+  // Platform hard safety controls (§140) are NOT fields here: a
+  // workspace admin cannot weaken them through settings.
+  allowedModelIds        String[] @default([])
+  dataResidencyRegion    String?
+  allowExternalProviders Boolean  @default(true)
+  approvalPolicy         String   @default("SOD_RESTRICTED") // SOD_RESTRICTED | STANDARD
+  retentionTraceDays     Int      @default(90)
+  retentionEvaluationDays Int     @default(365)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
@@ -6058,6 +6088,8 @@ model AiActionProposal {
 }
 
 // §85: analyst feedback on AI responses (quality signal, §86).
+// Prompt 36 §98/§99: rating set gains MISSING_EVIDENCE and OTHER, and
+// analysts may attach a corrected interpretation (correction).
 model AiFeedback {
   id           String   @id @default(uuid())
   workspaceId  String
@@ -6065,8 +6097,9 @@ model AiFeedback {
   messageId    String?
   requestLogId String?
   task         String?
-  rating       String // HELPFUL | NOT_HELPFUL | INCORRECT | UNSAFE | OUTDATED
+  rating       String // HELPFUL | NOT_HELPFUL | INCORRECT | MISSING_EVIDENCE | UNSAFE | OUTDATED | OTHER
   comment      String?
+  correction   String?
   createdAt    DateTime @default(now())
 
   @@index([workspaceId, rating])
@@ -6123,6 +6156,128 @@ model AiEvaluationRun {
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+// ---------------- AI Security Copilot V2 (Prompt 36) ----------------
+// V2 deepens the Prompt 21 copilot on the SAME architecture: plans,
+// human approvals, workflows, sanitized traces, workspace memory and
+// report drafts. None of these rows execute anything — a workflow
+// hands approved steps to the EXISTING deterministic services and
+// records proposals with executed:false semantics (§26/§33/§164).
+
+// §47: AI workflow. `plan` is the validated AiSecurityPlan JSON;
+// `authorizationSnapshotHash` binds the run to the immutable
+// authorization/scope snapshot (§46) — the snapshot itself is never
+// stored mutable here and AI cannot change it mid-run.
+model AiSecurityWorkflow {
+  id                        String    @id @default(uuid())
+  workspaceId               String
+  requestedBy               String
+  taskType                  String
+  objective                 String
+  mode                      String    @default("READ_ONLY") // READ_ONLY | ANALYSIS | PLANNING | APPROVAL_REQUIRED_ACTION (§25)
+  status                    String    @default("DRAFT") // DRAFT | VALIDATING | AWAITING_APPROVAL | APPROVED | RUNNING | PARTIAL | COMPLETED | FAILED | CANCELLED | REJECTED
+  plan                      Json      @default("{}")
+  validation                  Json      @default("{}") // deterministic validator verdict + findings (§43)
+  authorizationSnapshotHash String?
+  maxSteps                  Int       @default(8)
+  maxTokens                 Int       @default(12000)
+  result                    Json      @default("{}") // step outcomes; action steps reference proposal ids
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  completedAt               DateTime?
+
+  approvals AiActionApproval[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, requestedBy])
+}
+
+// §48: human approval for an AI-proposed action. The AI itself can
+// never be the approver (§49); expired approvals cannot be reused
+// (§50); separation of duties is enforced by policy (§143).
+model AiActionApproval {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workflowId  String
+  stepId      String?
+  requestedBy String
+  reason      String
+  riskClass   String    @default("LOW") // NONE | LOW | MEDIUM | HIGH | CRITICAL
+  scope       Json      @default("{}")
+  decision    String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  approvedBy  String?
+  approvedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  workflow AiSecurityWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, decision])
+  @@index([workflowId])
+}
+
+// §130/§131: sanitized AI trace. Metadata ONLY — request/retrieval
+// references, model metadata, tool NAMES, policy decisions,
+// validation results and timings. Full prompts/responses are never
+// stored here (§129); sensitive tool arguments are redacted (§132).
+model AiSecurityTrace {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  userId            String
+  requestLogId      String?
+  workflowId        String?
+  taskType          String
+  requestMetadata   Json     @default("{}")
+  retrievalRefs     Json     @default("[]") // sourceType/sourceId pairs only
+  modelMetadata     Json     @default("{}")
+  toolCalls         Json     @default("[]") // tool names + verdicts; arguments redacted
+  policyDecisions   Json     @default("[]")
+  validationResults Json     @default("[]")
+  timings           Json     @default("{}")
+  createdAt         DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, taskType])
+}
+
+// §95–§97: copilot memory — workspace-scoped, permission-aware,
+// purpose-limited preferences (report format, severity view, default
+// filters). Raw secrets and credentials are refused at the service
+// layer (§96) and never stored here.
+model AiCopilotMemory {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  kind        String   @default("PREFERENCE")
+  key         String
+  value       Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, userId, key])
+  @@index([workspaceId, userId])
+}
+
+// §144/§145: AI-assisted report draft. The draft is a review artifact
+// only — canonical reports (Prompt 20) stay authoritative; critical
+// customer-facing drafts require human review per workspace policy.
+model AiReportDraft {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  reportId     String?
+  title        String
+  content      String // sanitized model/rule-based output only
+  status       String   @default("DRAFT") // DRAFT | IN_REVIEW | APPROVED | FINALIZED
+  reviewStatus String   @default("UNREVIEWED") // UNREVIEWED | REVIEWED
+  reviewerId   String?
+  factCheck    Json     @default("{}") // §90 fact-check outcome at draft time
+  requestLogId String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([workspaceId, status])
 }
 
 // =====================================================================

@@ -49,6 +49,14 @@ export class AiConfigService {
       chatRetentionDays: (patch.chatRetentionDays as number) ?? existing?.chatRetentionDays ?? 30,
       primaryModelId: (patch.primaryModelId as string | null) ?? existing?.primaryModelId ?? null,
       fallbackModelId: (patch.fallbackModelId as string | null) ?? existing?.fallbackModelId ?? null,
+      // Prompt 36 §139 V2 settings (additive; §140 hard safety
+      // controls are not patchable through settings by design).
+      allowedModelIds: (patch.allowedModelIds as string[]) ?? existing?.allowedModelIds ?? [],
+      dataResidencyRegion: (patch.dataResidencyRegion as string | null) ?? existing?.dataResidencyRegion ?? null,
+      allowExternalProviders: (patch.allowExternalProviders as boolean) ?? existing?.allowExternalProviders ?? true,
+      approvalPolicy: (patch.approvalPolicy as string) ?? existing?.approvalPolicy ?? "SOD_RESTRICTED",
+      retentionTraceDays: (patch.retentionTraceDays as number) ?? existing?.retentionTraceDays ?? 90,
+      retentionEvaluationDays: (patch.retentionEvaluationDays as number) ?? existing?.retentionEvaluationDays ?? 365,
     };
     const row = existing
       ? await this.prisma.aiWorkspacePolicy.update({ where: { id: existing.id }, data })
@@ -132,6 +140,12 @@ export class AiConfigService {
         enabled: body.enabled !== false,
         allowedTasks: (body.allowedTasks as string[]) ?? [],
         costMetadata: (body.costMetadata as object) ?? undefined,
+        // Prompt 36 §4: V2 capability / cost / latency tracking.
+        structuredOutputSupport: body.structuredOutputSupport === true,
+        toolCallingSupport: body.toolCallingSupport === true,
+        embeddingSupport: body.embeddingSupport === true,
+        costClass: (body.costClass as string) ?? "LOW",
+        latencyClass: (body.latencyClass as string) ?? "STANDARD",
       },
     });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId, action: "AI_MODEL_CHANGED", resourceType: "AiModel", resourceId: row.id, metadata: { modelName: row.modelName } });
@@ -167,6 +181,53 @@ export class AiConfigService {
     if (!primary) return null;
     const fallback = policy.fallbackModelId && policy.fallbackModelId !== primary.modelRow.id ? pick(policy.fallbackModelId) : null;
     return { primary, fallback };
+  }
+
+  /** Prompt 36 §4/§5: V2 model capability records for the router —
+   *  built from the same registry rows; health stays honest:
+   *  non-MOCK transports in this build are NOT_CONFIGURED (§110). */
+  async listModelCapabilities(workspaceId: string) {
+    const [providers, models] = await Promise.all([
+      this.prisma.aiProviderConfig.findMany({ where: { workspaceId } }),
+      this.prisma.aiModel.findMany({ where: { workspaceId } }),
+    ]);
+    return models.map((m) => {
+      const p = providers.find((x) => x.id === m.providerId);
+      const transportProvisioned = p?.providerType === "MOCK";
+      return {
+        modelId: m.id,
+        providerName: p?.name ?? "unknown",
+        providerType: p?.providerType ?? "NONE",
+        modelName: m.modelName,
+        contextWindow: m.contextLimit,
+        structuredOutputSupport: m.structuredOutputSupport ?? false,
+        toolCallingSupport: m.toolCallingSupport ?? false,
+        embeddingSupport: m.embeddingSupport ?? (m.capabilities?.includes("EMBED") ?? false),
+        generateSupport: m.capabilities?.includes("GENERATE") ?? true,
+        availability: !p?.enabled || !m.enabled ? "UNAVAILABLE" as const
+          : transportProvisioned ? (m.healthStatus === "UNAVAILABLE" ? "UNAVAILABLE" as const : "AVAILABLE" as const)
+          : "NOT_CONFIGURED" as const,
+        costClass: (m.costClass ?? "LOW") as "FREE" | "LOW" | "MEDIUM" | "HIGH",
+        latencyClass: (m.latencyClass ?? "STANDARD") as "FAST" | "STANDARD" | "SLOW",
+        isExternal: p?.isExternal ?? true,
+        region: p?.region ?? null,
+        approvedClassifications: (p?.approvedClassifications ?? ["PUBLIC", "INTERNAL"]) as never,
+        enabled: !!p?.enabled && m.enabled,
+      };
+    });
+  }
+
+  /** Prompt 36 §5/§6/§139: the tenant routing policy for a workspace. */
+  async getRoutingPolicy(workspaceId: string) {
+    const row = await this.prisma.aiWorkspacePolicy.findFirst({ where: { workspaceId } });
+    return {
+      allowedModelIds: row?.allowedModelIds ?? [],
+      dataResidencyRegion: row?.dataResidencyRegion ?? null,
+      allowExternalProviders: row?.allowExternalProviders ?? true,
+      approvalPolicy: row?.approvalPolicy ?? "SOD_RESTRICTED",
+      maxCostClass: undefined as undefined | "FREE" | "LOW" | "MEDIUM" | "HIGH",
+      preferredModelId: row?.primaryModelId ?? null,
+    };
   }
 
   /** §110 provider health — statuses only, never credentials. */

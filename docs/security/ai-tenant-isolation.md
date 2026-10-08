@@ -27,3 +27,23 @@ workspaces:
   embeddings with identical content.
 - Conversations are listed per (workspace, user) — another user's or
   tenant's conversation is not retrievable.
+
+## Prompt 36 additions (§12/§105/§164)
+
+V2 adds two more independent layers on top of the four above:
+
+5. **Retrieval filter.** The SDK retrieval choke point
+   (`filterRetrievalCandidates`) drops any candidate whose
+   workspaceId differs from the request workspace, recording the
+   reason; candidates are never re-homed into another tenant's
+   context. Per-source permissions and classification ceilings are
+   enforced in the same pass, and skipped sources are disclosed.
+6. **Plan layer.** The planner's authorization snapshot is built
+   from the request workspace only and plans bind its hash; the
+   deterministic validator rejects target references outside the
+   snapshot (§107), and execution re-validates against the current
+   snapshot (§150).
+
+Memory is per (workspace, user) (§95); traces, approvals, workflows
+and evaluations are workspace-scoped rows. The §105 red-team case
+and API-level isolation tests exercise all layers in CI.

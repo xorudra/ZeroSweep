@@ -18,7 +18,8 @@ const ACTION_PERMISSION: Record<string, string> = {
   ASSIGN_FINDING: "ASSIGN_FINDINGS",
   CREATE_REPORT_DRAFT: "GENERATE_REPORT",
 };
-const FEEDBACK_RATINGS = ["HELPFUL", "NOT_HELPFUL", "INCORRECT", "UNSAFE", "OUTDATED"] as const;
+// Prompt 36 §98: rating set extended with MISSING_EVIDENCE and OTHER.
+const FEEDBACK_RATINGS = ["HELPFUL", "NOT_HELPFUL", "INCORRECT", "MISSING_EVIDENCE", "UNSAFE", "OUTDATED", "OTHER"] as const;
 
 /**
  * Copilot platform services (Prompt 21 §41–§45 NL search, §70–§73
@@ -141,15 +142,20 @@ export class AiPlatformService {
 
   // ---------- Feedback (§85/§86) ----------
 
-  async submitFeedback(user: RequestUser, workspaceId: string, body: { messageId?: string; requestLogId?: string; task?: string; rating: string; comment?: string }) {
+  async submitFeedback(user: RequestUser, workspaceId: string, body: { messageId?: string; requestLogId?: string; task?: string; rating: string; comment?: string; correction?: string }) {
     requireAiPermission(user, "USE_AI_COPILOT");
     if (!(FEEDBACK_RATINGS as readonly string[]).includes(body.rating)) {
       throw new BadRequestException(`rating must be one of ${FEEDBACK_RATINGS.join(", ")}`);
     }
     const row = await this.prisma.aiFeedback.create({
-      data: { workspaceId, userId: user.id, messageId: body.messageId, requestLogId: body.requestLogId, task: body.task, rating: body.rating, comment: body.comment?.slice(0, 2000) },
+      data: {
+        workspaceId, userId: user.id, messageId: body.messageId, requestLogId: body.requestLogId, task: body.task,
+        rating: body.rating, comment: body.comment?.slice(0, 2000),
+        // §99: the analyst's corrected interpretation, stored verbatim.
+        correction: body.correction?.slice(0, 4000),
+      },
     });
-    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId, action: "AI_FEEDBACK_SUBMITTED", resourceType: "AiFeedback", resourceId: row.id, metadata: { rating: body.rating, task: body.task } });
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId, action: "AI_FEEDBACK_RECEIVED", resourceType: "AiFeedback", resourceId: row.id, metadata: { rating: body.rating, task: body.task, hasCorrection: !!body.correction } });
     return row;
   }
 
