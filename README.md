@@ -30,6 +30,11 @@ down after ~15 minutes idle (slow first wake) and free Postgres expires after
 30 days. For a real production topology (HA, DR, observability), see `deploy/`
 instead — the Render deployment is the public demo, not that path.
 
+Uptime is monitored by UptimeRobot (free): **DSRclone Web**, **DSRclone API**
+(`/api/v1/health/live`), **DSRclone AI** (`/health`) and **DSRclone Worker**,
+each checked every 5 minutes with downtime alerts by email. The 5-minute
+checks also keep the free services warm during the day.
+
 > **Status — Phase 40 complete (Prompts 1–40).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
