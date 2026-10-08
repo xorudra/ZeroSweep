@@ -687,6 +687,30 @@ enum AuditAction {
   AI_PROVIDER_CHANGED
   AI_MODEL_CHANGED
   AI_KNOWLEDGE_DOCUMENT_ADDED
+  // Prompt 22 §88: continuous monitoring / scheduler / automation audit
+  // actions. Metadata carries ids, counts and reason codes only.
+  MONITORING_POLICY_CREATED
+  MONITORING_POLICY_UPDATED
+  MONITORING_POLICY_DELETED
+  SCHEDULE_CREATED
+  SCHEDULE_UPDATED
+  SCHEDULE_DELETED
+  SCHEDULE_PAUSED
+  SCHEDULE_RESUMED
+  SCHEDULE_RUN_STARTED
+  SCHEDULE_RUN_COMPLETED
+  SCHEDULE_RUN_BLOCKED
+  POSTURE_SNAPSHOT_CREATED
+  ASSET_DRIFT_DETECTED
+  FINDING_DRIFT_DETECTED
+  RISK_DRIFT_DETECTED
+  AUTO_RETEST_REQUESTED
+  WORKFLOW_CREATED
+  WORKFLOW_UPDATED
+  WORKFLOW_TRIGGERED
+  WORKFLOW_ACTION_EXECUTED
+  NOTIFICATION_SENT
+  NOTIFICATION_POLICY_UPDATED
 }
 
 enum NotificationType {
@@ -5237,5 +5261,449 @@ model AiEvaluationRun {
   createdBy   String
   createdAt   DateTime @default(now())
 
+  @@index([workspaceId, createdAt])
+}
+
+// =====================================================================
+// Prompt 22 — Continuous Security Monitoring, Scheduler & Automation
+// =====================================================================
+
+// §3: a monitoring policy binds a governed target selector + a SAFE
+// scan profile + frequency to continuous monitoring. The policy never
+// widens authorization: every resolved target is re-authorized at
+// schedule creation AND before every run (§25).
+model MonitoringPolicy {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  name               String
+  enabled            Boolean  @default(true)
+  // §5 MonitoringTargetSelector JSON (explicit ids / tags / env / BU /
+  // asset type / criticality). Discovered third-party assets are never
+  // auto-monitored (§4) — selectors resolve inside the workspace only.
+  targetSelector     Json     @default("{}")
+  scanProfile        String // AssessmentProfile name — must classify SAFE_AUTOMATED
+  frequency          String   @default("DAILY") // HOURLY|DAILY|WEEKLY|MONTHLY|CUSTOM
+  cronExpression     String?
+  timezone           String   @default("UTC")
+  safeOnly           Boolean  @default(true)
+  riskThreshold      Float?
+  retestPolicy       Json     @default("{}") // AutoRetestPolicy knobs (§51)
+  notificationPolicy Json     @default("{}")
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// §6: one recurring schedule. kind SCAN materializes through the gated
+// orchestration path; REPORT executes Prompt 20 ReportSchedule
+// definitions; REVALIDATION creates Prompt 16 validation requests
+// that still require their own approval; INTEL_SYNC refreshes intel
+// per the configured data-source policy (§49). No kind bypasses a gate.
+model SecuritySchedule {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  policyId         String?
+  name             String
+  kind             String    @default("SCAN") // SCAN|REPORT|REVALIDATION|INTEL_SYNC|RETEST
+  assessmentId     String?
+  reportScheduleId String?
+  profile          String? // snapshot of the approved assessment profile (SCANS)
+  expression       String // governed cron-like expression (validated)
+  frequency        String    @default("DAILY")
+  timezone         String    @default("UTC")
+  nextRunAt        DateTime
+  lastRunAt        DateTime?
+  lastStatus       String? // ScheduleRunStatus of the most recent run
+  enabled          Boolean   @default(true)
+  paused           Boolean   @default(false)
+  failureCount     Int       @default(0)
+  missedRunPolicy  String    @default("RUN_ONCE") // SKIP|RUN_ONCE|CATCH_UP_LIMITED
+  allowConcurrent  Boolean   @default(false) // §18 duplicate-run opt-in
+  createdBy        String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([workspaceId, enabled])
+  @@index([nextRunAt, enabled])
+}
+
+// One materialized (or refused) scheduled run. scheduleRunKey is the
+// §19 deterministic idempotency key — unique across the platform, so
+// two scheduler nodes racing the same due instant produce ONE run.
+model ScheduleRun {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  scheduleId          String
+  scheduleRunKey      String    @unique
+  scheduledFor        DateTime
+  status              String // ENQUEUED|COMPLETED|FAILED|BLOCKED|SKIPPED|DEFERRED|PENDING_APPROVAL
+  reasonCode          String?
+  reason              String?
+  scanId              String?
+  reportId            String?
+  validationRequestId String?
+  retestRequestId     String?
+  attempts            Int       @default(0)
+  nextAttemptAt       DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([workspaceId, scheduleId])
+  @@index([workspaceId, createdAt])
+  @@index([status])
+}
+
+// §24: distributed scheduler lease — one row per scope ("global").
+model SchedulerLease {
+  id          String   @id @default(uuid())
+  scope       String   @unique
+  owner       String
+  leaseUntil  DateTime
+  heartbeatAt DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Per-workspace scheduler quotas (§13/§17/§95/§96).
+model SchedulerSettings {
+  id                          String   @id @default(uuid())
+  workspaceId                 String   @unique
+  maxConcurrentScheduledScans Int      @default(2)
+  dailyRunBudget              Int      @default(200)
+  queueDepthThreshold         Int      @default(100)
+  leaseTtlSeconds             Int      @default(120)
+  maxRetryAttempts            Int      @default(3)
+  updatedBy                   String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+// §15: allowed/blocked scan hours in an explicit timezone.
+model MaintenanceWindow {
+  id          String   @id @default(uuid())
+  workspaceId String
+  policyId    String?
+  name        String
+  daysOfWeek  Json     @default("[]") // number[] 0=Sunday
+  startTime   String // HH:MM
+  endTime     String // HH:MM
+  timezone    String   @default("UTC")
+  mode        String   @default("ALLOWED_HOURS") // ALLOWED_HOURS|BLOCKED_HOURS
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// §16: blackout window — scheduled jobs must respect it (defer/skip).
+model BlackoutWindow {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  reason      String?
+  startsAt    DateTime
+  endsAt      DateTime
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, startsAt])
+}
+
+// §29: immutable posture snapshot. Rows are never updated after
+// creation (§32) — history is read from these, never recomputed.
+model SecurityPostureSnapshot {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  capturedAt         DateTime @default(now())
+  source             String   @default("SCHEDULED") // SCHEDULED|MANUAL|SCAN_COMPLETION
+  assetCount         Int
+  findingCount       Int
+  findingsBySeverity Json     @default("{}")
+  findingsByStatus   Json     @default("{}")
+  kevCount           Int      @default(0)
+  verifiedFindings   Int      @default(0)
+  slaOverdue         Int      @default(0)
+  slaDueSoon         Int      @default(0)
+  coverage           Float?
+  riskScore          Float?
+  contentHash        String
+
+  @@index([workspaceId, capturedAt])
+}
+
+// §30: one asset-state capture run (header) + normalized entries.
+model AssetSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  capturedAt  DateTime @default(now())
+  source      String   @default("SCHEDULED")
+  entryCount  Int      @default(0)
+  contentHash String
+
+  @@index([workspaceId, capturedAt])
+}
+
+model AssetSnapshotEntry {
+  id            String  @id @default(uuid())
+  snapshotId    String
+  workspaceId   String
+  assetKey      String
+  assetId       String?
+  host          String
+  type          String
+  exposure      String  @default("UNKNOWN")
+  scopeStatus   String  @default("IN_SCOPE")
+  criticality   String  @default("UNSPECIFIED")
+  ports         Json    @default("[]")
+  services      Json    @default("[]")
+  endpointCount Int     @default(0)
+  stateHash     String
+
+  @@index([snapshotId])
+  @@index([workspaceId, assetKey])
+}
+
+// §31: one finding-state capture run (header) + entries.
+model FindingSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  capturedAt  DateTime @default(now())
+  source      String   @default("SCHEDULED")
+  entryCount  Int      @default(0)
+  contentHash String
+
+  @@index([workspaceId, capturedAt])
+}
+
+model FindingSnapshotEntry {
+  id                 String  @id @default(uuid())
+  snapshotId         String
+  workspaceId        String
+  findingId          String?
+  fingerprint        String
+  status             String
+  lifecycleStatus    String
+  severity           String
+  priority           String?
+  riskScore          Float?
+  verificationStatus String
+  kevListed          Boolean @default(false)
+  cve                String?
+  stateHash          String
+
+  @@index([snapshotId])
+  @@index([workspaceId, fingerprint])
+}
+
+// §34: attack-surface changes detected between asset snapshots.
+model AttackSurfaceChange {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  type           String // NEW_DOMAIN|NEW_SUBDOMAIN|NEW_HOST|NEW_PORT|NEW_SERVICE|NEW_WEB_APP|NEW_API|NEW_CLOUD_RESOURCE|NEW_PUBLIC_RESOURCE|NEW_REPOSITORY|NEW_CONTAINER_IMAGE|EXPOSURE_CHANGED|SERVICE_CHANGED|ENDPOINT_CHANGED|ASSET_REMOVED
+  assetKey       String
+  host           String
+  priority       String   @default("NORMAL") // HIGH|NORMAL
+  detail         String
+  fromSnapshotId String?
+  toSnapshotId   String?
+  detectedAt     DateTime @default(now())
+
+  @@index([workspaceId, detectedAt])
+  @@index([workspaceId, type])
+}
+
+// Generic drift record for the §83 drift page filters (asset, finding,
+// cloud, source, mobile, binary, identity, wireless domains whose
+// per-domain engines live in their own phases; the continuous engine
+// records their snapshot comparisons here under one queryable shape).
+model DriftEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  domain      String // ASSET|WEB|API|CLOUD|KUBERNETES|SOURCE|MOBILE|BINARY|IDENTITY|WIRELESS
+  changeType  String
+  entityKey   String
+  detail      String
+  fromValue   Json?
+  toValue     Json?
+  detectedAt  DateTime @default(now())
+
+  @@index([workspaceId, domain])
+  @@index([workspaceId, detectedAt])
+}
+
+// Finding-level drift (§47).
+model FindingDriftEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  type        String // NEW|RESOLVED|REOPENED|SEVERITY_CHANGED|PRIORITY_CHANGED|VERIFICATION_CHANGED|RISK_CHANGED
+  fingerprint String
+  findingId   String?
+  detail      String
+  fromValue   Json?
+  toValue     Json?
+  detectedAt  DateTime @default(now())
+
+  @@index([workspaceId, detectedAt])
+  @@index([workspaceId, fingerprint])
+}
+
+// §48: risk drift from intelligence/exposure movement — no new scan.
+model RiskDriftEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  type        String // KEV_ADDED|EPSS_INCREASED|CVSS_CHANGED|ASSET_BECAME_PUBLIC|CRITICALITY_CHANGED|VERIFICATION_CHANGED
+  findingId   String?
+  cve         String?
+  detail      String
+  fromValue   Json?
+  toValue     Json?
+  detectedAt  DateTime @default(now())
+
+  @@index([workspaceId, detectedAt])
+  @@index([workspaceId, cve])
+}
+
+// §51: automatic-retest policy. Eligibility itself is decided per
+// finding by the SDK AutoRetestPolicy evaluator (RetestRouter + the
+// governed SAFE validator catalog); this row governs workspace knobs.
+model AutoRetestPolicy {
+  id          String   @id @default(uuid())
+  workspaceId String   @unique
+  enabled     Boolean  @default(false)
+  triggers    Json     @default("[]") // SCHEDULED|NEW_DEPLOYMENT_OR_BUILD|NEW_SCAN_OBSERVATION|REMEDIATION_MARKER
+  maxPerDay   Int      @default(50)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// §57: typed workflow definition. The definition Json is a validated
+// SecurityWorkflowDSL document — typed triggers/conditions/actions
+// only; arbitrary code is rejected at validation (§61/§62).
+model SecurityWorkflow {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  trigger     String
+  conditions  Json     @default("[]")
+  actions     Json     @default("[]")
+  enabled     Boolean  @default(true)
+  owner       String
+  version     Int      @default(1)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, trigger])
+  @@index([workspaceId, enabled])
+}
+
+// §64: one workflow execution against one event.
+model WorkflowExecution {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workflowId  String
+  eventId     String
+  trigger     String
+  status      String // COMPLETED|PARTIAL|BLOCKED_LOOP|FAILED
+  actions     Json      @default("[]") // executed action records (type, dedupKey, outcome)
+  depth       Int       @default(0)
+  lineage     Json      @default("[]")
+  errors      Json      @default("[]")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([workspaceId, workflowId])
+  @@index([workspaceId, startedAt])
+}
+
+// §67: notification policy (channels, thresholds, quiet hours, dedup).
+model NotificationPolicy {
+  id                  String   @id @default(uuid())
+  workspaceId         String
+  name                String
+  eventTypes          Json     @default("[]")
+  minSeverity         String?
+  minPriority         String?
+  riskThreshold       Float?
+  channels            Json     @default("[\"IN_APP\"]")
+  recipients          Json     @default("[]")
+  dedupWindowMinutes  Int      @default(60)
+  quietHours          Json? // {startTime,endTime,timezone}
+  emergencySeverities Json     @default("[\"CRITICAL\"]")
+  throttlePerHour     Int      @default(60)
+  // §73 webhook destination (when WEBHOOK is among channels): URL +
+  // host allowlist + signing-secret REFERENCE only — never a secret.
+  webhookUrl          String?
+  webhookAllowlist    Json     @default("[]")
+  signingSecretRef    String?
+  enabled             Boolean  @default(true)
+  createdBy           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// §71: escalation policy — P0/P1 unresolved past a duration escalates.
+model AlertEscalationPolicy {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  name                 String
+  priorities           Json     @default("[\"P0\",\"P1\"]")
+  escalateAfterMinutes Int      @default(240)
+  escalateTo           Json     @default("[]") // recipient user ids / team names
+  enabled              Boolean  @default(true)
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// One routed notification. Delivery status is honest: SENT only when
+// a configured provider accepted it; providers that are not
+// configured record RECORDED_NOT_DELIVERED with providerStatus
+// NOT_CONFIGURED — never a fake "sent" (§66).
+model SecurityNotification {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  policyId       String?
+  eventType      String
+  channel        String // IN_APP|EMAIL|SLACK|TEAMS|WEBHOOK
+  status         String // SENT|RECORDED_NOT_DELIVERED|SUPPRESSED_DEDUP|SUPPRESSED_THROTTLE|SUPPRESSED_QUIET_HOURS|FAILED
+  providerStatus String? // CONFIGURED|NOT_CONFIGURED
+  fingerprint    String
+  groupKey       String?
+  findingId      String?
+  assetKey       String?
+  title          String
+  detail         String?
+  escalated      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, fingerprint])
+}
+
+// §76: optional AI daily summary over the immutable daily posture
+// snapshot. Content is grounded in stored records with citations to
+// their ids (§77); the generator label is honest — RULE_BASED unless a
+// real AI provider produced it (Prompt 21 posture).
+model AiDailySecuritySummary {
+  id          String   @id @default(uuid())
+  workspaceId String
+  date        String // YYYY-MM-DD in the workspace timezone
+  snapshotId  String?
+  generator   String   @default("RULE_BASED") // RULE_BASED|AI_PROVIDER
+  summary     Json     @default("{}")
+  citations   Json     @default("[]")
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, date])
   @@index([workspaceId, createdAt])
 }

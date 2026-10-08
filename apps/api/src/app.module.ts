@@ -36,6 +36,7 @@ import { BinarySecurityModule } from "./modules/binary-security/binary-security.
 import { WirelessSecurityModule } from "./modules/wireless-security/wireless-security.module";
 import { VulnerabilityManagementModule } from "./modules/vulnerability-management/vulnerability-management.module";
 import { AiSecurityModule } from "./modules/ai-security/ai-security.module";
+import { ContinuousSecurityModule } from "./modules/continuous-security/continuous-security.module";
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { AiSecurityModule } from "./modules/ai-security/ai-security.module";
     ApiSecurityModule, NetworkModule, VulnerabilitiesModule, RepositoriesModule, CloudNativeModule, CloudSecurityModule, ActiveDirectoryModule,
     SecurityValidationModule, MobileSecurityModule, BinarySecurityModule, WirelessSecurityModule, VulnerabilityManagementModule,
     AiSecurityModule,
+    ContinuousSecurityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

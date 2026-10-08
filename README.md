@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 21 complete (Prompts 1–21).** Production monorepo, backend and
+> **Status — Phase 22 complete (Prompts 1–22).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -223,9 +223,33 @@ and the AI health endpoint.
 19. ✅ Wireless security assessment — passive only (Prompt 19)
 20. ✅ Unified vulnerability management, reporting & executive dashboard (Prompt 20)
 21. ✅ AI Security Copilot & intelligent analysis engine (Prompt 21)
+22. ✅ Continuous monitoring, intelligent scheduler & change detection (Prompt 22)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 22: Continuous Monitoring, Intelligent
+  Scheduler & Change Detection.** Governed recurrence over the
+  existing platform: monitoring policies bound to SAFE_AUTOMATED
+  profiles only (approval-required/manual/prohibited automation is
+  unschedulable in code, §11 list included), a lease-guarded tick
+  scheduler with deterministic run keys, missed-run collapse,
+  blackout/maintenance windows, concurrency + budget caps,
+  backpressure and tenant fairness. Every fire time re-runs every
+  gate — APPROVED assessment, VERIFIED target, fresh DNS scope
+  revalidation — and refusals are persisted BLOCKED/SKIPPED runs,
+  never silent retries. Schedules materialize only through the
+  governed paths (orchestration scans, Prompt 20 report definitions,
+  Prompt 16 validation requests that still need approval, Prompt 11
+  retests via the RetestRouter + SAFE catalog). Immutable posture /
+  asset / finding snapshots feed drift detection (new ports, exposure
+  changes, reopened findings) and intelligence-driven Risk Engine V3
+  re-scoring without re-scanning. Typed workflows (no code, loop-
+  guarded), a provider-neutral notification router with dedup /
+  throttle / quiet hours / escalation and SSRF-validated webhooks
+  (secret references only), and a grounded RULE_BASED-labelled daily
+  summary. Honest states preserved: intel sync NOT_CONFIGURED (the
+  dataset stays NEVER_SYNCED), external notification providers
+  RECORDED_NOT_DELIVERED until configured.
 - **2026-10-08 — Prompt 21: AI Security Copilot & Intelligent
   Analysis Engine.** An analyst-assistant layer over normalized
   platform data only: provider abstraction + model registry (secret
