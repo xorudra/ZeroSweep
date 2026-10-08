@@ -1,0 +1,76 @@
+{
+  "evaluatedAt": "2026-10-08T14:30:59.428Z",
+  "status": "V1_READY",
+  "results": [
+    {
+      "gate": "RC_SECURITY",
+      "status": "PASS",
+      "evidence": "rcStatus=RC_READY, blockers=0, criticals=0"
+    },
+    {
+      "gate": "TENANT_ISOLATION",
+      "status": "PASS",
+      "evidence": "tenant isolation test battery"
+    },
+    {
+      "gate": "AUTHORIZATION",
+      "status": "PASS",
+      "evidence": "authorization/scope test battery"
+    },
+    {
+      "gate": "PRODUCT_ENTITLEMENT",
+      "status": "PASS",
+      "evidence": "entitlement fail-closed tests"
+    },
+    {
+      "gate": "QUOTA",
+      "status": "PASS",
+      "evidence": "quota check/reserve/race tests"
+    },
+    {
+      "gate": "METERING",
+      "status": "PASS",
+      "evidence": "metering idempotency tests"
+    },
+    {
+      "gate": "BILLING_SECURITY",
+      "status": "NOT_APPLICABLE",
+      "evidence": "billing provider not configured in the evaluated deployment (§268)"
+    },
+    {
+      "gate": "LICENSE_SECURITY",
+      "status": "NOT_APPLICABLE",
+      "evidence": "license verification not enabled in the evaluated deployment (§269)"
+    },
+    {
+      "gate": "ONBOARDING",
+      "status": "PASS",
+      "evidence": "live onboarding smoke"
+    },
+    {
+      "gate": "BACKUP",
+      "status": "PASS",
+      "evidence": "platform backup evidence"
+    },
+    {
+      "gate": "RESTORE",
+      "status": "PASS",
+      "evidence": "isolated restore evidence"
+    },
+    {
+      "gate": "PRODUCTION_DEPLOYMENT",
+      "status": "PASS",
+      "evidence": "live stack regression battery"
+    },
+    {
+      "gate": "DOCUMENTATION",
+      "status": "PASS",
+      "evidence": "documentation audit (§293)"
+    },
+    {
+      "gate": "NO_BLOCKER_DEFECTS",
+      "status": "PASS",
+      "evidence": "RC findings register"
+    }
+  ]
+}

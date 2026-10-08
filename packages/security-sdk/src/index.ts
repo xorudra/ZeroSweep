@@ -333,3 +333,9 @@ export * from "./platformops/index";
 // Prompt 37: reporting/VM V2 decision layer + client-portal projection.
 export * from "./reporting2/index";
 export * from "./portal/index";
+
+// Prompt 40: SaaS productization — product modes, versioned plans,
+// entitlements with safety-ceiling precedence, signed self-hosted
+// licensing, billing abstraction + webhook verification, canonical usage
+// metering, quotas, lifecycle, capability resolution, launch gates.
+export * from "./product/index";

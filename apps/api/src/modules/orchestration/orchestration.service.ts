@@ -14,6 +14,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
 import { PlatformControlService } from "../platform-ops/platform-control.service";
+import { ProductGateService } from "../product/entitlements/product-gate.service";
 import { QueueService } from "../../queue/queue.service";
 import { ScanEventsService } from "./scan-events.service";
 
@@ -58,6 +59,11 @@ export class OrchestrationService {
     // so unit specs that construct this service directly keep working;
     // in the running app PlatformOpsModule provides the shared state.
     @Optional() private readonly platformControl?: PlatformControlService,
+    // Prompt 40: product gate (entitlement / quota / lifecycle / demo /
+    // abuse / protected targets). Optional for the same reason; in the
+    // running app ProductModule provides it. It can only refuse scans
+    // the safety gates allowed — never allow one they refused (§52).
+    @Optional() private readonly productGate?: ProductGateService,
   ) {}
 
   private registryCache: { registry: ToolRegistry; healthBySlug: Record<string, string> } | undefined;
@@ -252,6 +258,18 @@ export class OrchestrationService {
         throw new BadRequestException(`Scan refused: ${decision.reason} (PLATFORM_WORK_BLOCKED)`);
       }
     }
+
+    // Prompt 40 product gate: demo mode (§178), organization lifecycle
+    // (§87), protected targets (§173), abuse response (§171), feature
+    // entitlement (§12) and quota (§48). Runs before the authorization
+    // gate evaluates; a refusal here is a product refusal, and passing
+    // here never weakens the authorization gate below (§52).
+    if (this.productGate) {
+      await this.productGate.assertScanAllowed({
+        organizationId: user.organizationId, userId: user.id, workspaceId: loaded.workspaceId,
+        targetValue: assessment.target.value, profile: assessment.profile,
+      });
+    }
     const target = assessment.target;
 
     const gate = evaluateAuthorizationGate({
@@ -309,6 +327,13 @@ export class OrchestrationService {
       if (plan.profile === "NETWORK_INTERNAL") {
         await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId, action: "INTERNAL_SCAN_APPROVED", resourceType: "Scan", resourceId: scan.id, metadata: { basis: "assessment approval + verified target (internal engagement)" } });
       }
+    }
+    // Prompt 40 §38–§42: meter the started scan exactly once (the usage
+    // event is idempotent on the scan id, so retries never double-count).
+    if (this.productGate) {
+      await this.productGate.recordScanUsage({
+        organizationId: user.organizationId, workspaceId: loaded.workspaceId, scanId: scan.id, profile: assessment.profile,
+      }).catch(() => undefined);
     }
     const enqueued = await this.queue.enqueueScanOrchestration({ scanId: scan.id, workspaceId: loaded.workspaceId });
     return { scanId: scan.id, status: "QUEUED", plan, queueEnqueued: enqueued, simulation: plan.policySnapshot.simulation };

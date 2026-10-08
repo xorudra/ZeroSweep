@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { BUNDLED_WORDLISTS, FRAMEWORK_CATALOG } from "@dsrclone/security-sdk";
+import { BUNDLED_WORDLISTS, FRAMEWORK_CATALOG, EXAMPLE_PLANS } from "@dsrclone/security-sdk";
 
 const prisma = new PrismaClient();
 
@@ -774,6 +774,44 @@ async function main(): Promise<void> {
     },
   });
   console.log(`Seeded ${TOOLS.length + 2} tool catalog entries (10 recon + 5 web-discovery adapters enabled — Prompts 5–6; ${BUNDLED_WORDLISTS.length} governed wordlists; other catalog adapters disabled)`);
+
+  // Prompt 40 §256: EXAMPLE plan definitions only. They carry no
+  // commercial pricing (§257 — pricing is separate configuration) and
+  // are seeded ACTIVE so signup/provisioning can reference them.
+  // Idempotent: an existing plan keeps its versions (history is never
+  // rewritten, §8).
+  for (const example of EXAMPLE_PLANS) {
+    const plan = await prisma.productPlan.upsert({
+      where: { code: example.code },
+      update: { name: example.name, description: example.description, productMode: example.productMode },
+      create: { code: example.code, name: example.name, description: example.description, productMode: example.productMode, status: "ACTIVE" },
+    });
+    if (plan.status !== "ACTIVE") {
+      await prisma.productPlan.update({ where: { id: plan.id }, data: { status: "ACTIVE" } });
+    }
+    const existingVersion = await prisma.planVersion.findFirst({ where: { planId: plan.id, version: 1 } });
+    if (!existingVersion) {
+      const version = await prisma.planVersion.create({ data: { planId: plan.id, version: 1, quotas: example.quotas } });
+      for (const entitlement of example.entitlements) {
+        await prisma.planEntitlement.create({
+          data: { planVersionId: version.id, featureKey: entitlement.featureKey, enabled: entitlement.enabled, limit: entitlement.limit },
+        });
+      }
+    }
+  }
+
+  // Prompt 40 §127: the deployment's region registry. This deployment
+  // honestly operates ONE region (§132 — no active-active multi-region
+  // claim). Additional regions are operator configuration.
+  await prisma.deploymentRegion.upsert({
+    where: { code: "default" },
+    update: {},
+    create: {
+      code: "default", name: "Default Region", status: "ACTIVE", dataResidencyClass: "STANDARD",
+      capabilities: { singleRegion: true, note: "Single-region deployment; data residency follows the deployment's own database/object storage (§130/§132)." },
+    },
+  });
+  console.log(`Seeded ${EXAMPLE_PLANS.length} example product plans + default deployment region (Prompt 40)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

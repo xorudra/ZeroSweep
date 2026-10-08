@@ -1020,6 +1020,31 @@ enum AuditAction {
   PRODUCTION_DEPLOYMENT_STARTED
   PRODUCTION_DEPLOYMENT_COMPLETED
   PRODUCTION_ROLLBACK_STARTED
+  // Prompt 40 §137: SaaS productization audit actions. Metadata for
+  // these actions never contains payment data, license signatures or
+  // secrets (§22/§26/§105).
+  PLAN_CREATED
+  PLAN_UPDATED
+  PLAN_ACTIVATED
+  SUBSCRIPTION_CREATED
+  SUBSCRIPTION_UPDATED
+  SUBSCRIPTION_CANCELLED
+  TRIAL_STARTED
+  TRIAL_EXPIRED
+  LICENSE_INSTALLED
+  LICENSE_REJECTED
+  LICENSE_EXPIRED
+  QUOTA_EXCEEDED
+  QUOTA_OVERRIDE_CREATED
+  BILLING_WEBHOOK_RECEIVED
+  BILLING_WEBHOOK_REJECTED
+  ORGANIZATION_PROVISIONED
+  ORGANIZATION_SUSPENDED
+  ORGANIZATION_REACTIVATED
+  ORGANIZATION_CANCELLATION_REQUESTED
+  ORGANIZATION_DELETION_REQUESTED
+  SUPPORT_ACCESS_STARTED
+  SUPPORT_ACCESS_ENDED
 }
 
 enum NotificationType {
@@ -1045,6 +1070,13 @@ model User {
   name            String
   passwordHash    String // bcrypt hash only — never a plaintext password
   isActive        Boolean           @default(true)
+  // Prompt 40 §96/§98: deployment-level platform administrator flag.
+  // Granted only from trusted deployment configuration (bootstrap
+  // emails) or by another platform admin — never through tenant APIs.
+  isPlatformAdmin Boolean           @default(false)
+  // Prompt 40 §60: SaaS signup email verification (hashed, single-use,
+  // expiring tokens — EmailVerificationToken).
+  emailVerifiedAt DateTime?
   status          UserAccountStatus @default(ACTIVE)
   lastLoginAt     DateTime?
   memberships     Membership[]
@@ -1062,17 +1094,27 @@ enum OrganizationStatus {
 }
 
 model Organization {
-  id               String                @id @default(uuid())
+  id               String                      @id @default(uuid())
   name             String
-  slug             String                @unique
-  status           OrganizationStatus    @default(ACTIVE)
+  slug             String                      @unique
+  status           OrganizationStatus          @default(ACTIVE)
+  // Prompt 40 §86: SaaS lifecycle state machine (ACTIVE → SUSPENDED /
+  // CANCELLATION_PENDING → CANCELLED → RETENTION → DELETION_PENDING →
+  // DELETED). Cancellation never hard-deletes data (§85/§88).
+  lifecycleStatus  OrganizationLifecycleStatus @default(ACTIVE)
+  retentionUntil   DateTime?
+  // Prompt 40 §94: legal hold blocks destructive deletion.
+  legalHold        Boolean                     @default(false)
+  // Prompt 40 §176: demo organizations hold synthetic data only and
+  // can never start real scans (§178).
+  isDemo           Boolean                     @default(false)
   securityContact  String?
   dataRegion       String?
   memberships      Membership[]
   workspaces       Workspace[]
   workspaceMembers WorkspaceMembership[]
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
   deletedAt        DateTime?
 }
 
@@ -5711,15 +5753,15 @@ model RiskException {
 // (§43/§114) — the last-synced external status/severity are kept for
 // conflict detection only.
 model ExternalFindingReference {
-  id               String   @id @default(uuid())
-  workspaceId      String
-  integrationId    String
-  findingId        String?
-  externalSystem   String // DEFECTDOJO | FARADAY | DRADIS | PLEXTRAC | SERPICO
-  externalId       String
-  externalUrl      String?
-  externalStatus   String?
-  externalSeverity String?
+  id                String   @id @default(uuid())
+  workspaceId       String
+  integrationId     String
+  findingId         String?
+  externalSystem    String // DEFECTDOJO | FARADAY | DRADIS | PLEXTRAC | SERPICO
+  externalId        String
+  externalUrl       String?
+  externalStatus    String?
+  externalSeverity  String?
   // Prompt 37 §56: full external identity (workspace/project on the
   // external side) alongside the external finding id.
   externalWorkspace String?
@@ -5727,12 +5769,12 @@ model ExternalFindingReference {
   // §59 loop prevention: SHA-256 of the canonical content last moved
   // across the boundary; an inbound record whose hash matches was
   // originated here and is skipped, never re-applied.
-  contentHash      String?
-  origin           String   @default("EXTERNAL") // EXTERNAL | DSRCLONE
-  syncVersion      Int      @default(1)
-  lastSyncedAt     DateTime @default(now())
-  finding          Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
-  createdAt        DateTime @default(now())
+  contentHash       String?
+  origin            String   @default("EXTERNAL") // EXTERNAL | DSRCLONE
+  syncVersion       Int      @default(1)
+  lastSyncedAt      DateTime @default(now())
+  finding           Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  createdAt         DateTime @default(now())
 
   @@unique([integrationId, externalId])
   @@index([workspaceId])
@@ -5814,34 +5856,34 @@ model ReportTemplate {
 // filter document (domains, period, environment) — generating a report
 // never runs a scan; it reads stored records only.
 model SecurityReport {
-  id             String          @id @default(uuid())
-  workspaceId    String
-  title          String
-  type           String // EXECUTIVE | TECHNICAL_VAPT | WEB | NETWORK | API | CLOUD | CONTAINER_KUBERNETES | SOURCE_SCA | IDENTITY | MOBILE | BINARY | WIRELESS | COMPLIANCE | REMEDIATION | RETEST (§55)
-  scope          Json            @default("{}")
-  periodStart    DateTime?
-  periodEnd      DateTime?
-  generatedBy    String
-  templateId     String?
-  version        String          @default("v1") // §66: v1, v1.1, v2 …
-  status         String          @default("DRAFT") // DRAFT | GENERATING | READY | FAILED | ARCHIVED (§58)
-  approvalStatus String          @default("DRAFT") // DRAFT | REVIEW | APPROVED | ISSUED (§67)
-  classification String          @default("CONFIDENTIAL")
-  changeNotes    String?
-  approvedBy     String?
-  versions       ReportVersion[]
-  shareLinks     ReportShareLink[]
+  id                      String            @id @default(uuid())
+  workspaceId             String
+  title                   String
+  type                    String // EXECUTIVE | TECHNICAL_VAPT | WEB | NETWORK | API | CLOUD | CONTAINER_KUBERNETES | SOURCE_SCA | IDENTITY | MOBILE | BINARY | WIRELESS | COMPLIANCE | REMEDIATION | RETEST (§55)
+  scope                   Json              @default("{}")
+  periodStart             DateTime?
+  periodEnd               DateTime?
+  generatedBy             String
+  templateId              String?
+  version                 String            @default("v1") // §66: v1, v1.1, v2 …
+  status                  String            @default("DRAFT") // DRAFT | GENERATING | READY | FAILED | ARCHIVED (§58)
+  approvalStatus          String            @default("DRAFT") // DRAFT | REVIEW | APPROVED | ISSUED (§67)
+  classification          String            @default("CONFIDENTIAL")
+  changeNotes             String?
+  approvedBy              String?
+  versions                ReportVersion[]
+  shareLinks              ReportShareLink[]
   // Prompt 37: review/finalization workflow + portal binding.
-  reviewedBy     String?
-  finalizedAt    DateTime?
-  clientOrganizationId String? // set when the report serves a client engagement (§96)
-  engagementId   String?
-  watermark      String? // CONFIDENTIAL | DRAFT | INTERNAL | CLIENT COPY (§92)
-  requireSeparateApprover Boolean @default(false) // §85 separation of duties policy
-  snapshot       ReportSnapshot?
-  exports        ReportExport[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  reviewedBy              String?
+  finalizedAt             DateTime?
+  clientOrganizationId    String? // set when the report serves a client engagement (§96)
+  engagementId            String?
+  watermark               String? // CONFIDENTIAL | DRAFT | INTERNAL | CLIENT COPY (§92)
+  requireSeparateApprover Boolean           @default(false) // §85 separation of duties policy
+  snapshot                ReportSnapshot?
+  exports                 ReportExport[]
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 
   @@index([workspaceId, status])
   @@index([workspaceId, type])
@@ -5984,26 +6026,26 @@ model AiProviderConfig {
 // health. Business logic never hard-codes a vendor (§3). Prompt 36 §4
 // adds the V2 capability/cost/latency tracking the model router uses.
 model AiModel {
-  id            String    @id @default(uuid())
-  workspaceId   String
-  providerId    String
-  modelName     String
-  capabilities  String[]  @default([]) // GENERATE | STREAM | EMBED
-  contextLimit  Int       @default(8192)
-  enabled       Boolean   @default(true)
-  allowedTasks  String[]  @default([])
-  isFallbackFor String? // model id this model falls back FROM (§107)
-  costMetadata  Json?
-  healthStatus  String    @default("UNKNOWN")
-  lastCheckedAt DateTime?
+  id                      String    @id @default(uuid())
+  workspaceId             String
+  providerId              String
+  modelName               String
+  capabilities            String[]  @default([]) // GENERATE | STREAM | EMBED
+  contextLimit            Int       @default(8192)
+  enabled                 Boolean   @default(true)
+  allowedTasks            String[]  @default([])
+  isFallbackFor           String? // model id this model falls back FROM (§107)
+  costMetadata            Json?
+  healthStatus            String    @default("UNKNOWN")
+  lastCheckedAt           DateTime?
   // Prompt 36 §4: V2 routing capabilities.
-  structuredOutputSupport Boolean @default(false)
-  toolCallingSupport      Boolean @default(false)
-  embeddingSupport        Boolean @default(false)
-  costClass               String  @default("LOW") // FREE | LOW | MEDIUM | HIGH
-  latencyClass            String  @default("STANDARD") // FAST | STANDARD | SLOW
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  structuredOutputSupport Boolean   @default(false)
+  toolCallingSupport      Boolean   @default(false)
+  embeddingSupport        Boolean   @default(false)
+  costClass               String    @default("LOW") // FREE | LOW | MEDIUM | HIGH
+  latencyClass            String    @default("STANDARD") // FAST | STANDARD | SLOW
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   provider AiProviderConfig @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
@@ -6014,26 +6056,26 @@ model AiModel {
 // §109/§16/§17/§62: workspace AI policy singleton. Defaults are the
 // spec defaults: source code REDACTED, raw evidence SANITIZED_ONLY.
 model AiWorkspacePolicy {
-  id                String   @id @default(uuid())
-  workspaceId       String   @unique
-  sourceCodeAccess  String   @default("REDACTED") // DISABLED | REDACTED | ALLOWED_FOR_APPROVED_PROVIDER
-  rawEvidenceAccess String   @default("SANITIZED_ONLY") // DISABLED | SANITIZED_ONLY | APPROVED_PROVIDER_ONLY
-  enabledTasks      String[] @default([])
-  chatRetentionDays Int      @default(30)
-  primaryModelId    String?
-  fallbackModelId   String?
+  id                      String   @id @default(uuid())
+  workspaceId             String   @unique
+  sourceCodeAccess        String   @default("REDACTED") // DISABLED | REDACTED | ALLOWED_FOR_APPROVED_PROVIDER
+  rawEvidenceAccess       String   @default("SANITIZED_ONLY") // DISABLED | SANITIZED_ONLY | APPROVED_PROVIDER_ONLY
+  enabledTasks            String[] @default([])
+  chatRetentionDays       Int      @default(30)
+  primaryModelId          String?
+  fallbackModelId         String?
   // Prompt 36 §139/§6/§143/§159: V2 workspace AI settings — allowed
   // models, data residency, approval policy, per-kind retention.
   // Platform hard safety controls (§140) are NOT fields here: a
   // workspace admin cannot weaken them through settings.
-  allowedModelIds        String[] @default([])
-  dataResidencyRegion    String?
-  allowExternalProviders Boolean  @default(true)
-  approvalPolicy         String   @default("SOD_RESTRICTED") // SOD_RESTRICTED | STANDARD
-  retentionTraceDays     Int      @default(90)
-  retentionEvaluationDays Int     @default(365)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  allowedModelIds         String[] @default([])
+  dataResidencyRegion     String?
+  allowExternalProviders  Boolean  @default(true)
+  approvalPolicy          String   @default("SOD_RESTRICTED") // SOD_RESTRICTED | STANDARD
+  retentionTraceDays      Int      @default(90)
+  retentionEvaluationDays Int      @default(365)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 // §104: usage budgets — workspace daily/monthly token ceilings, task
@@ -6264,7 +6306,7 @@ model AiSecurityWorkflow {
   mode                      String    @default("READ_ONLY") // READ_ONLY | ANALYSIS | PLANNING | APPROVAL_REQUIRED_ACTION (§25)
   status                    String    @default("DRAFT") // DRAFT | VALIDATING | AWAITING_APPROVAL | APPROVED | RUNNING | PARTIAL | COMPLETED | FAILED | CANCELLED | REJECTED
   plan                      Json      @default("{}")
-  validation                  Json      @default("{}") // deterministic validator verdict + findings (§43)
+  validation                Json      @default("{}") // deterministic validator verdict + findings (§43)
   authorizationSnapshotHash String?
   maxSteps                  Int       @default(8)
   maxTokens                 Int       @default(12000)
@@ -10541,7 +10583,7 @@ model RuntimeEventCorrelation {
 // snapshot document is copied in at finalization; later live changes
 // (or even later report versions) can never alter it (§64).
 model ReportVersion {
-  id                String   @id @default(uuid())
+  id                String         @id @default(uuid())
   reportId          String
   workspaceId       String
   version           String // mirrors SecurityReport.version at finalization
@@ -10551,7 +10593,7 @@ model ReportVersion {
   artifactHash      String // §93: SHA-256 of the rendered finalized artifact
   signatureMetadata Json? // §94: optional signing metadata — no legal validity is claimed
   finalizedBy       String
-  finalizedAt       DateTime @default(now())
+  finalizedAt       DateTime       @default(now())
   report            SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@unique([reportId, version])
@@ -10562,18 +10604,18 @@ model ReportVersion {
 // §106: revocable, expiring share links. Only the SHA-256 hash of the
 // token is stored — the raw token is shown exactly once at creation.
 model ReportShareLink {
-  id             String    @id @default(uuid())
-  workspaceId    String
-  reportId       String
+  id              String         @id @default(uuid())
+  workspaceId     String
+  reportId        String
   reportVersionId String?
-  tokenHash      String    @unique
-  expiresAt      DateTime
-  revokedAt      DateTime?
-  maxDownloads   Int?
-  downloadCount  Int       @default(0)
-  createdBy      String
-  createdAt      DateTime  @default(now())
-  report         SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  tokenHash       String         @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  maxDownloads    Int?
+  downloadCount   Int            @default(0)
+  createdBy       String
+  createdAt       DateTime       @default(now())
+  report          SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([reportId])
@@ -10614,22 +10656,22 @@ model FindingTemplate {
 // there is exactly one enforcement path. SLA_EXCEPTION and
 // CONTROL_EXCEPTION are policy records that never touch finding state.
 model SecurityException {
-  id                   String    @id @default(uuid())
-  workspaceId          String
-  findingId            String?
-  type                 String // RISK_ACCEPTANCE | FALSE_POSITIVE_SUPPRESSION | SLA_EXCEPTION | CONTROL_EXCEPTION
-  status               String    @default("PENDING") // PENDING | ACTIVE | REJECTED | EXPIRED
-  reason               String
+  id                    String    @id @default(uuid())
+  workspaceId           String
+  findingId             String?
+  type                  String // RISK_ACCEPTANCE | FALSE_POSITIVE_SUPPRESSION | SLA_EXCEPTION | CONTROL_EXCEPTION
+  status                String    @default("PENDING") // PENDING | ACTIVE | REJECTED | EXPIRED
+  reason                String
   businessJustification String?
-  requestedBy          String
-  approverId           String?
-  startDate            DateTime  @default(now())
-  expiryDate           DateTime?
-  reviewDate           DateTime?
-  compensatingControls Json?
-  riskExceptionId      String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  requestedBy           String
+  approverId            String?
+  startDate             DateTime  @default(now())
+  expiryDate            DateTime?
+  reviewDate            DateTime?
+  compensatingControls  Json?
+  riskExceptionId       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@index([workspaceId, status])
   @@index([findingId])
@@ -10640,18 +10682,18 @@ model SecurityException {
 // the internal Organization (the consultancy tenant); it is bound to
 // the internal workspace that performs its assessments.
 model ClientOrganization {
-  id          String   @id @default(uuid())
-  workspaceId String
-  name        String
-  slug        String
-  status      String   @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED
-  contactName String?
+  id           String             @id @default(uuid())
+  workspaceId  String
+  name         String
+  slug         String
+  status       String             @default("ACTIVE") // ACTIVE | SUSPENDED | ARCHIVED
+  contactName  String?
   contactEmail String?
-  createdBy   String
-  engagements ClientEngagement[]
-  portalUsers ClientPortalUser[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy    String
+  engagements  ClientEngagement[]
+  portalUsers  ClientPortalUser[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
@@ -10659,21 +10701,21 @@ model ClientOrganization {
 
 // §96: one engagement = one assessment programme for one client.
 model ClientEngagement {
-  id                String    @id @default(uuid())
+  id                   String                     @id @default(uuid())
   clientOrganizationId String
-  workspaceId       String
-  assessmentId      String?
-  name              String
-  startDate         DateTime?
-  endDate           DateTime?
-  status            String    @default("ACTIVE") // ACTIVE | COMPLETED | ARCHIVED
-  clientContacts    Json      @default("[]")
-  reportVisibility  String    @default("FINALIZED_ONLY") // FINALIZED_ONLY — only finalized versions are ever client-visible (§105)
-  createdBy         String
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  client            ClientOrganization @relation(fields: [clientOrganizationId], references: [id], onDelete: Cascade)
-  publications      ClientFindingPublication[]
+  workspaceId          String
+  assessmentId         String?
+  name                 String
+  startDate            DateTime?
+  endDate              DateTime?
+  status               String                     @default("ACTIVE") // ACTIVE | COMPLETED | ARCHIVED
+  clientContacts       Json                       @default("[]")
+  reportVisibility     String                     @default("FINALIZED_ONLY") // FINALIZED_ONLY — only finalized versions are ever client-visible (§105)
+  createdBy            String
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  client               ClientOrganization         @relation(fields: [clientOrganizationId], references: [id], onDelete: Cascade)
+  publications         ClientFindingPublication[]
 
   @@index([workspaceId])
   @@index([clientOrganizationId])
@@ -10683,14 +10725,14 @@ model ClientEngagement {
 // ONLY through this row, which pins them to exactly one client
 // organization and one portal role. Created by internal admins only.
 model ClientPortalUser {
-  id                   String   @id @default(uuid())
-  userId               String   @unique
+  id                   String             @id @default(uuid())
+  userId               String             @unique
   clientOrganizationId String
   workspaceId          String
   portalRole           String // CLIENT_VIEWER | CLIENT_REMEDIATOR | CLIENT_MANAGER
-  status               String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  status               String             @default("ACTIVE") // ACTIVE | SUSPENDED
   createdBy            String
-  createdAt            DateTime @default(now())
+  createdAt            DateTime           @default(now())
   client               ClientOrganization @relation(fields: [clientOrganizationId], references: [id], onDelete: Cascade)
 
   @@index([clientOrganizationId])
@@ -10701,12 +10743,12 @@ model ClientPortalUser {
 // the portal (§100). Revoking the row's publication (revokedAt set)
 // removes it from every portal view immediately.
 model ClientFindingPublication {
-  id           String    @id @default(uuid())
+  id           String           @id @default(uuid())
   engagementId String
   findingId    String
   workspaceId  String
   publishedBy  String
-  publishedAt  DateTime  @default(now())
+  publishedAt  DateTime         @default(now())
   revokedAt    DateTime?
   revokedBy    String?
   engagement   ClientEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
@@ -10877,4 +10919,383 @@ model PlatformDrExercise {
   createdAt          DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// --------------------- SaaS Productization (Prompt 40) ---------------------
+//
+// One codebase serves COMMUNITY / SELF_HOSTED / SAAS / ENTERPRISE modes
+// (§3–§5): the mode comes from trusted deployment configuration, and
+// differentiation is expressed through plans, entitlements, licenses and
+// feature flags — never through forked implementations. Entitlements
+// can never disable tenant isolation, authorization, scope enforcement,
+// scanner safety, audit controls or platform hard safety ceilings (§16).
+
+enum ProductMode {
+  COMMUNITY
+  SELF_HOSTED
+  SAAS
+  ENTERPRISE
+}
+
+enum ProductPlanStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+  RETIRED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum ProductTrialStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED
+  CANCELLED
+}
+
+enum QuotaReservationStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+  EXPIRED
+}
+
+enum SupportAccessStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  EXPIRED
+  ENDED
+  REVOKED
+}
+
+enum OrganizationLifecycleStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLATION_PENDING
+  CANCELLED
+  RETENTION
+  DELETION_PENDING
+  DELETED
+}
+
+// ProductPlan (§6/§7): code is the stable identity; commercial pricing is
+// NOT stored here (§257 — pricing is separate configuration).
+model ProductPlan {
+  id          String            @id @default(uuid())
+  code        String            @unique
+  name        String
+  description String?
+  status      ProductPlanStatus @default(DRAFT)
+  productMode ProductMode
+  versions    PlanVersion[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+// PlanVersion (§8): subscriptions reference a version forever; editing a
+// plan creates a new version, never rewrites history.
+model PlanVersion {
+  id            String            @id @default(uuid())
+  planId        String
+  version       Int
+  entitlements  PlanEntitlement[]
+  quotas        Json // dimension -> limit|null (§46); example/contract data
+  subscriptions Subscription[]
+  trials        ProductTrial[]
+  plan          ProductPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdAt     DateTime          @default(now())
+
+  @@unique([planId, version])
+  @@index([planId])
+}
+
+// PlanEntitlement (§9): per-version feature grants.
+model PlanEntitlement {
+  id            String      @id @default(uuid())
+  planVersionId String
+  featureKey    String
+  enabled       Boolean     @default(false)
+  limit         Int?
+  configuration Json?
+  planVersion   PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([planVersionId, featureKey])
+  @@index([planVersionId])
+}
+
+// Subscription (§17/§18). externalBillingReference is an opaque provider
+// reference only — no payment data ever (§26).
+model Subscription {
+  id                       String             @id @default(uuid())
+  organizationId           String
+  planVersionId            String
+  status                   SubscriptionStatus @default(ACTIVE)
+  startedAt                DateTime           @default(now())
+  currentPeriodStart       DateTime
+  currentPeriodEnd         DateTime
+  trialEndsAt              DateTime?
+  cancelAtPeriodEnd        Boolean            @default(false)
+  cancelledAt              DateTime?
+  externalBillingReference String?
+  planVersion              PlanVersion        @relation(fields: [planVersionId], references: [id])
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+// BillingEvent (§25): safe metadata only. (provider, externalEventId) is
+// the idempotency key: a replayed webhook never transitions state twice
+// (§24/§219).
+model BillingEvent {
+  id              String    @id @default(uuid())
+  organizationId  String?
+  provider        String
+  externalEventId String
+  type            String
+  status          String // RECEIVED | PROCESSED | REJECTED | DUPLICATE
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+  error           String?
+
+  @@unique([provider, externalEventId])
+  @@index([organizationId])
+}
+
+// BillingInvoiceReference (§27): provider-hosted invoice reference only.
+model BillingInvoiceReference {
+  id                String    @id @default(uuid())
+  organizationId    String
+  provider          String
+  externalInvoiceId String
+  status            String
+  currency          String?
+  amountCents       Int?
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  hostedInvoiceRef  String?
+  createdAt         DateTime  @default(now())
+
+  @@unique([provider, externalInvoiceId])
+  @@index([organizationId])
+}
+
+// ProductLicense (§28/§29): the installed signed license document.
+// Payload + signature are stored for offline re-verification (§36);
+// the issuer's private key is never in the product (§31/§248).
+model ProductLicense {
+  id             String   @id @default(uuid())
+  licenseId      String   @unique
+  organizationId String?
+  organization   String // licensed organization name from the payload
+  edition        String
+  issuer         String
+  issuedAt       DateTime
+  validFrom      DateTime
+  expiresAt      DateTime
+  entitlements   Json // [{featureKey, enabled, limit}]
+  limits         Json // dimension -> limit|null
+  signature      String
+  status         String // VALID | EXPIRING | EXPIRED | INVALID | REVOKED (computed at install, re-evaluated at read)
+  installedById  String?
+  installedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+// UsageEvent (§39): the authoritative billable record (§44). The
+// idempotencyKey makes job retries safe (§42/§218).
+model UsageEvent {
+  id             String   @id @default(uuid())
+  organizationId String
+  workspaceId    String?
+  metric         String
+  quantity       Float    @default(1)
+  source         String
+  reference      String?
+  occurredAt     DateTime @default(now())
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, metric, occurredAt])
+}
+
+// UsageAggregate (§43): derived from UsageEvent; never authoritative.
+model UsageAggregate {
+  id             String   @id @default(uuid())
+  organizationId String
+  metric         String
+  granularity    String // HOURLY | DAILY | BILLING_PERIOD
+  periodStart    DateTime
+  quantity       Float    @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, metric, granularity, periodStart])
+  @@index([organizationId, metric])
+}
+
+// QuotaPolicy (§45): materialized per-organization limits. Sources, in
+// precedence order: license → plan version → platform fair-use ceilings.
+model QuotaPolicy {
+  id             String   @id @default(uuid())
+  organizationId String
+  dimension      String
+  limit          Int? // null = unlimited by plan
+  period         String   @default("MONTHLY")
+  source         String // LICENSE | PLAN | OVERRIDE_MATERIALIZED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, dimension, period])
+  @@index([organizationId])
+}
+
+// QuotaReservation (§50): reserve → consume/release for expensive async
+// work. The reservation row (unique per reference) is what makes quota
+// enforcement race-safe (§49/§217).
+model QuotaReservation {
+  id             String                 @id @default(uuid())
+  organizationId String
+  dimension      String
+  quantity       Int                    @default(1)
+  status         QuotaReservationStatus @default(RESERVED)
+  reference      String
+  expiresAt      DateTime
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([organizationId, dimension, reference])
+  @@index([organizationId, dimension, status])
+}
+
+// QuotaOverride (§138–§140): platform-issued only. Tenants can never
+// create overrides for themselves.
+model QuotaOverride {
+  id             String    @id @default(uuid())
+  organizationId String
+  metric         String
+  newLimit       Int
+  reason         String
+  approvedById   String
+  startsAt       DateTime  @default(now())
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([organizationId, metric])
+}
+
+// ProductTrial (§54/§55).
+model ProductTrial {
+  id               String             @id @default(uuid())
+  organizationId   String
+  planVersionId    String
+  status           ProductTrialStatus @default(ACTIVE)
+  startedAt        DateTime           @default(now())
+  expiresAt        DateTime
+  conversionStatus String             @default("NONE") // NONE | CONVERTED | NOT_CONVERTED
+  planVersion      PlanVersion        @relation(fields: [planVersionId], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+// OrganizationOnboarding (§66): resumable onboarding state (§75).
+model OrganizationOnboarding {
+  id                        String    @id @default(uuid())
+  organizationId            String    @unique
+  status                    String    @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | ABANDONED
+  currentStep               String    @default("WELCOME")
+  completedSteps            Json      @default("[]")
+  authorizationAttestedAt   DateTime?
+  authorizationAttestedById String?
+  startedAt                 DateTime  @default(now())
+  completedAt               DateTime?
+  updatedAt                 DateTime  @updatedAt
+}
+
+// EmailVerificationToken (§60): hashed-at-rest, single-use, expiring —
+// the same discipline as OrganizationInvitation tokens (§77).
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// SupportAccessSession (§100–§103): controlled, expiring, audited
+// support access. No silent impersonation exists (§99): a session is a
+// visible, tenant-approvable record, and platform views stay
+// metadata-only regardless (§104/§105).
+model SupportAccessSession {
+  id             String              @id @default(uuid())
+  organizationId String
+  operatorId     String
+  reason         String
+  scope          Json // { areas: string[] } — metadata areas only, never secrets
+  status         SupportAccessStatus @default(PENDING_APPROVAL)
+  tenantApproved Boolean             @default(false)
+  approvedById   String?
+  startedAt      DateTime?
+  expiresAt      DateTime
+  endedAt        DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([operatorId])
+}
+
+// DeploymentRegion (§127/§128). This deployment honestly operates a
+// single region unless Prompt 38 architecture says otherwise (§132).
+model DeploymentRegion {
+  id                 String   @id @default(uuid())
+  code               String   @unique
+  name               String
+  status             String   @default("ACTIVE") // ACTIVE | DISABLED
+  dataResidencyClass String   @default("STANDARD")
+  capabilities       Json     @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// ProductAnalyticsEvent (§141/§142): aggregate product events only.
+// Properties pass the §143 privacy filter before persistence — targets,
+// evidence, credentials and finding payloads are never stored here.
+model ProductAnalyticsEvent {
+  id             String   @id @default(uuid())
+  organizationId String?
+  type           String
+  properties     Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  @@index([type, createdAt])
+}
+
+// AbuseSignalRecord (Prompt 40 §170): platform-safety signal counts.
+// Signals are indicators for a response ladder (warn → throttle →
+// block scan creation → require review), never proof of intent (§172).
+model AbuseSignalRecord {
+  id             String   @id @default(uuid())
+  organizationId String
+  signal         String
+  context        Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, signal, createdAt])
 }

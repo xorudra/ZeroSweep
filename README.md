@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 38 complete (Prompts 1–38).** Production monorepo, backend and
+> **Status — Phase 40 complete (Prompts 1–40).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -113,6 +113,24 @@ without verified scope and approval.
 > with fresh DNS. Provider transports are unwired in this environment,
 > so everything honestly reports NOT_CONFIGURED; verification is
 > fixture-payload/mock-transport only.
+>
+> The remaining phases deepen every domain (web/API, network,
+> cloud/container/Kubernetes, mobile/binary VAPT V2; AI copilot V2;
+> reporting & client portal V2), add production deployment &
+> observability V2 with platform operations, and close with **final
+> hardening & the RC1 audit (Phase 39: 0 BLOCKER / 0 CRITICAL open,
+> status RC_READY)** and **SaaS productization & v1.0 launch
+> preparation (Phase 40)**: versioned plans and backend-enforced
+> entitlements (fail-closed; safety can never be entitled away),
+> subscriptions, provider-abstracted billing with signed idempotent
+> webhooks (never simulated when unconfigured), Ed25519 product
+> licenses verified with the shipped public key only, real-row usage
+> metering with idempotency keys, race-safe quota reservations,
+> trials, transactional signup/onboarding with authorization
+> attestation, organization lifecycle with retention/legal-hold, a
+> separate platform control plane with reason-bound audited support
+> access, demo mode that can never scan, and measured — never
+> invented — launch gates for v1.0 (`release/v1.0/`).
 
 ## Architecture
 

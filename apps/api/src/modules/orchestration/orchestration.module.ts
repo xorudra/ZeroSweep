@@ -3,9 +3,10 @@ import { OrchestrationController } from "./orchestration.controller";
 import { OrchestrationService } from "./orchestration.service";
 import { ScanEventsService } from "./scan-events.service";
 import { PlatformOpsModule } from "../platform-ops/platform-ops.module";
+import { ProductModule } from "../product/product.module";
 
 @Module({
-  imports: [PlatformOpsModule],
+  imports: [PlatformOpsModule, ProductModule],
   controllers: [OrchestrationController],
   providers: [OrchestrationService, ScanEventsService],
   exports: [ScanEventsService, OrchestrationService],

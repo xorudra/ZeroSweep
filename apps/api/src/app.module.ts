@@ -52,6 +52,8 @@ import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelli
 import { RemediationModule } from "./modules/remediation/remediation.module";
 import { MobileBinaryV2Module } from "./modules/mobile-binary-v2/mobile-binary-v2.module";
 import { PlatformOpsModule } from "./modules/platform-ops/platform-ops.module";
+import { ProductModule } from "./modules/product/product.module";
+import { PlatformControlModule } from "./modules/platform-control/platform-control.module";
 
 @Module({
   imports: [
@@ -85,6 +87,12 @@ import { PlatformOpsModule } from "./modules/platform-ops/platform-ops.module";
     KubernetesSecurityModule,
     MobileBinaryV2Module,
     PlatformOpsModule,
+    // Prompt 40: SaaS productization (plans/entitlements/subscriptions/
+    // licenses/usage/quotas/trials/provisioning/onboarding/lifecycle)
+    // and the platform control plane. ProductModule is also imported by
+    // OrchestrationModule for the scan-start product gate.
+    ProductModule,
+    PlatformControlModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

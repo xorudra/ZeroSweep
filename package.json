@@ -1,6 +1,6 @@
 {
   "name": "dsrclone",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "private": true,
   "description": "DSRclone — authorized automated VAPT & security-assessment orchestration platform (GUI-first)",
   "packageManager": "pnpm@9.15.0",

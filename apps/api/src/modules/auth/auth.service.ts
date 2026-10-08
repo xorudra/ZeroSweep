@@ -5,6 +5,7 @@ import { loginSchema, registerSchema } from "@dsrclone/validation";
 import {
   GENERIC_AUTH_ERROR, isPrivilegedOrgRole, normalizeEmail, randomToken, rateLimitDecision, sha256Hex, type AttemptBucket,
 } from "@dsrclone/security-sdk";
+import { isPlatformAdminEmail, loadEnv } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
 import { AuditService } from "../audit/audit.service";
@@ -42,7 +43,10 @@ export class AuthService {
     if (existing) throw new ConflictException("An account with this email already exists");
     const passwordHash = await bcrypt.hash(data.password, 12);
     const slug = data.organizationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Math.random().toString(36).slice(2, 8);
-    const user = await this.prisma.user.create({ data: { email: data.email, normalizedEmail, name: data.name, passwordHash } });
+    // Prompt 40 §96: platform-admin bootstrap comes only from trusted
+    // deployment configuration — never from the request payload.
+    const isPlatformAdmin = isPlatformAdminEmail(data.email, loadEnv());
+    const user = await this.prisma.user.create({ data: { email: data.email, normalizedEmail, name: data.name, passwordHash, isPlatformAdmin } });
     const org = await this.prisma.organization.create({ data: { name: data.organizationName, slug } });
     await this.prisma.membership.create({ data: { userId: user.id, organizationId: org.id, role: "OWNER", joinedAt: new Date() } });
     const workspace = await this.prisma.workspace.create({ data: { organizationId: org.id, name: "Default Workspace" } });
