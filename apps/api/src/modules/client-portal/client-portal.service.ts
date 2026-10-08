@@ -54,6 +54,12 @@ export class ClientPortalService {
 
   async createClient(user: RequestUser, workspaceId: string, input: { name: string; slug: string; contactEmail?: string }) {
     requireV2Permission(user, "MANAGE_CLIENT_ENGAGEMENTS");
+    // Prompt 39 RC1 fix (finding RC1-H1): unguarded input.slug.toLowerCase()
+    // turned a malformed request body into a 500 TypeError. Invalid input
+    // is a 400 here, and the controller validates with zod before this.
+    if (typeof input?.name !== "string" || input.name.trim() === "" || typeof input?.slug !== "string" || input.slug.trim() === "") {
+      throw new BadRequestException("client name and slug are required");
+    }
     const slug = input.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-");
     const existing = await this.prisma.clientOrganization.findFirst({ where: { workspaceId, slug } });
     if (existing) throw new ConflictException(`client slug ${slug} already exists in this workspace (§95)`);
@@ -72,6 +78,9 @@ export class ClientPortalService {
     clientOrganizationId: string; name: string; scopeSummary?: string; reportVisibility?: string;
   }) {
     requireV2Permission(user, "MANAGE_CLIENT_ENGAGEMENTS");
+    if (typeof input?.name !== "string" || input.name.trim() === "" || typeof input?.clientOrganizationId !== "string" || input.clientOrganizationId === "") {
+      throw new BadRequestException("engagement name and clientOrganizationId are required");
+    }
     const client = await this.prisma.clientOrganization.findFirst({ where: { id: input.clientOrganizationId, workspaceId } });
     if (!client) throw new NotFoundException("client organization not found in this workspace");
     return this.prisma.clientEngagement.create({

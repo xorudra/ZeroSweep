@@ -1,8 +1,32 @@
 import { Body, Controller, Get, Inject, Param, Post } from "@nestjs/common";
+import { z } from "zod";
 import { CurrentUser, Public, type RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";
+import { parseOrThrow } from "../../common/parse";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { ClientPortalService } from "./client-portal.service";
+
+/** Prompt 39 RC1 fix (finding RC1-H1): admin bodies are validated at the
+ *  trust boundary with the platform's standard zod contract (§227), so a
+ *  malformed body is a 400 — previously a missing `slug` reached
+ *  String.prototype.toLowerCase on undefined and surfaced as a 500. */
+const createClientSchema = z.object({
+  name: z.string().min(1).max(200),
+  slug: z.string().min(1).max(100),
+  contactEmail: z.string().email().optional(),
+});
+const createEngagementSchema = z.object({
+  clientOrganizationId: z.string().min(1),
+  name: z.string().min(1).max(200),
+  scopeSummary: z.string().max(2000).optional(),
+  reportVisibility: z.string().max(50).optional(),
+});
+const bindPortalUserSchema = z.object({
+  userId: z.string().min(1),
+  clientOrganizationId: z.string().min(1),
+  portalRole: z.string().min(1),
+});
+const findingRefSchema = z.object({ findingId: z.string().min(1) });
 
 /** §95–§100 admin side: clients, engagements, portal users, publications. */
 @Controller("client-portal/admin")
@@ -22,8 +46,8 @@ export class ClientAdminController {
   }
 
   @Post("clients")
-  async createClient(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
-    return this.portal.createClient(user, await this.ws(user), body as never);
+  async createClient(@CurrentUser() user: RequestUser, @Body() body: unknown) {
+    return this.portal.createClient(user, await this.ws(user), parseOrThrow(createClientSchema, body ?? {}));
   }
 
   @Get("engagements")
@@ -32,23 +56,23 @@ export class ClientAdminController {
   }
 
   @Post("engagements")
-  async createEngagement(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
-    return this.portal.createEngagement(user, await this.ws(user), body as never);
+  async createEngagement(@CurrentUser() user: RequestUser, @Body() body: unknown) {
+    return this.portal.createEngagement(user, await this.ws(user), parseOrThrow(createEngagementSchema, body ?? {}));
   }
 
   @Post("portal-users")
-  async bind(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
-    return this.portal.bindPortalUser(user, await this.ws(user), body as never);
+  async bind(@CurrentUser() user: RequestUser, @Body() body: unknown) {
+    return this.portal.bindPortalUser(user, await this.ws(user), parseOrThrow(bindPortalUserSchema, body ?? {}));
   }
 
   @Post("engagements/:id/publish")
-  async publish(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.portal.publishFinding(user, await this.ws(user), id, String(body.findingId ?? ""));
+  async publish(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.portal.publishFinding(user, await this.ws(user), id, parseOrThrow(findingRefSchema, body ?? {}).findingId);
   }
 
   @Post("engagements/:id/unpublish")
-  async unpublish(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.portal.unpublishFinding(user, await this.ws(user), id, String(body.findingId ?? ""));
+  async unpublish(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.portal.unpublishFinding(user, await this.ws(user), id, parseOrThrow(findingRefSchema, body ?? {}).findingId);
   }
 }
 

@@ -1,0 +1,87 @@
+{
+  "release": "DSRclone RC1",
+  "version": "1.0.0-rc.1",
+  "generatedAt": "2026-10-08T13:28:06.632Z",
+  "verdict": "RC_READY",
+  "testSummary": "turbo 15/15 tasks",
+  "gates": [
+    {
+      "gate": 1,
+      "name": "BUILD",
+      "status": "PASS",
+      "detail": "turbo build green"
+    },
+    {
+      "gate": 2,
+      "name": "LINT/TYPECHECK",
+      "status": "PASS",
+      "detail": "typecheck=0 lint=0"
+    },
+    {
+      "gate": 3,
+      "name": "UNIT/INTEGRATION",
+      "status": "PASS",
+      "detail": "turbo 15/15 tasks; pytest exit=0"
+    },
+    {
+      "gate": 4,
+      "name": "TENANT ISOLATION",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "gate": 5,
+      "name": "AUTHORIZATION",
+      "status": "PASS",
+      "detail": "sdk policy=0 api authz suites=0"
+    },
+    {
+      "gate": 6,
+      "name": "SCANNER SAFETY",
+      "status": "PASS",
+      "detail": "sdk suites=0; shell:true occurrences=0"
+    },
+    {
+      "gate": 7,
+      "name": "E2E CORE FLOW",
+      "status": "PASS",
+      "detail": "e2e exit=0"
+    },
+    {
+      "gate": 8,
+      "name": "REPORT/CLIENT ISOLATION",
+      "status": "PASS",
+      "detail": "client=true tenant=true"
+    },
+    {
+      "gate": 9,
+      "name": "AI SECURITY",
+      "status": "PASS",
+      "detail": "sdk ai=0 pytest=0"
+    },
+    {
+      "gate": 10,
+      "name": "SECRET SCAN",
+      "status": "PASS",
+      "detail": "no non-canary secret patterns in tracked files"
+    },
+    {
+      "gate": 11,
+      "name": "BACKUP/RESTORE",
+      "status": "PASS",
+      "detail": "findings/audit source=42/1135 restored=42/1135"
+    },
+    {
+      "gate": 12,
+      "name": "PRODUCTION CONFIGURATION",
+      "status": "PASS",
+      "detail": "compose hardening + staged CI present"
+    },
+    {
+      "gate": 13,
+      "name": "NO BLOCKER RELEASE FINDINGS",
+      "status": "PASS",
+      "detail": "no OPEN blockers in rc1-findings.md"
+    }
+  ]
+}

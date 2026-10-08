@@ -1,0 +1,249 @@
+{
+  "generatedAt": "2026-10-08T13:26:26.991Z",
+  "apiBase": "http://127.0.0.1:4000/api/v1",
+  "total": 40,
+  "passed": 40,
+  "failed": 0,
+  "results": [
+    {
+      "suite": "core-flow",
+      "name": "stack health ok",
+      "ok": true,
+      "detail": "status=ok"
+    },
+    {
+      "suite": "core-flow",
+      "name": "TenantA registered (persona OrgAdmin)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "suite": "core-flow",
+      "name": "authorized target created",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "core-flow",
+      "name": "target verified",
+      "ok": true,
+      "detail": "targetStatus=VERIFIED"
+    },
+    {
+      "suite": "core-flow",
+      "name": "scope created",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "suite": "core-flow",
+      "name": "assessment created PENDING_APPROVAL",
+      "ok": true,
+      "detail": "state=PENDING_APPROVAL"
+    },
+    {
+      "suite": "core-flow",
+      "name": "assessment approved",
+      "ok": true,
+      "detail": "state=APPROVED"
+    },
+    {
+      "suite": "core-flow",
+      "name": "scan started through governed path",
+      "ok": true,
+      "detail": "scanId=d01aeb18-0071-4f9b-9770-6c06a03a6d44"
+    },
+    {
+      "suite": "core-flow",
+      "name": "scan reaches terminal state",
+      "ok": true,
+      "detail": "final=COMPLETED"
+    },
+    {
+      "suite": "core-flow",
+      "name": "findings normalized into canonical list",
+      "ok": true,
+      "detail": "total=1"
+    },
+    {
+      "suite": "core-flow",
+      "name": "report created",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "core-flow",
+      "name": "report generated from snapshot",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "core-flow",
+      "name": "report approved",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "TenantB registered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "target detail",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "scan detail",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "scan list excludes A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "findings list excludes A",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "assets list excludes A target host",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "report detail",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "tenant-isolation",
+      "name": "search excludes A finding",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "client-isolation",
+      "name": "malformed admin body is a 400, never a 500 (RC1-H1)",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "suite": "client-isolation",
+      "name": "client + engagement created",
+      "ok": true,
+      "detail": "client=201 eng=201"
+    },
+    {
+      "suite": "client-isolation",
+      "name": "finding published to client engagement",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "client-isolation",
+      "name": "report finalized (immutable snapshot)",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "negative",
+      "name": "unauthenticated request is 401",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "suite": "negative",
+      "name": "garbage bearer token is 401",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "suite": "negative",
+      "name": "unverified target cannot reach a running scan",
+      "ok": true,
+      "detail": "assess=201 approve=201 scan=400"
+    },
+    {
+      "suite": "negative",
+      "name": "invalid state transition rejected",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "suite": "negative",
+      "name": "arbitrary command in tool registration rejected/ignored",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "negative",
+      "name": "mass-assigned tenant fields do not relocate the record",
+      "ok": true,
+      "detail": "create=201 visibleToB=false"
+    },
+    {
+      "suite": "negative",
+      "name": "share link resolves while valid",
+      "ok": true,
+      "detail": "create=201 resolve=200"
+    },
+    {
+      "suite": "negative",
+      "name": "revoked share link is 404",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "negative",
+      "name": "forged share token is 404",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "self-security",
+      "name": "security headers present (helmet)",
+      "ok": true,
+      "detail": "xcto=nosniff xfo=SAMEORIGIN csp=set"
+    },
+    {
+      "suite": "self-security",
+      "name": "CORS does not reflect arbitrary origins",
+      "ok": true,
+      "detail": "acao=null"
+    },
+    {
+      "suite": "self-security",
+      "name": "error responses leak no stack/SQL/paths",
+      "ok": true,
+      "detail": "status=404"
+    },
+    {
+      "suite": "ai",
+      "name": "copilot answers grounded with executed:false",
+      "ok": true,
+      "detail": "status=201 origin=RULE_BASED"
+    },
+    {
+      "suite": "ai",
+      "name": "copilot for TenantB cites no TenantA records",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "suite": "ai",
+      "name": "AI has no shell tool (gateway refusal)",
+      "ok": true,
+      "detail": "status=201"
+    }
+  ]
+}

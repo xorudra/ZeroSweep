@@ -1,0 +1,47 @@
+{
+  "measuredAt": "2026-10-08T12:52:41.303Z",
+  "environment": "Docker-less local stack on the build VM (PostgreSQL 16.2 pgserver, Redis 7.2.5, single node, loopback)",
+  "dataset": "workspace with 5,000 synthetic Finding rows inserted directly via SQL for query-cost measurement (bypassing ingestion by design); 67 pre-existing smoke organizations",
+  "results": [
+    {
+      "endpoint": "GET /findings (pageSize=50, 5000-row workspace)",
+      "requests": 20,
+      "meanMs": 64.6,
+      "p95Ms": 131,
+      "minMs": 41.9,
+      "maxMs": 137.9
+    },
+    {
+      "endpoint": "GET /vulnerabilities (pageSize=50)",
+      "requests": 20,
+      "meanMs": 357.4,
+      "p95Ms": 434.5,
+      "minMs": 299.3,
+      "maxMs": 434.9
+    },
+    {
+      "endpoint": "GET /assets (pageSize=50)",
+      "requests": 20,
+      "meanMs": 11,
+      "p95Ms": 34,
+      "minMs": 5.4,
+      "maxMs": 47.7
+    },
+    {
+      "endpoint": "GET /scans (pageSize=50)",
+      "requests": 20,
+      "meanMs": 6.2,
+      "p95Ms": 9,
+      "minMs": 4.9,
+      "maxMs": 9.2
+    },
+    {
+      "endpoint": "GET /findings?severity=HIGH (filtered)",
+      "requests": 20,
+      "meanMs": 25.7,
+      "p95Ms": 31.1,
+      "minMs": 22.1,
+      "maxMs": 41.7
+    }
+  ]
+}

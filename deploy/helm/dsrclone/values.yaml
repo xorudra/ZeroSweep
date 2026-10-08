@@ -3,7 +3,7 @@
 # manager, plus a ConfigMap rendered from `config` below (non-secret only).
 global:
   imageRegistry: ghcr.io/xorudra
-  imageTag: "25.0.0" # immutable release tag — never "latest"
+  imageTag: "1.0.0-rc.1" # immutable release tag — never "latest"
 
 existingSecret: dsrclone-secrets
 

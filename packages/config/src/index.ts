@@ -28,7 +28,9 @@ export const envSchema = z.object({
   SCHEDULER_TICK_MS: z.coerce.number().int().min(1000).max(300000).default(15000),
   SCHEDULER_OWNER_ID: z.string().max(120).optional(),
   // Release identity stamped into logs and release manifests (§144–146).
-  RELEASE_VERSION: z.string().max(64).optional(),
+  // Prompt 39 §302/§303: the RC version is the default build identity;
+  // deployments may override it via env for hotfix trains.
+  RELEASE_VERSION: z.string().max(64).default("1.0.0-rc.1"),
   GIT_COMMIT: z.string().max(64).optional(),
 });
 export type AppEnv = z.infer<typeof envSchema>;
