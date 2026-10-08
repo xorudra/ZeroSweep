@@ -55,3 +55,24 @@ unless the worker carries the `PRIVILEGED_HOST_ASSESSMENT` capability,
 which only a worker of type `PRIVILEGED_HOST` can hold. Benchmark results
 normalize to CIS Docker control assessments; FAIL/WARN raise findings,
 PASS is recorded as evidence only.
+
+## V2 additions (Prompt 34 §46–§64)
+
+- **Identity (§49):** the digest is the immutable identity; the tag
+  is mutable metadata. The same digest under two tags is ONE image;
+  two digests under one tag are two build outputs. Baselines,
+  coverage and verification key on digest; a tag-only reference is
+  reported as an unresolved identity, never silently trusted.
+- **Pipeline (§104):** IMAGE_DISCOVERY → SBOM → VULNERABILITY →
+  CONFIGURATION → DEPLOYMENT_CORRELATION → RISK → REMEDIATION,
+  implemented by the Container Orchestrator on the same models.
+- **Dedup (§56):** Trivy and Grype observations of the same
+  package/CVE merge into one canonical finding.
+- **Deployment context (§87/§59):** a critical CVE in a running
+  public workload outranks the same CVE in an undeployed image.
+- **Image policy (§62):** `evaluateImagePolicy` — approved-registry
+  allowlist, `latest` rejection, digest pinning, non-root user,
+  healthcheck, signature requirement, vulnerability ceiling (max
+  severity, KEV count, fixable-critical count). Violations are
+  evidence for admission-policy design, not runtime enforcement.
+- **Secrets (§58):** metadata-only findings; values never stored.

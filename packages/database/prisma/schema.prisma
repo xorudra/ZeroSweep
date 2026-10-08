@@ -925,6 +925,26 @@ enum AuditAction {
   PACKET_CAPTURE_STARTED
   PACKET_CAPTURE_COMPLETED
   CONTROLLED_METASPLOIT_VERIFICATION_REQUESTED
+  // Prompt 34 §140: Cloud / Container / Kubernetes Security V2 audit
+  // actions. CLOUD_RESOURCE_DISCOVERED, CLOUD_DRIFT_DETECTED,
+  // CONTAINER_IMAGE_DISCOVERED, CONTAINER_SCAN_COMPLETED and
+  // SBOM_GENERATED already exist above (Prompts 12–14) and are reused,
+  // not duplicated. Metadata for these actions never contains
+  // credentials, kubeconfig content or secret values (§10/§72/§147).
+  CLOUD_ACCOUNT_CONNECTED
+  CLOUD_ACCOUNT_CONNECTION_FAILED
+  CLOUD_ASSESSMENT_STARTED
+  CLOUD_ASSESSMENT_COMPLETED
+  CLOUD_FINDING_CREATED
+  CLOUD_BASELINE_CREATED
+  CONTAINER_ASSESSMENT_COMPLETED
+  CONTAINER_BASELINE_CREATED
+  KUBERNETES_CLUSTER_CONNECTED
+  KUBERNETES_ASSESSMENT_STARTED
+  KUBERNETES_FINDING_CREATED
+  KUBERNETES_BASELINE_CREATED
+  KUBERNETES_RUNTIME_EVENT_INGESTED
+  RUNTIME_EVENT_CORRELATED
 }
 
 enum NotificationType {
@@ -3302,24 +3322,27 @@ model DockerHost {
 // secret reference to a least-privilege, read-oriented service account.
 // Cluster-admin is never assumed or requested by default.
 model KubernetesCluster {
-  id                  String               @id @default(uuid())
+  id                  String                  @id @default(uuid())
   workspaceId         String
   targetId            String?
   name                String
   apiServerReference  String // reference name only — no embedded credentials, ever
   version             String?
-  provider            String               @default("GENERIC") // GENERIC | EKS | AKS | GKE | OPENSHIFT | ON_PREM
+  provider            String                  @default("GENERIC") // GENERIC | EKS | AKS | GKE | OPENSHIFT | ON_PREM
   credentialReference String? // secret reference name only — never a value
   // Prompt 14 §50: an EKS / AKS / GKE cluster discovered in cloud
   // inventory LINKS to this row — never a duplicate cluster entity.
   cloudAccountId      String?
   cloudResourceId     String?
-  environment         String               @default("UNKNOWN")
-  criticality         String               @default("MEDIUM")
+  environment         String                  @default("UNKNOWN")
+  criticality         String                  @default("MEDIUM")
   lastAssessmentAt    DateTime?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
   workloads           KubernetesWorkload[]
+  // Prompt 34 §76: RBAC inventory (roles + bindings as data).
+  roles               KubernetesRole[]
+  roleBindings        KubernetesRoleBinding[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -3485,8 +3508,12 @@ model CloudAccount {
   // AWS account id / Azure tenant+subscription / GCP project id — the
   // provider's own identifier for the assessed estate. NOT a credential.
   externalAccountId   String
-  environment         String                   @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | CI | UNKNOWN
+  environment         String                   @default("UNKNOWN") // PRODUCTION | STAGING | DEVELOPMENT | TEST | SANDBOX | CI | UNKNOWN (Prompt 34 §7)
   criticality         String                   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  // Prompt 34 §6/§8: the authorization record this account is assessed
+  // under — an APPROVED assessment / engagement reference. Assessment
+  // is refused when it is absent, expired or provider-mismatched.
+  authorizationId     String?
   credentialReference String? // secret reference name only — never a value
   // Assessment posture (§7): READ_ONLY is the only posture ordinary
   // assessments may hold; the field exists so policy can name it.
@@ -3506,6 +3533,10 @@ model CloudAccount {
   riskPaths           CloudRiskPath[]
   driftEvents         CloudDriftEvent[]
   leases              CredentialLease[]
+  // Prompt 34: governed connection tests (§12) + per-resource
+  // immutable configuration snapshots (§17).
+  connectionTests     CloudConnectionTest[]
+  resourceSnapshots   CloudResourceSnapshot[]
 
   @@unique([workspaceId, provider, externalAccountId])
   @@index([workspaceId])
@@ -3540,7 +3571,7 @@ model CloudScope {
 // (§99). A resource that disappears is marked NOT_SEEN / REMOVED —
 // historical records are never hard-deleted (§20).
 model CloudResource {
-  id                    String        @id @default(uuid())
+  id                    String                  @id @default(uuid())
   workspaceId           String
   cloudAccountId        String
   provider              CloudProvider
@@ -3549,16 +3580,17 @@ model CloudResource {
   name                  String
   region                String?
   zone                  String?
-  tags                  Json          @default("{}") // sanitized string map only
-  configurationMetadata Json          @default("{}") // bounded normalized security metadata
-  exposure              String        @default("UNKNOWN") // PUBLIC | INTERNET_REACHABLE_POSSIBLE | PRIVATE | UNKNOWN (§47)
-  criticality           String        @default("UNSPECIFIED")
-  status                String        @default("ACTIVE") // ACTIVE | NOT_SEEN | REMOVED (§20)
-  scopeStatus           String        @default("IN_SCOPE") // IN_SCOPE | OUT_OF_SCOPE
-  sources               String[]      @default([]) // adapter slugs that reported this resource
-  firstSeen             DateTime      @default(now())
-  lastSeen              DateTime      @updatedAt
-  account               CloudAccount  @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  tags                  Json                    @default("{}") // sanitized string map only
+  configurationMetadata Json                    @default("{}") // bounded normalized security metadata
+  exposure              String                  @default("UNKNOWN") // PUBLIC | INTERNET_REACHABLE_POSSIBLE | PRIVATE | UNKNOWN (§47)
+  criticality           String                  @default("UNSPECIFIED")
+  status                String                  @default("ACTIVE") // ACTIVE | NOT_SEEN | REMOVED (§20)
+  scopeStatus           String                  @default("IN_SCOPE") // IN_SCOPE | OUT_OF_SCOPE
+  sources               String[]                @default([]) // adapter slugs that reported this resource
+  firstSeen             DateTime                @default(now())
+  lastSeen              DateTime                @updatedAt
+  account               CloudAccount            @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  configSnapshots       CloudResourceSnapshot[]
 
   @@unique([cloudAccountId, providerResourceId])
   @@index([workspaceId])
@@ -9844,4 +9876,255 @@ model MetasploitVerificationRequest {
   createdAt     DateTime @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+// ===================== Prompt 34 — Advanced Cloud, Container & Kubernetes Security V2 =====================
+// Deepens Prompts 13/14 on the SAME canonical models: CloudAccount /
+// CloudResource / CloudIdentity / CloudRelationship / CloudRiskPath /
+// CloudDriftEvent, ContainerRegistry / ContainerImage (+ snapshots and
+// the Prompt 12/30 SBOM subsystem), KubernetesCluster /
+// KubernetesWorkload / RuntimeSecurityEvent. Nothing here can hold
+// credential material, kubeconfig content or secret values: accounts
+// and clusters store secret REFERENCES only (§10/§72), resource
+// snapshots store bounded sanitized security configuration (§17), and
+// Kubernetes inventory stores Secret METADATA only (§83).
+
+// One governed connection test (§12): the outcome of evaluating an
+// account's credential reference + provider transport. The record
+// carries the verdict and the permission limitations discovered —
+// never a credential value, and forbidden operations are never
+// retried in a loop (§13).
+model CloudConnectionTest {
+  id                 String       @id @default(uuid())
+  workspaceId        String
+  cloudAccountId     String
+  result             String // CONNECTED | CONNECTED_WITH_LIMITATIONS | AUTH_FAILED | PERMISSION_LIMITED | EXPIRED | UNREACHABLE
+  limitations        Json         @default("[]") // [{ code, detail }] — incl. transport NOT_CONFIGURED honesty
+  missingPermissions Json         @default("[]") // provider permission names only (§13)
+  accountMatch       Boolean      @default(true) // §145: credential/account identity match
+  testedById         String?
+  testedAt           DateTime     @default(now())
+  account            CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([cloudAccountId, testedAt])
+}
+
+// An immutable per-resource configuration snapshot (§17): the bounded,
+// sanitized security configuration of ONE CloudResource at a point in
+// time. Snapshot-vs-snapshot comparison drives §18 drift. No
+// updatedAt by design — snapshots are never rewritten.
+model CloudResourceSnapshot {
+  id                String        @id @default(uuid())
+  workspaceId       String
+  cloudAccountId    String
+  cloudResourceId   String
+  runId             String? // CloudV2AssessmentRun that captured it
+  configuration     Json          @default("{}") // bounded sanitized security metadata only
+  configurationHash String
+  exposure          String        @default("UNKNOWN")
+  capturedAt        DateTime      @default(now())
+  account           CloudAccount  @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  resource          CloudResource @relation(fields: [cloudResourceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([cloudResourceId, capturedAt])
+  @@index([cloudAccountId, capturedAt])
+}
+
+// One V2 orchestrator run (§103–§105): the pipeline record for a cloud,
+// container or Kubernetes assessment. Stages advance over STORED
+// inventory + governed adapter results only; a run whose inputs are
+// incomplete ends COMPLETED_WITH_GAPS (§110) — never "clean".
+model CloudV2AssessmentRun {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  domain         String // CLOUD | CONTAINER | KUBERNETES
+  cloudAccountId String?
+  clusterId      String?
+  imageId        String?
+  scanId         String?
+  pipeline       Json      @default("[]") // [{ stage, status, detail }] in §103–§105 order
+  status         String    @default("RUNNING") // RUNNING | COMPLETED | COMPLETED_WITH_GAPS | FAILED | BLOCKED
+  blockedReason  String?
+  startedById    String?
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  @@index([workspaceId, domain])
+  @@index([cloudAccountId])
+  @@index([clusterId])
+  @@index([imageId])
+}
+
+// Versioned, immutable baselines (§97–§99). Rules are declarative
+// expectations over posture facts (never provider mutations); drift is
+// the deviation of current facts from the approved baseline (§100).
+model CloudSecurityBaseline {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  cloudAccountId String? // null = workspace/provider-wide baseline
+  provider       String?
+  version        Int
+  rules          Json     @default("[]") // [{ ruleId, expectation, severity }]
+  hash           String
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([workspaceId, cloudAccountId, provider, version])
+  @@index([workspaceId, createdAt])
+}
+
+model ContainerSecurityBaseline {
+  id          String   @id @default(uuid())
+  workspaceId String
+  registryId  String? // null = workspace-wide baseline
+  version     Int
+  rules       Json     @default("[]") // [{ ruleId, expectation, severity }]
+  hash        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, registryId, version])
+  @@index([workspaceId, createdAt])
+}
+
+model KubernetesSecurityBaseline {
+  id          String   @id @default(uuid())
+  workspaceId String
+  clusterId   String? // null = workspace-wide baseline
+  version     Int
+  rules       Json     @default("[]") // [{ ruleId, expectation, severity }]
+  hash        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, clusterId, version])
+  @@index([workspaceId, createdAt])
+}
+
+// Coverage records (§111–§114): what an assessment actually saw, and
+// what it could not — every gap carries a §115 skipped reason. A
+// coverage row with gaps makes its run COMPLETED_WITH_GAPS (§110);
+// missing permission is never reported as a clean result (§166).
+model CloudSecurityCoverage {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  runId             String?  @unique
+  cloudAccountId    String
+  accountsCovered   Int      @default(0)
+  regionsCovered    Int      @default(0)
+  regionsAuthorized Int      @default(0)
+  servicesCovered   Int      @default(0)
+  resourcesCovered  Int      @default(0)
+  iamIdentities     Int      @default(0)
+  postureChecks     Int      @default(0)
+  gaps              Json     @default("[]") // [{ area, reason, detail }] — reason ∈ §115 set
+  completion        String   @default("COMPLETED_WITH_GAPS")
+  createdAt         DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([cloudAccountId, createdAt])
+}
+
+model ContainerSecurityCoverage {
+  id                    String   @id @default(uuid())
+  workspaceId           String
+  runId                 String?  @unique
+  imageId               String?
+  registriesCovered     Int      @default(0)
+  repositoriesCovered   Int      @default(0)
+  imagesCovered         Int      @default(0)
+  sbomCoverage          Float? // null when unknown — never fabricated (§113)
+  vulnerabilityCoverage Float?
+  deploymentCorrelated  Int      @default(0)
+  gaps                  Json     @default("[]")
+  completion            String   @default("COMPLETED_WITH_GAPS")
+  createdAt             DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([imageId, createdAt])
+}
+
+model KubernetesSecurityCoverage {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  runId             String?  @unique
+  clusterId         String
+  namespacesCovered Int      @default(0)
+  workloadsCovered  Int      @default(0)
+  rbacSubjects      Int      @default(0)
+  benchmarkChecks   Int      @default(0)
+  imagesCorrelated  Int      @default(0)
+  runtimeTelemetry  Boolean  @default(false)
+  gaps              Json     @default("[]")
+  completion        String   @default("COMPLETED_WITH_GAPS")
+  createdAt         DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([clusterId, createdAt])
+}
+
+// Kubernetes RBAC inventory (§76): roles as DATA (rules are permission
+// metadata — never credentials). Analysis is defensive: wildcards,
+// cluster-admin-like bindings and dangerous verbs/resources become
+// findings + graph edges (§77); privileges are never used (§152).
+model KubernetesRole {
+  id          String            @id @default(uuid())
+  workspaceId String
+  clusterId   String
+  kind        String // Role | ClusterRole
+  namespace   String? // null for ClusterRole
+  name        String
+  rules       Json              @default("[]") // [{ resources, verbs, apiGroups, resourceNames? }]
+  labels      Json              @default("{}")
+  firstSeen   DateTime          @default(now())
+  lastSeen    DateTime          @updatedAt
+  cluster     KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, kind, namespace, name])
+  @@index([workspaceId])
+  @@index([clusterId])
+}
+
+model KubernetesRoleBinding {
+  id          String            @id @default(uuid())
+  workspaceId String
+  clusterId   String
+  kind        String // RoleBinding | ClusterRoleBinding
+  namespace   String? // null for ClusterRoleBinding
+  name        String
+  roleKind    String // Role | ClusterRole
+  roleName    String
+  subjects    Json              @default("[]") // [{ kind: ServiceAccount|User|Group, name, namespace? }] — identities, never tokens (§84)
+  firstSeen   DateTime          @default(now())
+  lastSeen    DateTime          @updatedAt
+  cluster     KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, kind, namespace, name])
+  @@index([workspaceId])
+  @@index([clusterId])
+}
+
+// A Falco runtime event correlated to platform context (§94): the
+// workload, image and known-vulnerability links evidence supports.
+// Correlation raises CONTEXTUAL risk only — the original scanner
+// severity is never altered (§95), and no response action is taken
+// against the workload (§96).
+model RuntimeEventCorrelation {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  eventId        String   @unique // RuntimeSecurityEvent id
+  clusterId      String?
+  workloadRef    String? // namespace/kind/name
+  imageRef       String? // repository@digest where evidence supports it
+  imageId        String? // ContainerImage id when the digest resolves
+  findingIds     Json     @default("[]")
+  confidence     String   @default("LOW") // LOW | MEDIUM | HIGH
+  socAlertLinked Boolean  @default(false) // §141: high-confidence signals link a SOC alert without duplication
+  detail         String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([clusterId])
 }

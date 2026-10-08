@@ -44,6 +44,9 @@ import { SocModule } from "./modules/soc/soc.module";
 import { EasmModule } from "./modules/easm/easm.module";
 import { WebVaptModule } from "./modules/web-vapt/web-vapt.module";
 import { NetworkVaptModule } from "./modules/network-vapt/network-vapt.module";
+import { CloudSecurityV2Module } from "./modules/cloud-security-v2/cloud-security-v2.module";
+import { ContainerSecurityModule } from "./modules/container-security/container-security.module";
+import { KubernetesSecurityModule } from "./modules/kubernetes-security/kubernetes-security.module";
 import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelligence/vulnerability-intelligence.module";
 import { RemediationModule } from "./modules/remediation/remediation.module";
 
@@ -74,6 +77,9 @@ import { RemediationModule } from "./modules/remediation/remediation.module";
     EasmModule,
     WebVaptModule,
     NetworkVaptModule,
+    CloudSecurityV2Module,
+    ContainerSecurityModule,
+    KubernetesSecurityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -305,3 +305,4 @@ export * from "./webvapt/index";
 // (transport NOT_PROVISIONED), packet-capture governance, topology/
 // exposure, drift, coverage honesty, Risk V3 signals, fix verification.
 export * from "./netvapt/index";
+export * from "./cloudv2/index";

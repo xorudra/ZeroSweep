@@ -48,3 +48,24 @@ control on the same resource identity (namespace/kind/name/container/
 control fingerprint), correlation merges them into one canonical finding
 that preserves BOTH observations. Image→workload correlation binds by
 digest; a tag-only match is recorded at lower confidence.
+
+## V2 additions (Prompt 34 §70–§90)
+
+- **RBAC inventory & analysis (§76/§77):** roles/bindings stored as
+  data (`KubernetesRole`/`KubernetesRoleBinding`); risks include
+  wildcard permissions, cluster-admin bindings, dangerous verbs
+  (impersonate/escalate/bind/approve), secret access and workload
+  creation. See `kubernetes-rbac.md`. Privileges are analyzed, never
+  used; token/secret-shaped subject fields are refused at import
+  (§83/§84).
+- **Pipeline (§105):** CONNECT → INVENTORY → RBAC →
+  WORKLOAD_CONFIGURATION → BENCHMARK → IMAGE_CORRELATION → EXPOSURE
+  → RUNTIME_SIGNALS → RISK → REMEDIATION. CONNECT reports
+  NOT_CONFIGURED honestly when no live transport is wired.
+- **Admission posture (§85):** PSS levels, Kyverno/Gatekeeper
+  presence and image policy are evaluated as observations; the
+  platform operates no admission webhook.
+- **Attack paths (§89):** public workload → over-privileged service
+  account → cluster impact, as labelled candidates, never executed.
+- **Runtime (§91–§96):** Falco correlation with SOC linkage — see
+  `cloud-runtime-security.md`.
