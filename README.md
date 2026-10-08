@@ -17,8 +17,8 @@ Deployed from this repository via the `render.yaml` blueprint (free tier, Oregon
 | Piece | URL |
 |---|---|
 | Web console | https://dsrclone-web.onrender.com |
-| API | https://dsrclone-api.onrender.com (`/api/v1/health`) |
-| AI copilot service | https://dsrclone-ai.onrender.com (`/health`) |
+| API | https://dsrclone-api.onrender.com/api/v1/health |
+| AI copilot service | https://dsrclone-ai.onrender.com/health |
 | Worker | https://dsrclone-worker.onrender.com (background jobs; health via API) |
 | Database / cache | Render Postgres 16 + Key Value, wired by the blueprint |
 

@@ -17,6 +17,13 @@ logger = get_logger()
 app = FastAPI(title="DSRclone AI Service", version="0.1.0")
 
 
+@app.get("/")
+async def root() -> dict:
+    """Root info route: the bare service URL returns a small descriptor
+    pointing at the real endpoints instead of a bare 404."""
+    return {"service": "dsrclone-ai", "status": "ok", "health": "/health"}
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     logger.info("ai service starting", extra={})

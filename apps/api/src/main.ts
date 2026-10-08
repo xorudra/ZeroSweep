@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import { RequestMethod } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
@@ -17,7 +18,9 @@ async function bootstrap(): Promise<void> {
   // Prompt 25 §30/§33: fail fast on placeholder secrets / unsafe production config.
   assertProductionConfig(env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
-  app.setGlobalPrefix(API_PREFIX);
+  // The root info route (GET /) lives outside the prefix; everything else
+  // stays under /api/v1 as before.
+  app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: "", method: RequestMethod.GET }] });
   app.use(helmet());
   app.enableCors({ origin: env.API_CORS_ORIGIN.split(",").map((s) => s.trim()), credentials: true });
   app.use(requestIdMiddleware);
