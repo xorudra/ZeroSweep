@@ -17,6 +17,18 @@ turbo/
 *.pem
 credentials*
 *secret*
+# source/docs files that legitimately carry "secret"/"credentials" in their
+# names — these are code and documentation ABOUT secrets, never secret values
+!packages/security-sdk/src/code/secrets.ts
+!apps/api/src/modules/identity/secret-resolver.ts
+!apps/api/src/modules/credentials/
+!apps/api/src/modules/credentials/**
+!docs/architecture/secret-scanning.md
+!docs/security/ai-secret-redaction.md
+!docs/security/integration-secret-protection.md
+!docs/security/mobile-secret-redaction.md
+!docs/security/production-secrets.md
+!release/rc1/security-results/secret-scan.md
 # python
 __pycache__/
 *.py[cod]
