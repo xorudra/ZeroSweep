@@ -30,6 +30,9 @@ services:
     name: dsrclone-redis
     plan: free
     region: oregon
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere (access still requires the generated connection string)
 
   - type: web
     name: dsrclone-api
