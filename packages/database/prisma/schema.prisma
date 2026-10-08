@@ -846,6 +846,21 @@ enum AuditAction {
   THREAT_INTEL_SYNCED
   INDICATOR_MATCHED
   POST_INCIDENT_REVIEW_COMPLETED
+  // Prompt 29 §119: EASM audit actions. Metadata never contains
+  // screenshot content or sensitive URL parameter values (§64/§157-style).
+  EASM_PROGRAM_CREATED
+  EASM_ROOT_ASSET_ADDED
+  EASM_ROOT_ASSET_VERIFIED
+  EASM_ACTIVE_TESTING_AUTHORIZED
+  EASM_DISCOVERY_STARTED
+  EASM_DISCOVERY_COMPLETED
+  EASM_CANDIDATE_DISCOVERED
+  EASM_ASSET_PROMOTED
+  EASM_ASSET_REJECTED
+  EASM_OWNERSHIP_CHANGED
+  EASM_EXPOSURE_CHANGED
+  EASM_DRIFT_DETECTED
+  EASM_BASELINE_CREATED
 }
 
 enum NotificationType {
@@ -8113,4 +8128,455 @@ model SocIncidentReport {
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, incidentId, createdAt])
+}
+
+// ============================================================================
+// Prompt 29 — Enterprise External Attack Surface Management (EASM).
+// The authorization boundary is structural: candidates are DISCOVERED
+// records only. A candidate carries activeTestingStatus NOT_AUTHORIZED
+// until a named human with AUTHORIZE_EASM_ACTIVE_TESTING records a
+// separate authorization — discovery, verification of ownership and
+// promotion into the canonical inventory NEVER set it (§13/§71/§135).
+// ============================================================================
+
+// §3: an EASM program — a named external-surface scope inside a workspace.
+model EasmProgram {
+  id                String   @id @default(uuid())
+  organizationId    String
+  workspaceId       String
+  name              String
+  description       String   @default("")
+  status            String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | ARCHIVED (§4)
+  monitoringEnabled Boolean  @default(false)
+  monitoringTier    String   @default("DAILY") // HOURLY_LIGHT | DAILY | WEEKLY_DEEP (§87/§88)
+  createdBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §5–§9: an explicitly-scoped root asset. Ownership is NEVER inferred
+// from WHOIS alone (§9): authorizationStatus stays PENDING until a
+// controlled verification workflow completes (§8).
+model EasmRootAsset {
+  id                     String    @id @default(uuid())
+  programId              String
+  workspaceId            String
+  type                   String // DOMAIN | IP | CIDR | CLOUD_ACCOUNT | REPOSITORY_ORGANIZATION
+  value                  String // normalized identity (ascii domain / canonical IP / CIDR)
+  unicodeValue           String? // §21 preserved Unicode form for IDN roots
+  authorizationStatus    String    @default("PENDING") // PENDING | VERIFIED | REJECTED | EXPIRED (§7)
+  authorizationMethod    String? // DNS_TXT | FILE_CHALLENGE | MANUAL_APPROVAL | CLOUD_INTEGRATION
+  authorizedBy           String?
+  authorizedAt           DateTime?
+  authorizationExpiresAt DateTime?
+  // §6: active testing is a SEPARATE grant from ownership verification.
+  activeTestingAllowed   Boolean   @default(false)
+  activeTestingStatus    String    @default("NOT_AUTHORIZED") // NOT_AUTHORIZED | AUTHORIZED_SAFE | AUTHORIZED_STANDARD (§19)
+  activeTestingBy        String?
+  activeTestingAt        DateTime?
+  verificationChallenge  String? // opaque challenge value the owner must publish (§8)
+  createdBy              String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@unique([programId, type, value])
+  @@index([workspaceId, programId])
+}
+
+// §10/§11: discovery policy. CUSTOM remains bounded by platform policy:
+// unbounded brute force and unrestricted port sets are not expressible.
+model EasmDiscoveryPolicy {
+  id                   String   @id @default(uuid())
+  programId            String   @unique
+  workspaceId          String
+  mode                 String   @default("PASSIVE_ONLY") // PASSIVE_ONLY | SAFE_ACTIVE | CUSTOM
+  passiveDiscovery     Boolean  @default(true)
+  dnsResolution        Boolean  @default(true)
+  certificateDiscovery Boolean  @default(true)
+  httpProbing          Boolean  @default(false)
+  serviceDiscovery     Boolean  @default(false)
+  technologyDetection  Boolean  @default(true)
+  historicalUrls       Boolean  @default(false)
+  frequency            String   @default("DAILY") // HOURLY | DAILY | WEEKLY
+  maxCandidatesPerRun  Int      @default(1000) // §124/§125 backpressure bound
+  allowPromotion       Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// §42/§43: conservative-by-default service discovery profile. The port
+// set is an explicit approved list — never "all ports" (§153).
+model EasmServiceDiscoveryProfile {
+  id            String   @id @default(uuid())
+  programId     String   @unique
+  workspaceId   String
+  ports         Int[]    @default([80, 443, 22, 21, 25, 53, 110, 143, 993, 995, 1723, 3306, 3389, 5432, 5900, 8000, 8080, 8443])
+  ratePerSecond Int      @default(100)
+  timeoutMs     Int      @default(1500)
+  retries       Int      @default(1)
+  probeLevel    String   @default("CONNECT") // CONNECT only — no aggressive probes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// §16–§19 + §91: a discovered candidate asset. status = human review
+// state; lifecycle = observation state; ownershipStatus/activeTesting
+// Status are the authorization boundary, stored separately on purpose.
+model EasmAssetCandidate {
+  id                  String   @id @default(uuid())
+  programId           String
+  workspaceId         String
+  rootAssetId         String?
+  type                String // DOMAIN | FQDN | IP | URL | CLOUD_ASSET
+  normalizedValue     String // canonical identity (dedupe key within program)
+  unicodeValue        String? // §21 Unicode form for IDNs
+  suspiciousIdn       Boolean  @default(false)
+  status              String   @default("NEW") // NEW | REVIEWING | CONFIRMED | REJECTED | MERGED (§17)
+  lifecycle           String   @default("DISCOVERED") // DISCOVERED | ACTIVE | STALE | DISAPPEARED | ARCHIVED (§91)
+  confidence          Float    @default(0.5)
+  ownershipStatus     String   @default("UNKNOWN") // UNKNOWN | LIKELY | VERIFIED | THIRD_PARTY | SHARED (§18)
+  ownershipConfidence String   @default("UNKNOWN") // UNKNOWN | LOW | MEDIUM | HIGH | VERIFIED (§66)
+  activeTestingStatus String   @default("NOT_AUTHORIZED") // §19 — discovery NEVER changes this
+  exposureState       String   @default("UNKNOWN") // §74
+  criticality         String   @default("UNSPECIFIED")
+  firstSeen           DateTime @default(now())
+  lastSeen            DateTime @default(now())
+  missCount           Int      @default(0) // §92 disappearance confirmation counter
+  promotedAssetId     String? // canonical Asset row after promotion (§70)
+  promotedTargetId    String?
+  mergedIntoId        String?
+  technicalOwner      String? // §94
+  businessOwner       String?
+  team                String?
+  application         String?
+  businessUnit        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([programId, normalizedValue])
+  @@index([workspaceId, status])
+  @@index([workspaceId, ownershipStatus])
+  @@index([workspaceId, exposureState])
+}
+
+// §14/§15: one provenance-preserving observation of a candidate.
+model AssetDiscoveryObservation {
+  id           String   @id @default(uuid())
+  candidateId  String
+  workspaceId  String
+  programId    String
+  rootAssetId  String?
+  source       String // EasmSourceKind
+  confidence   Float    @default(0.5)
+  rawReference String   @default("") // recorded-output reference, never a live URL fetch
+  relationship String? // e.g. SUBDOMAIN_OF | SAN_OF | RESOLVES_TO
+  metadata     Json     @default("{}")
+  observedAt   DateTime @default(now())
+
+  @@index([workspaceId, candidateId])
+  @@index([workspaceId, observedAt])
+}
+
+// §67: ownership evidence rows — every ownership conclusion references these.
+model EasmOwnershipEvidence {
+  id          String   @id @default(uuid())
+  candidateId String?
+  rootAssetId String?
+  workspaceId String
+  kind        String // OwnershipEvidenceKind
+  reference   String
+  detail      String   @default("")
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, candidateId])
+}
+
+// §26/§27: immutable DNS snapshot (history preserved; hash per §26).
+model DnsSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  programId   String
+  candidateId String?
+  domain      String
+  records     Json     @default("[]") // DnsRecord[]
+  source      String
+  hash        String
+  observedAt  DateTime @default(now())
+
+  @@index([workspaceId, domain, observedAt])
+  @@index([workspaceId, candidateId])
+}
+
+// §29: dangling-DNS CANDIDATE — observable configuration only; the
+// platform never attempts a takeover (§141/§153).
+model DanglingDnsCandidate {
+  id          String   @id @default(uuid())
+  workspaceId String
+  programId   String
+  candidateId String
+  domain      String
+  cnameTarget String
+  service     String?
+  evidence    String   @default("")
+  status      String   @default("OPEN") // OPEN | ACKNOWLEDGED | DISMISSED
+  detectedAt  DateTime @default(now())
+
+  @@index([workspaceId, status])
+}
+
+// §35: certificate intelligence record, keyed by fingerprint.
+model EasmCertificate {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  fingerprint        String // normalized SHA-256 hex (§20)
+  subject            String    @default("")
+  issuer             String    @default("")
+  sans               Json      @default("[]") // string[]
+  notBefore          DateTime?
+  notAfter           DateTime?
+  signatureAlgorithm String    @default("")
+  keyType            String    @default("")
+  keyBits            Int?
+  state              String    @default("HEALTHY") // §38
+  firstSeen          DateTime  @default(now())
+  lastSeen           DateTime  @default(now())
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, state])
+}
+
+// §35: which hosts a certificate was observed on.
+model EasmCertificateObservation {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  certificateId String
+  candidateId   String?
+  host          String
+  source        String // TLS_HANDSHAKE | CERT_TRANSPARENCY | SCAN_EVIDENCE
+  observedAt    DateTime @default(now())
+
+  @@index([workspaceId, certificateId])
+  @@index([workspaceId, host])
+}
+
+// §40: point-in-time host exposure snapshot.
+model HostExposureSnapshot {
+  id                     String   @id @default(uuid())
+  workspaceId            String
+  programId              String
+  candidateId            String
+  host                   String
+  resolvedIps            Json     @default("[]")
+  internetVisibility     String   @default("UNKNOWN")
+  httpState              Json     @default("{}")
+  services               Json     @default("[]")
+  technologies           Json     @default("[]")
+  certificateFingerprint String?
+  riskSignals            Json     @default("[]")
+  capturedAt             DateTime @default(now())
+
+  @@index([workspaceId, candidateId, capturedAt])
+}
+
+// §44: service observation (first/last seen per candidate+port).
+model ServiceObservation {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  candidateId    String
+  ip             String?
+  port           Int
+  transport      String   @default("tcp")
+  service        String?
+  product        String?
+  version        String? // only when a tool actually reported it
+  confidence     Float    @default(0.5)
+  sensitiveClass String? // §46 classification only
+  firstSeen      DateTime @default(now())
+  lastSeen       DateTime @default(now())
+
+  @@unique([candidateId, port, transport])
+  @@index([workspaceId, candidateId])
+}
+
+// §49: HTTP exposure snapshot. Headers subset only; no bodies stored.
+model HttpExposureSnapshot {
+  id                     String   @id @default(uuid())
+  workspaceId            String
+  programId              String
+  candidateId            String
+  url                    String
+  status                 Int?
+  title                  String?
+  headers                Json     @default("{}")
+  redirectTarget         String? // recorded, NEVER auto-followed into active scope (§48/§137)
+  technologies           Json     @default("[]")
+  certificateFingerprint String?
+  capturedAt             DateTime @default(now())
+
+  @@index([workspaceId, candidateId, capturedAt])
+}
+
+// §54: technology observation with per-source evidence.
+model TechnologyObservation {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  candidateId    String
+  technology     String
+  normalizedName String
+  version        String? // §57: null unless evidence states a version
+  category       String   @default("OTHER") // §55
+  confidence     String   @default("LOW") // LOW | MEDIUM | HIGH (§56)
+  sources        Json     @default("[]")
+  firstSeen      DateTime @default(now())
+  lastSeen       DateTime @default(now())
+
+  @@unique([candidateId, normalizedName])
+  @@index([workspaceId, candidateId])
+}
+
+// §72/§73: asset-graph relationships between candidates/roots with
+// confidence + provenance.
+model EasmAssetRelationship {
+  id          String   @id @default(uuid())
+  workspaceId String
+  programId   String
+  fromType    String // ROOT_ASSET | CANDIDATE
+  fromId      String
+  toType      String // CANDIDATE | CERTIFICATE
+  toId        String
+  kind        String // ROOT_DOMAIN_SUBDOMAIN | DOMAIN_IP | HOST_SERVICE | HOST_CERTIFICATE | HOST_TECHNOLOGY | CLOUD_ACCOUNT_ASSET | REPOSITORY_DEPLOYED_ASSET
+  confidence  Float    @default(0.5)
+  source      String
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @default(now())
+
+  @@unique([workspaceId, fromId, toId, kind])
+  @@index([workspaceId, programId])
+}
+
+// §96: deterministic ownership-assignment rules.
+model AssetOwnershipRule {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  programId       String?
+  ruleType        String // DOMAIN_SUFFIX | CLOUD_ACCOUNT | REPOSITORY | TAG | IP_RANGE
+  pattern         String
+  ownershipStatus String   @default("LIKELY")
+  technicalOwner  String?
+  team            String?
+  application     String?
+  businessUnit    String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId, programId])
+}
+
+// §51/§52: screenshot METADATA only. Bytes live in private object
+// storage; access is RBAC-gated + audited (VIEW_EASM_EVIDENCE) and
+// retention is shorter than other evidence (§123).
+model EasmScreenshot {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  candidateId    String
+  storageKey     String
+  classification String    @default("RESTRICTED")
+  sha256         String?
+  retentionUntil DateTime?
+  capturedAt     DateTime  @default(now())
+
+  @@index([workspaceId, candidateId])
+}
+
+// §127–§130: discovery run + per-adapter results (partial success is
+// a first-class outcome, §126).
+model EasmDiscoveryRun {
+  id              String    @id @default(uuid())
+  programId       String
+  workspaceId     String
+  status          String    @default("QUEUED") // QUEUED | RUNNING | PARTIAL | COMPLETED | FAILED | CANCELLED (§128)
+  trigger         String    @default("MANUAL") // MANUAL | SCHEDULED
+  candidatesFound Int       @default(0)
+  candidatesNew   Int       @default(0)
+  promoted        Int       @default(0)
+  coverage        Json      @default("{}")
+  errors          Json      @default("[]")
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([workspaceId, programId, startedAt])
+}
+
+model EasmAdapterRunResult {
+  id          String   @id @default(uuid())
+  runId       String
+  workspaceId String
+  adapter     String
+  version     String? // §130 recorded tool version (null when transport unconfigured)
+  status      String // OK | ERROR | NOT_CONFIGURED | SKIPPED_POLICY
+  durationMs  Int      @default(0)
+  resultCount Int      @default(0)
+  errorClass  String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, runId])
+}
+
+// §82: drift event (before/after evidence preserved).
+model EasmDriftEvent {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  programId     String
+  candidateId   String?
+  assetIdentity String
+  type          String // §81 drift types
+  before        Json?
+  after         Json?
+  severity      String   @default("LOW")
+  confidence    Float    @default(0.8)
+  fingerprint   String // §79 correlation fingerprint
+  status        String   @default("OPEN") // OPEN | ACKNOWLEDGED
+  evidence      Json     @default("{}")
+  detectedAt    DateTime @default(now())
+
+  @@index([workspaceId, programId, detectedAt])
+  @@index([workspaceId, fingerprint])
+}
+
+// §84/§85: baselines are immutable + versioned; a new baseline is a
+// new row, never an edit.
+model EasmBaseline {
+  id          String   @id @default(uuid())
+  workspaceId String
+  programId   String
+  version     Int
+  snapshot    Json     @default("{}") // EasmSnapshot
+  contentHash String
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@unique([programId, version])
+  @@index([workspaceId, programId])
+}
+
+// §120: EASM report snapshots in the P20 immutable discipline —
+// content is rendered from real rows only and hash-anchored.
+model EasmReportSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  programId   String?
+  type        String // EXTERNAL_ATTACK_SURFACE | NEW_ASSET | EXPOSURE_DRIFT | CERTIFICATE_HEALTH | TECHNOLOGY_EXPOSURE | UNKNOWN_ASSET | EXECUTIVE_EASM
+  content     Json     @default("{}")
+  contentHash String
+  generatedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, type, createdAt])
 }

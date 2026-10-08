@@ -41,6 +41,7 @@ import { IdentityModule } from "./modules/identity/identity.module";
 import { GrcModule } from "./modules/grc/grc.module";
 import { SecurityAnalyticsModule } from "./modules/security-analytics/security-analytics.module";
 import { SocModule } from "./modules/soc/soc.module";
+import { EasmModule } from "./modules/easm/easm.module";
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { SocModule } from "./modules/soc/soc.module";
     GrcModule,
     SecurityAnalyticsModule,
     SocModule,
+    EasmModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

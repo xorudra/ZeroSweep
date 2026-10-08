@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 28 complete (Prompts 1–28).** Production monorepo, backend and
+> **Status — Phase 29 complete (Prompts 1–29).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -256,9 +256,36 @@ and the AI health endpoint.
 26. ✅ Compliance, Audit & GRC platform (Prompt 26) — versioned framework catalog (ISO 27001, SOC 2, PCI DSS 4.0, NIST CSF/800-53, CIS Controls, OWASP), control library with cross-framework mappings, snapshot evidence + freshness, continuous control monitoring, risk register, audit packages; assessment evidence, never certification — GRC migration also applied to the live local stack
 27. ✅ Security data lake, advanced analytics, attack-surface intelligence & enterprise search (Prompt 27) — append-only canonical event lake with idempotent ingestion + dead-letter quarantine, lifecycle/risk projections, governed DSL search (tenant + classification enforced before retrieval, secrets redacted at index time), correlation signals, evidence-backed attack-path candidates, MTTR/SLA/regression analytics over real records only; data-lake migration also applied to the live local stack
 28. ✅ Enterprise SOC, SIEM, detection engineering, threat intelligence & incident response (Prompt 28) — canonical telemetry store (scoped ingestion auth, fingerprint idempotency, content hashes, secret redaction before storage), safe declarative detection DSL with immutable rule versions and ATT&CK-mapped templates, fingerprint-deduped alerts with a deterministic priority engine and scoped expiring suppressions, incidents with append-only timelines and hash-anchored access-logged evidence, STIX/fixture threat-intel with provenance + deterministic confidence (live transports NOT_CONFIGURED, honestly), SOC correlation over the Prompt 27 engine, a closed response-action catalog behind single/dual approval with segregation of duties, declarative playbooks, SIEM forwarding only through the Prompt 24 governed outbox, and SOC analytics over recorded rows only; SOC migration also applied to the live local stack
+29. ✅ Enterprise External Attack Surface Management (Prompt 29) — EASM programs + root assets with challenge-based ownership verification and a SEPARATE, segregated active-testing grant (discovered assets land UNVERIFIED/UNMANAGED with activeTestingStatus NOT_AUTHORIZED and can never be scanned without the standard VERIFIED + APPROVED gates), passive-first discovery via governed adapters (live transports NOT_CONFIGURED, honestly), normalization/dedup with wildcard suppression, DNS intelligence with snapshot history + dangling-DNS *candidates* (never claimed takeovers), certificate intelligence (SAN → candidate only), approved-port service discovery and redirect-recording HTTP discovery for authorized roots only, independent-source technology confidence (family-only ⇒ version null), evidence-based ownership resolution, promotion to canonical assets that stay UNVERIFIED, immutable drift baselines with flapping control and threshold disappearance, risk signals into RiskEngine V3 context + P28 SOC alerts, continuous monitoring on the P22 scheduler (discovery-class only), grounded AI copilot that cannot authorize, and an 8-page EASM console; EASM migration also applied to the live local stack
 
 ## Changelog
 
+- **2026-10-08 — Prompt 29: Enterprise External Attack Surface
+  Management (EASM).** An external-surface layer over the asset
+  inventory, RiskEngine V3, the P22 scheduler, P27 correlation and
+  the P28 SOC alert path. Programs own root assets whose ownership is
+  proven by a published DNS TXT / file challenge (or recorded manual
+  approval); active testing is a second, separate grant restricted to
+  OWNER/ADMIN. Discovery is passive-first through governed adapters:
+  results land as candidates with full provenance, normalized and
+  deduplicated (domain/IDN/IP/URL/certificate/technology), with
+  wildcard-zone suppression for uncorroborated labels. DNS snapshots
+  are append-only history with typed diffs; unresolvable CNAMEs to
+  claimable services become dangling-DNS *candidates* with evidence —
+  never claimed takeovers. Certificate intelligence tracks expiry
+  states and treats every SAN as a candidate only. Service discovery
+  and HTTP probing run solely for VERIFIED + active-authorized roots,
+  on approved port sets, with redirects recorded and never followed.
+  Ownership resolves from weighted evidence (rules can be decisive);
+  promotion creates canonical assets that remain UNVERIFIED until the
+  standard gates pass. Drift compares against immutable hashed
+  baselines with flapping control and multi-run disappearance;
+  sensitive exposure raises governed SOC alerts. Continuous runs ride
+  P22 schedules (HOURLY_LIGHT / DAILY / WEEKLY_DEEP tiers,
+  discovery-class only). The grounded EASM copilot cites records and
+  refuses authorization requests. EASM GUI at `/easm`, `/easm/assets`,
+  `/easm/assets/:id`, `/easm/unknown-assets`, `/easm/discovery`,
+  `/easm/drift`, `/easm/technologies`, `/easm/certificates`.
 - **2026-10-08 — Prompt 28: Enterprise SOC, SIEM, Detection Engineering,
   Threat Intelligence & Incident Response Engine.** A SOC layer over the
   existing event bus/outbox (P24), data lake + correlation (P27),
