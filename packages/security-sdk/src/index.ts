@@ -306,3 +306,12 @@ export * from "./webvapt/index";
 // exposure, drift, coverage honesty, Risk V3 signals, fix verification.
 export * from "./netvapt/index";
 export * from "./cloudv2/index";
+
+// Prompt 35 — Mobile & Binary Security V2: governed analysis plans
+// + profiles (static by default), ADB/Frida/Objection defensive
+// policy (allowlist-only, reviewed scripts only), traffic redaction
+// + scope, version lineage carry-forward (absence is never a fix),
+// coverage honesty (COMPLETED_WITH_GAPS), contextual Risk V3
+// signals, deterministic NL plans and the defensive AI guard. The
+// V1 engines (Prompts 17/18) remain the execution substrate.
+export * from "./mobbin/index";
