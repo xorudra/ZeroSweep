@@ -23,8 +23,9 @@ async def on_startup() -> None:
 
 
 @app.get("/health")
+@app.head("/health")
 async def health() -> dict:
-    """Health endpoint: GET /health"""
+    """Health endpoint: GET /health (HEAD supported for uptime probes)"""
     return {
         "status": "ok",
         "service": settings.service_name,
