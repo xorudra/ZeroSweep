@@ -676,6 +676,17 @@ enum AuditAction {
   EXTERNAL_IMPORT_COMPLETED
   EXTERNAL_EXPORT_COMPLETED
   INTEGRATION_SYNC_COMPLETED
+  // Prompt 21 §117: AI copilot audit actions. Metadata for these actions
+  // NEVER contains raw prompts, raw evidence or secrets (§63/§117).
+  AI_REQUEST_CREATED
+  AI_RESPONSE_GENERATED
+  AI_CONTEXT_REDACTED
+  AI_POLICY_BLOCKED
+  AI_ACTION_PROPOSED
+  AI_FEEDBACK_SUBMITTED
+  AI_PROVIDER_CHANGED
+  AI_MODEL_CHANGED
+  AI_KNOWLEDGE_DOCUMENT_ADDED
 }
 
 enum NotificationType {
@@ -4945,4 +4956,286 @@ model VmTag {
 
   @@unique([workspaceId, kind, name])
   @@index([workspaceId])
+}
+
+// ------------------------------- AI Security Copilot (Prompt 21) -------------------------------
+// The AI layer is an ANALYST ASSISTANT over normalized platform data
+// only (§1/§120): it has no execution authority, no scanner/SQL/shell
+// path, and every retrieval is tenant-filtered at the data layer (§12)
+// with RBAC applied BEFORE context construction (§11). Provider
+// credentials are stored as secret REFERENCES only — never values.
+
+// §3/§64: provider configuration. `credentialRef` names a secret in the
+// platform credential store; the raw key never lands in this table, in
+// logs, or in any API response (§110).
+model AiProviderConfig {
+  id                      String    @id @default(uuid())
+  workspaceId             String
+  name                    String
+  providerType            String // OPENAI_COMPATIBLE | ANTHROPIC | AZURE_OPENAI | LOCAL | MOCK
+  baseUrl                 String?
+  credentialRef           String? // secret reference NAME only (§64)
+  isExternal              Boolean   @default(true)
+  region                  String?
+  enabled                 Boolean   @default(false)
+  // §64 data policy: which classifications this provider may receive.
+  approvedClassifications String[]  @default(["PUBLIC", "INTERNAL"])
+  sourceCodeAllowance     String    @default("REDACTED") // DISABLED | REDACTED | ALLOWED
+  retentionPolicy         String?
+  // §110 health (never credentials).
+  healthStatus            String    @default("NOT_CONFIGURED") // NOT_CONFIGURED | HEALTHY | DEGRADED | UNAVAILABLE
+  lastHealthCheckAt       DateTime?
+  lastSuccessfulAt        DateTime?
+  lastLatencyMs           Int?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  models AiModel[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// §4: model registry — capabilities, context limit, allowed tasks,
+// health. Business logic never hard-codes a vendor (§3).
+model AiModel {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  providerId    String
+  modelName     String
+  capabilities  String[]  @default([]) // GENERATE | STREAM | EMBED
+  contextLimit  Int       @default(8192)
+  enabled       Boolean   @default(true)
+  allowedTasks  String[]  @default([])
+  isFallbackFor String? // model id this model falls back FROM (§107)
+  costMetadata  Json?
+  healthStatus  String    @default("UNKNOWN")
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  provider AiProviderConfig @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, providerId, modelName])
+  @@index([workspaceId])
+}
+
+// §109/§16/§17/§62: workspace AI policy singleton. Defaults are the
+// spec defaults: source code REDACTED, raw evidence SANITIZED_ONLY.
+model AiWorkspacePolicy {
+  id                String   @id @default(uuid())
+  workspaceId       String   @unique
+  sourceCodeAccess  String   @default("REDACTED") // DISABLED | REDACTED | ALLOWED_FOR_APPROVED_PROVIDER
+  rawEvidenceAccess String   @default("SANITIZED_ONLY") // DISABLED | SANITIZED_ONLY | APPROVED_PROVIDER_ONLY
+  enabledTasks      String[] @default([])
+  chatRetentionDays Int      @default(30)
+  primaryModelId    String?
+  fallbackModelId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// §104: usage budgets — workspace daily/monthly token ceilings, task
+// limits and the maximum retrieval set the copilot may pull (§10).
+model AiUsageBudget {
+  id                  String   @id @default(uuid())
+  workspaceId         String   @unique
+  dailyTokenLimit     Int      @default(200000)
+  monthlyTokenLimit   Int      @default(4000000)
+  perTaskTokenLimit   Int      @default(16000)
+  maxRetrievalRecords Int      @default(25)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// §59: workspace copilot conversation, bound to an optional typed
+// context (FINDING | ASSET | SCAN | REPORT | CVE | WORKSPACE …).
+model AiConversation {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  contextType String   @default("WORKSPACE")
+  contextId   String?
+  title       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages AiMessage[]
+
+  @@index([workspaceId, userId])
+  @@index([workspaceId, contextType, contextId])
+}
+
+// §60: conversation message. Content stored here is the SANITIZED form
+// only (§60/§63) — raw model context is never persisted by default.
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  workspaceId    String
+  role           String // USER | ASSISTANT | SYSTEM
+  content        String // sanitized content only
+  modelName      String?
+  providerName   String?
+  answerOrigin   String? // MODEL | RULE_BASED | NONE (assistant rows)
+  confidence     String? // LOW | MEDIUM | HIGH
+  citations      Json     @default("[]")
+  tokenUsage     Json?
+  requestLogId   String?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([workspaceId])
+}
+
+// §63: model request log — identifiers and counters ONLY. Full
+// sensitive prompts are never logged (§63); redaction counts are (§15).
+model AiRequestLog {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  userId           String
+  task             String
+  providerName     String?
+  modelName        String?
+  status           String // COMPLETED | NOT_CONFIGURED | POLICY_BLOCKED | PROVIDER_ERROR | INSUFFICIENT_EVIDENCE
+  policyDecision   String? // ALLOW | DENY | REQUIRE_REDACTION | REQUIRE_REVIEW
+  latencyMs        Int?
+  promptTokens     Int?
+  completionTokens Int?
+  redactionCount   Int      @default(0)
+  citationCount    Int      @default(0)
+  injectionFlags   Int      @default(0)
+  contextHash      String?
+  createdAt        DateTime @default(now())
+
+  citations AiCitation[]
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, task])
+}
+
+// §22: citation — every factual claim traces to a platform record.
+model AiCitation {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  requestLogId      String
+  claim             String
+  sourceType        String // FINDING | OBSERVATION | EVIDENCE | ASSET | CVE | CWE | KEV | EPSS | SBOM_COMPONENT | GRAPH_RELATIONSHIP | COMPLIANCE_CONTROL | DOCUMENTATION
+  sourceId          String
+  evidenceReference String?
+  confidence        Float    @default(0.5)
+  createdAt         DateTime @default(now())
+
+  requestLog AiRequestLog @relation(fields: [requestLogId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, requestLogId])
+}
+
+// §34: AI-suggested patch — review-only. AI never commits code (§35).
+model AiSuggestedPatch {
+  id          String   @id @default(uuid())
+  workspaceId String
+  findingId   String
+  filePath    String?
+  diff        String
+  modelName   String?
+  citations   Json     @default("[]")
+  confidence  String? // LOW | MEDIUM | HIGH
+  status      String   @default("PROPOSED") // PROPOSED | REVIEWED | ACCEPTED | REJECTED | SUPERSEDED
+  reviewedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, findingId])
+  @@index([workspaceId, status])
+}
+
+// §83: AI action proposal — the AI proposes; the EXISTING workflow
+// authorizes and executes (§8/§99). A proposal is never an execution.
+model AiActionProposal {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  proposedByUserId   String
+  actionType         String // REQUEST_VALIDATION | REQUEST_RETEST | ASSIGN_FINDING | CREATE_REPORT_DRAFT
+  targetType         String
+  targetId           String
+  summary            String
+  scope              Json      @default("{}")
+  requiredPermission String
+  status             String    @default("PROPOSED") // PROPOSED | APPROVED | REJECTED | DISMISSED
+  decidedBy          String?
+  decidedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §85: analyst feedback on AI responses (quality signal, §86).
+model AiFeedback {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  userId       String
+  messageId    String?
+  requestLogId String?
+  task         String?
+  rating       String // HELPFUL | NOT_HELPFUL | INCORRECT | UNSAFE | OUTDATED
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId, rating])
+  @@index([workspaceId, task])
+}
+
+// §71: governed knowledge document. Content is UNTRUSTED data (§72):
+// ingested with size caps + injection scanning, cited exactly (§73).
+model KnowledgeDocument {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  title          String
+  source         String
+  classification String   @default("INTERNAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED | SECRET
+  version        String   @default("1")
+  contentHash    String
+  status         String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  content        String // sanitized at ingestion (§72)
+  injectionFlags Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §67: tenant-scoped vector storage. Every vector carries workspaceId,
+// sourceType, sourceId and classification; retrieval filters on tenant
+// metadata BEFORE similarity is considered (§68).
+model AiEmbedding {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  sourceType     String // FINDING | REMEDIATION | KNOWLEDGE_DOCUMENT
+  sourceId       String
+  classification String   @default("INTERNAL")
+  vector         Json // number[] — deterministic local embedder output
+  contentHash    String
+  createdAt      DateTime @default(now())
+
+  @@unique([workspaceId, sourceType, sourceId])
+  @@index([workspaceId, sourceType])
+}
+
+// §87: evaluation run record — the golden-dataset suite result. Stores
+// counts and check outcomes only, never fixture secrets (there are
+// none beyond synthetic redaction targets, §88).
+model AiEvaluationRun {
+  id          String   @id @default(uuid())
+  workspaceId String
+  suite       String   @default("GOLDEN")
+  passed      Int
+  failed      Int
+  results     Json     @default("[]")
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
 }

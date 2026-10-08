@@ -24,6 +24,13 @@ export default function SettingsPage() {
           </p>
           <p className="mt-2 text-sm"><Link href="/settings/scanners" className="text-sky-300 hover:underline">Open scanner instances →</Link></p>
         </Card>
+        <Card eyebrow="AI Copilot" title="AI providers & policy">
+          <p className="text-sm text-slate-400">
+            Configure copilot providers (credential references only), models, data-classification policy,
+            budgets and the golden evaluation suite (Prompt 21).
+          </p>
+          <p className="mt-2 text-sm"><Link href="/settings/ai" className="text-sky-300 hover:underline">Open AI settings →</Link></p>
+        </Card>
         <Card eyebrow="Schedules" title="Schedules">
           <p className="text-sm text-slate-400">Recurring assessments are configured here in a later phase. No schedule exists yet.</p>
         </Card>

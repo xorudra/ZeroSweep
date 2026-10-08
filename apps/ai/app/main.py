@@ -1,13 +1,16 @@
-"""DSRclone AI service — foundation only.
+"""DSRclone AI service — model-facing copilot services (Prompt 21).
 
-Responsibilities in later phases: finding explanation, deduplication
-assistance, remediation drafting, executive/technical summaries and risk
-interpretation over NORMALIZED findings. It must never autonomously launch
-intrusive exploitation, and no LLM is connected in this phase.
+Responsibilities: finding explanation, remediation drafting,
+executive/technical summaries and risk interpretation over NORMALIZED
+findings, via the copilot pipeline (context → redaction → grounding).
+It must never autonomously launch intrusive exploitation, execute
+commands or run scanners (§7/§120). No live LLM is connected in this
+build — the status endpoints report NOT_CONFIGURED honestly.
 """
 from fastapi import FastAPI
 
 from .config import settings
+from .copilot import copilot_status
 from .logging_config import get_logger
 
 logger = get_logger()
@@ -27,5 +30,12 @@ async def health() -> dict:
         "service": settings.service_name,
         "environment": settings.environment,
         "llm_connected": False,
-        "detail": "Foundation only — no LLM connected yet (by design, this phase).",
+        "detail": "Copilot pipeline implemented (Prompt 21); no live LLM connected — NOT_CONFIGURED by design.",
     }
+
+
+@app.get("/copilot/status")
+async def copilot() -> dict:
+    """Copilot provider status (Prompt 21 §103/§110): identifiers and
+    status only — never credentials."""
+    return copilot_status()

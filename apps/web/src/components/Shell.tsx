@@ -31,6 +31,8 @@ export const NAV = [
   { href: "/remediation", label: "Remediation" },
   { href: "/reports", label: "Reports" },
   { href: "/security-reports", label: "Security Reports" },
+  { href: "/ai", label: "AI Copilot" },
+  { href: "/ai/copilot", label: "Copilot Chat" },
   { href: "/dashboard/executive", label: "Executive Dashboard" },
   { href: "/dashboard/security", label: "Security Dashboard" },
   { href: "/dashboard/remediation", label: "Remediation Dashboard" },

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
+import { FindingAiPanel } from "@/components/AiAssistant";
 import { Badge, Card, EmptyState } from "@dsrclone/ui";
 import { api, apiFetch, ApiError } from "@/lib/api-client";
 
@@ -444,6 +445,8 @@ export default function Page() {
             </div>
           )}
         </Card>
+
+        <FindingAiPanel findingId={params.id} />
       </div>
     </>
   );

@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 20 complete (Prompts 1–20).** Production monorepo, backend and
+> **Status — Phase 21 complete (Prompts 1–21).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -222,9 +222,27 @@ and the AI health endpoint.
 18. ✅ Reverse engineering & binary analysis (Prompt 18)
 19. ✅ Wireless security assessment — passive only (Prompt 19)
 20. ✅ Unified vulnerability management, reporting & executive dashboard (Prompt 20)
+21. ✅ AI Security Copilot & intelligent analysis engine (Prompt 21)
 
 ## Changelog
 
+- **2026-10-08 — Prompt 21: AI Security Copilot & Intelligent
+  Analysis Engine.** An analyst-assistant layer over normalized
+  platform data only: provider abstraction + model registry (secret
+  references only, never values), task policy (ALLOW / DENY /
+  REQUIRE_REDACTION / REQUIRE_REVIEW), least-context builder with RBAC
+  before retrieval and tenant filtering at the data layer, redaction
+  before any provider call (SECRET data never leaves for external
+  providers), prompt-injection detection with strict instruction/data
+  separation, grounding + citations + confidence (insufficient
+  evidence is stated, never papered over), natural-language search via
+  a governed typed DSL (never AI-generated SQL), tenant-scoped
+  knowledge base + vectors, review-only suggested patches, and action
+  PROPOSALS that only the existing workflows can execute. No provider
+  configured ⇒ honest NOT_CONFIGURED with labelled rule-based
+  summaries; the core platform never depends on AI. Golden evaluation
+  suite covers groundedness, hallucination refusal, injection,
+  secret-leak, cross-tenant and vector isolation.
 - **2026-10-08 — Prompt 20: Unified Vulnerability Management, Reporting
   & Executive Dashboard.** All engines from Prompts 3–19 converge on
   one canonical finding model: standardized lifecycle (now with
