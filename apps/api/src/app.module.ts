@@ -42,6 +42,7 @@ import { GrcModule } from "./modules/grc/grc.module";
 import { SecurityAnalyticsModule } from "./modules/security-analytics/security-analytics.module";
 import { SocModule } from "./modules/soc/soc.module";
 import { EasmModule } from "./modules/easm/easm.module";
+import { WebVaptModule } from "./modules/web-vapt/web-vapt.module";
 import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelligence/vulnerability-intelligence.module";
 import { RemediationModule } from "./modules/remediation/remediation.module";
 
@@ -70,6 +71,7 @@ import { RemediationModule } from "./modules/remediation/remediation.module";
     SecurityAnalyticsModule,
     SocModule,
     EasmModule,
+    WebVaptModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -141,6 +141,52 @@ export const VULN_CLASS_TAXONOMY: Record<string, VulnClassInfo> = {
     remediation: "Apply context-appropriate output encoding and a Content-Security-Policy; validate input server-side.",
     technicalImpact: "Reflected/stored script injection executes attacker code in victims' browsers under the site's origin.",
   },
+  // Prompt 32: governed detection classes for the V2 injection/XSS/
+  // WordPress adapters. Findings in these classes are created ONLY from
+  // tool detection evidence (safe markers / detection techniques) —
+  // the adapters never extract data or execute payloads (§71–§82).
+  XSS_REFLECTED: {
+    title: "Reflected Cross-Site Scripting",
+    cwe: "CWE-79",
+    owaspCategory: "A03:2021 Injection",
+    remediation: "Apply context-appropriate output encoding for reflected input and deploy a Content-Security-Policy; validate input server-side.",
+    technicalImpact: "Reflected script injection executes attacker code in victims' browsers under the site's origin.",
+  },
+  SQL_INJECTION: {
+    title: "SQL Injection",
+    cwe: "CWE-89",
+    owaspCategory: "A03:2021 Injection",
+    remediation: "Use parameterized queries/prepared statements for all database access; apply least-privilege database accounts and server-side input validation.",
+    technicalImpact: "Injection into SQL queries can expose or modify database contents and, in unsafe configurations, lead to server compromise. The platform confirms detectability only — it never extracts data.",
+  },
+  COMMAND_INJECTION: {
+    title: "OS Command Injection",
+    cwe: "CWE-78",
+    owaspCategory: "A03:2021 Injection",
+    remediation: "Avoid invoking OS commands with user input; where unavoidable, use argument arrays with strict allowlist validation instead of shell strings.",
+    technicalImpact: "Command injection can execute operating-system commands with the application's privileges. The platform confirms detectability with a harmless marker only.",
+  },
+  SSTI: {
+    title: "Server-Side Template Injection",
+    cwe: "CWE-1336",
+    owaspCategory: "A03:2021 Injection",
+    remediation: "Never render user input as a template; use logic-less templates or a sandboxed engine and pass user data as values, not template source.",
+    technicalImpact: "Template injection can lead to remote code execution in unsafe engine configurations. The platform confirms evaluation with a non-destructive arithmetic marker only.",
+  },
+  KNOWN_VULNERABLE_COMPONENT: {
+    title: "Component with Known Vulnerability",
+    cwe: "CWE-1035",
+    owaspCategory: "A06:2021 Vulnerable and Outdated Components",
+    remediation: "Update the component to a version without the known vulnerability, or remove it; subscribe to vendor security announcements.",
+    technicalImpact: "A publicly known vulnerability in an deployed component may be exploitable with public information; correlation here is version-based evidence, not exploitation.",
+  },
+  WORDPRESS_CONFIGURATION: {
+    title: "WordPress Configuration Observation",
+    cwe: "CWE-693",
+    owaspCategory: "A05:2021 Security Misconfiguration",
+    remediation: "Review the WordPress configuration observation and apply WordPress hardening guidance (disable enumeration/editors, restrict REST exposure where appropriate).",
+    technicalImpact: "Configuration exposure can aid targeted attacks against the WordPress installation.",
+  },
   GENERIC_VULNERABILITY: {
     title: "Vulnerability Reported by Scanner",
     owaspCategory: undefined,
@@ -254,6 +300,13 @@ export const VULN_CLASS_FAMILIES: Record<string, string> = {
   CLEARTEXT_PROTOCOL_EXPOSURE: "NETWORK_EXPOSURE",
   UNAUTHENTICATED_MANAGEMENT_API: "NETWORK_EXPOSURE",
   SMB_SIGNING_NOT_REQUIRED: "NETWORK_EXPOSURE",
+  XSS: "XSS",
+  XSS_REFLECTED: "XSS",
+  SQL_INJECTION: "INJECTION",
+  COMMAND_INJECTION: "INJECTION",
+  SSTI: "INJECTION",
+  KNOWN_VULNERABLE_COMPONENT: "COMPONENT",
+  WORDPRESS_CONFIGURATION: "COMPONENT",
 };
 
 export function vulnClassFamily(vulnClass: string): string {

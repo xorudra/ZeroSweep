@@ -58,6 +58,8 @@ export const NAV = [
   { href: "/easm/drift", label: "Exposure Drift" },
   { href: "/easm/technologies", label: "Technologies" },
   { href: "/easm/certificates", label: "Certificates" },
+  { href: "/vapt/web", label: "Web VAPT V2" },
+  { href: "/vapt/api", label: "API VAPT V2" },
   { href: "/soc", label: "SOC" },
   { href: "/soc/alerts", label: "SOC Alerts" },
   { href: "/soc/incidents", label: "Incidents" },

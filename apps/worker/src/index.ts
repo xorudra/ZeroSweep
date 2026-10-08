@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { QUEUES, loadEnv, assertProductionConfig } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters, registerWirelessAdapters } from "@dsrclone/security-sdk";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters, registerWebVaptAdapters, registerWirelessAdapters } from "@dsrclone/security-sdk";
 import { prisma } from "@dsrclone/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
@@ -43,6 +43,10 @@ registry.register(new MockSecurityAdapter());
 registry.register(new LocalEchoAdapter());
 registerReconAdapters(registry);
 registerWebDiscoveryAdapters(registry);
+// Prompt 32: Web/API VAPT V2 detection adapters (Dalfox / XSStrike /
+// SQLmap / Commix / SSTImap / WPScan) — detection-only plans; binaries
+// absent from the worker host report UNAVAILABLE and are never executed.
+registerWebVaptAdapters(registry);
 registerVulnAdapters(registry);
 // Prompt 8: interactive scanner connectors (ZAP / Burp / Caido) backed by
 // admin-registered ScannerInstance rows. With none registered they report

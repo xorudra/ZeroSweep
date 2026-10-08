@@ -895,6 +895,19 @@ enum AuditAction {
   INTELLIGENCE_CONFLICT_REVIEWED
   FINDING_REENRICHED
   RISK_RECALCULATED_FROM_INTELLIGENCE
+  // Prompt 32 §168: Web/API VAPT V2 audit actions. Metadata for these
+  // actions never contains credentials, tokens or payload values (§53).
+  WEB_VAPT_TARGET_CREATED
+  WEB_VAPT_PREFLIGHT_COMPLETED
+  WEB_VAPT_SCAN_PLANNED
+  WEB_VAPT_SCAN_STARTED
+  WEB_VAPT_SCAN_CANCELLED
+  WEB_VAPT_SCAN_COMPLETED
+  WEB_VAPT_SCAN_PARTIAL
+  AUTH_PROFILE_USED
+  HIGH_RISK_TEST_APPROVED
+  WEB_VAPT_FINDING_CREATED
+  WEB_VAPT_FINDING_VERIFIED
 }
 
 enum NotificationType {
@@ -2303,27 +2316,27 @@ model FindingComment {
 // Configurable SLA policy (§41) — rules map priority (or severity) to a
 // resolution window in hours. Never one hardcoded organization's policy.
 model RemediationSlaPolicy {
-  id          String   @id @default(uuid())
-  workspaceId String
-  name        String
-  rules       Json // { "P0": 24, "P1": 48, ... } hours, priority-first (§42)
-  isDefault   Boolean  @default(false)
-  createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                        String   @id @default(uuid())
+  workspaceId               String
+  name                      String
+  rules                     Json // { "P0": 24, "P1": 48, ... } hours, priority-first (§42)
+  isDefault                 Boolean  @default(false)
+  createdBy                 String
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
   // Prompt 31 §21/§23/§54: orchestration policy extensions. `conditions`
   // carries the resolver matchers (severity/priority sets, KEV,
   // internet-exposure, asset criticality, finding category) plus the
   // target duration in hours; `version` is snapshotted onto every case
   // SLA so a historical due date stays explainable (§24). The flat
   // P0..P4 `rules` map remains the fallback duration source.
-  version                     Int     @default(1)
-  conditions                  Json? // { severities?, priorities?, kevOnly?, internetExposed?, criticalities?, categories?, targetHours, verificationRequired?, requiredCleanObservations?, dualApprovalForHighRisk? }
-  warningThresholds           Json? // { warningPct?, atRiskPct? } of target duration elapsed
-  escalation                  Json? // { escalateTo?, managementRoute? }
-  verificationRequired        Boolean @default(true)
-  requiredCleanObservations   Int     @default(1)
-  active                      Boolean @default(true)
+  version                   Int      @default(1)
+  conditions                Json? // { severities?, priorities?, kevOnly?, internetExposed?, criticalities?, categories?, targetHours, verificationRequired?, requiredCleanObservations?, dualApprovalForHighRisk? }
+  warningThresholds         Json? // { warningPct?, atRiskPct? } of target duration elapsed
+  escalation                Json? // { escalateTo?, managementRoute? }
+  verificationRequired      Boolean  @default(true)
+  requiredCleanObservations Int      @default(1)
+  active                    Boolean  @default(true)
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -9035,50 +9048,50 @@ model RemediationCase {
 }
 
 model RemediationStatusHistory {
-  id         String   @id @default(uuid())
-  caseId     String
+  id          String   @id @default(uuid())
+  caseId      String
   workspaceId String
-  fromStatus String?
-  toStatus   String
-  actorId    String
-  reason     String?
-  evidence   Json?
-  createdAt  DateTime @default(now())
+  fromStatus  String?
+  toStatus    String
+  actorId     String
+  reason      String?
+  evidence    Json?
+  createdAt   DateTime @default(now())
 
   @@index([caseId, createdAt])
   @@index([workspaceId])
 }
 
 model RemediationTriage {
-  id        String   @id @default(uuid())
-  caseId    String
-  workspaceId String
-  decision  String // ACTION_REQUIRED | FALSE_POSITIVE | DUPLICATE | ACCEPT_RISK_CANDIDATE | NEEDS_MORE_EVIDENCE | NOT_APPLICABLE (§11)
-  analystId String
-  priority  String?
-  reason    String
-  notes     String?
-  evidence  Json?
+  id                 String    @id @default(uuid())
+  caseId             String
+  workspaceId        String
+  decision           String // ACTION_REQUIRED | FALSE_POSITIVE | DUPLICATE | ACCEPT_RISK_CANDIDATE | NEEDS_MORE_EVIDENCE | NOT_APPLICABLE (§11)
+  analystId          String
+  priority           String?
+  reason             String
+  notes              String?
+  evidence           Json?
   canonicalFindingId String? // DUPLICATE: the canonical primary (§13)
-  reviewAt  DateTime? // FALSE_POSITIVE optional expiration/review (§12)
-  createdAt DateTime @default(now())
+  reviewAt           DateTime? // FALSE_POSITIVE optional expiration/review (§12)
+  createdAt          DateTime  @default(now())
 
   @@index([caseId, createdAt])
   @@index([workspaceId])
 }
 
 model RemediationAssignment {
-  id         String   @id @default(uuid())
-  caseId     String
+  id          String   @id @default(uuid())
+  caseId      String
   workspaceId String
-  ownerType  String
-  ownerId    String?
-  teamId     String?
-  confidence String? // ownership confidence at assignment time (§16)
-  assignedBy String
-  reason     String?
-  source     String // EXPLICIT_FINDING_ASSIGNMENT | APPLICATION_OWNER | REPOSITORY_OWNER | ASSET_OWNER | WORKSPACE_DEFAULT | MANUAL | AI_SUGGESTION_CONFIRMED
-  createdAt  DateTime @default(now())
+  ownerType   String
+  ownerId     String?
+  teamId      String?
+  confidence  String? // ownership confidence at assignment time (§16)
+  assignedBy  String
+  reason      String?
+  source      String // EXPLICIT_FINDING_ASSIGNMENT | APPLICATION_OWNER | REPOSITORY_OWNER | ASSET_OWNER | WORKSPACE_DEFAULT | MANUAL | AI_SUGGESTION_CONFIRMED
+  createdAt   DateTime @default(now())
 
   @@index([caseId, createdAt])
   @@index([workspaceId, ownerId])
@@ -9088,23 +9101,23 @@ model RemediationAssignment {
 // exact inputs used — so a historical due date stays explainable even
 // after the policy changes.
 model RemediationSlaSnapshot {
-  id              String    @id @default(uuid())
-  caseId          String
-  workspaceId     String
-  policyId        String?
-  policyVersion   Int?
-  inputs          Json // { priority, severity, kevListed, internetExposed, criticality, category }
-  targetHours     Float
-  startedAt       DateTime
-  dueAt           DateTime
-  state           String    @default("ON_TRACK") // ON_TRACK | WARNING | AT_RISK | BREACHED | PAUSED | COMPLETED (§26)
-  pausedDurationMs Int      @default(0)
-  pausedAt        DateTime?
-  pauseReason     String?
-  completedAt     DateTime?
-  lastEvaluatedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  caseId           String
+  workspaceId      String
+  policyId         String?
+  policyVersion    Int?
+  inputs           Json // { priority, severity, kevListed, internetExposed, criticality, category }
+  targetHours      Float
+  startedAt        DateTime
+  dueAt            DateTime
+  state            String    @default("ON_TRACK") // ON_TRACK | WARNING | AT_RISK | BREACHED | PAUSED | COMPLETED (§26)
+  pausedDurationMs Int       @default(0)
+  pausedAt         DateTime?
+  pauseReason      String?
+  completedAt      DateTime?
+  lastEvaluatedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([caseId])
   @@index([workspaceId, state])
@@ -9112,23 +9125,23 @@ model RemediationSlaSnapshot {
 }
 
 model RemediationSlaPause {
-  id         String    @id @default(uuid())
-  snapshotId String
-  caseId     String
+  id          String    @id @default(uuid())
+  snapshotId  String
+  caseId      String
   workspaceId String
-  reason     String // WAITING_VENDOR | APPROVED_EXCEPTION | ENVIRONMENT_UNAVAILABLE | OTHER_APPROVED_REASON (§28)
-  startedBy  String
-  approvedBy String?
-  startedAt  DateTime  @default(now())
-  endedAt    DateTime?
-  endedBy    String?
+  reason      String // WAITING_VENDOR | APPROVED_EXCEPTION | ENVIRONMENT_UNAVAILABLE | OTHER_APPROVED_REASON (§28)
+  startedBy   String
+  approvedBy  String?
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  endedBy     String?
 
   @@index([snapshotId])
   @@index([workspaceId])
 }
 
 model RemediationPlan {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   caseId            String
   workspaceId       String
   summary           String
@@ -9142,10 +9155,10 @@ model RemediationPlan {
   ownerId           String?
   plannedAt         DateTime?
   targetDate        DateTime?
-  status            String   @default("DRAFT") // DRAFT | APPROVED | SUPERSEDED
+  status            String    @default("DRAFT") // DRAFT | APPROVED | SUPERSEDED
   createdBy         String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([caseId, createdAt])
   @@index([workspaceId])
@@ -9220,18 +9233,18 @@ model RemediationVerificationJob {
 }
 
 model RemediationVerificationEvidence {
-  id               String   @id @default(uuid())
-  jobId            String
-  caseId           String
-  workspaceId      String
+  id                String   @id @default(uuid())
+  jobId             String
+  caseId            String
+  workspaceId       String
   beforeObservation Json? // observation of the finding before the fix (§59/§60)
   afterObservation  Json? // observation after the fix
-  tool             String?
-  toolVersion      String?
-  comparisonResult String // STILL_PRESENT | ABSENT | INSUFFICIENT | SCANNER_ERROR
-  evidenceRefs     Json?
-  recordedBy       String
-  createdAt        DateTime @default(now())
+  tool              String?
+  toolVersion       String?
+  comparisonResult  String // STILL_PRESENT | ABSENT | INSUFFICIENT | SCANNER_ERROR
+  evidenceRefs      Json?
+  recordedBy        String
+  createdAt         DateTime @default(now())
 
   @@index([jobId, createdAt])
   @@index([workspaceId])
@@ -9279,27 +9292,27 @@ model RemediationCampaign {
 }
 
 model RemediationCampaignCase {
-  id         String   @id @default(uuid())
-  campaignId String
-  caseId     String
+  id          String   @id @default(uuid())
+  campaignId  String
+  caseId      String
   workspaceId String
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@unique([campaignId, caseId])
   @@index([workspaceId, caseId])
 }
 
 model RemediationRegressionEvent {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   caseId             String
   workspaceId        String
   findingId          String
   fingerprint        String? // regression identity (§72)
-  detectedAt         DateTime @default(now())
+  detectedAt         DateTime  @default(now())
   previousVerifiedAt DateTime?
   source             String // RETEST | SCAN_OBSERVATION | SCHEDULED_CHECK
   riskRecalculation  Json?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime  @default(now())
 
   @@index([caseId, detectedAt])
   @@index([workspaceId, detectedAt])
@@ -9317,4 +9330,252 @@ model RemediationReportSnapshot {
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, type, createdAt])
+}
+
+// ------------------------------- Web/API VAPT V2 (Prompt 32) -------------------------------
+// V2 deepens the Prompt 5–9 engines on the SAME canonical models
+// (Target / Asset / Endpoint / EndpointParameter / ApiService /
+// ApiSpecification / Finding). The models below are the V2 planning
+// and governance records only: targets, immutable scope snapshots,
+// scan plans with budgets, preflight results, authorization matrices,
+// business-logic scenarios, sessions, evidence and coverage. No
+// credential VALUES exist anywhere in these models — references only
+// (§50/§53).
+
+// §4: a web VAPT target binds an existing verified asset to an
+// authorization (an APPROVED assessment on the parent Target). It is
+// a planning view — it never authorizes anything by itself (§6).
+model WebVaptTarget {
+  id                      String   @id @default(uuid())
+  workspaceId             String
+  assetId                 String
+  targetId                String
+  baseUrl                 String
+  normalizedOrigin        String
+  // The APPROVED assessment that carries the active authorization.
+  authorizationId         String
+  // PRODUCTION | STAGING | DEVELOPMENT | TEST | UNKNOWN (§5)
+  environment             String   @default("UNKNOWN")
+  criticality             String   @default("MEDIUM")
+  authenticationProfileId String?
+  scanProfileKey          String   @default("WEB_SAFE")
+  // ACTIVE | PAUSED | ARCHIVED
+  status                  String   @default("ACTIVE")
+  createdBy               String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([assetId])
+}
+
+// §136: the immutable scope snapshot frozen at scan start. There is
+// deliberately no updatedAt — a snapshot never changes after creation;
+// scope edits create a NEW snapshot for the NEXT scan (§137).
+model ScanScopeSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  planId      String?
+  scanId      String?
+  origins     String[] @default([])
+  hosts       String[] @default([])
+  exclusions  String[] @default([])
+  hash        String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([hash])
+}
+
+// §10/§11: a scan plan generated BEFORE execution — target, tools,
+// stages, limits, authentication, scope snapshot and request budget,
+// shown in the plan preview before any high-impact run.
+model WebVaptScanPlan {
+  id                      String   @id @default(uuid())
+  workspaceId             String
+  webTargetId             String
+  scanId                  String?
+  // WEB_PASSIVE | WEB_SAFE | WEB_STANDARD | API_SAFE | API_STANDARD |
+  // TLS_ONLY | CONTENT_DISCOVERY | TARGETED_VERIFICATION (§122)
+  profileKey              String
+  stages                  Json     @default("[]")
+  allowedTools            String[] @default([])
+  // Modules dropped by the §16 gate, with reasons — never silent.
+  blockedModules          Json     @default("[]")
+  budget                  Json
+  estimatedRequestClass   String   @default("MEDIUM")
+  scopeSnapshotId         String
+  authenticationProfileId String?
+  // PLANNED | STARTED | BLOCKED | CANCELLED | COMPLETED
+  status                  String   @default("PLANNED")
+  createdBy               String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([webTargetId])
+}
+
+// §7/§8: one preflight evaluation over authorization facts + probe
+// observations. Checks are stored verbatim so a BLOCKED verdict always
+// carries its reasons.
+model WebVaptPreflightResult {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  webTargetId      String
+  // READY | READY_WITH_WARNINGS | BLOCKED | UNREACHABLE | AUTH_REQUIRED
+  status           String
+  checks           Json     @default("[]")
+  redirectRecorded String?
+  probeTransport   String   @default("NOT_CONFIGURED")
+  createdBy        String
+  createdAt        DateTime @default(now())
+
+  @@index([workspaceId, webTargetId])
+}
+
+// §36/§37: an immutable snapshot of an imported API specification.
+// The parent ApiSpecification tracks the live import; the snapshot
+// freezes source/version/hash/counts at import time.
+model ApiSpecificationSnapshot {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  specificationId String
+  source          String
+  version         String?
+  hash            String
+  endpointCount   Int      @default(0)
+  schemaCount     Int      @default(0)
+  // Hosts referenced by the document that scope validation rejected
+  // (§139/§140) — recorded, never fetched.
+  rejectedHosts   String[] @default([])
+  importedAt      DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([specificationId])
+}
+
+// §99: one evaluated row of an AuthorizationTestMatrix, attached to a
+// Prompt 9 AuthorizationTestCase (the governed design record). A
+// MISMATCH stores the candidate finding (§100) — materialization into
+// the canonical Finding pipeline happens only with a linked scan.
+model AuthorizationMatrixEntry {
+  id               String   @id @default(uuid())
+  workspaceId      String
+  testCaseId       String
+  identityA        String
+  identityB        String?
+  role             String
+  resource         String
+  expectedAccess   String
+  observedAccess   String   @default("NOT_TESTED")
+  // MATCH | MISMATCH | NOT_TESTED
+  result           String   @default("NOT_TESTED")
+  candidateFinding Json?
+  createdBy        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([workspaceId, testCaseId])
+}
+
+// §102: a human-defined business-logic test scenario. Steps are
+// descriptions evaluated by governed comparison — the platform does
+// not pretend generic scanners automate business logic (§101).
+model BusinessLogicScenario {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  name                 String
+  preconditions        String   @default("")
+  authorizedIdentities String[] @default([])
+  safeSteps            Json     @default("[]")
+  expectedBehavior     String
+  observedBehavior     String?
+  // DRAFT | READY | EVALUATED
+  status               String   @default("DRAFT")
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §51–§53: an isolated per-scan-run web session context. Only the
+// credential REFERENCE and redacted presence metadata are stored —
+// cookie/token VALUES never enter this record, logs or evidence.
+model WebScanSession {
+  id                      String    @id @default(uuid())
+  workspaceId             String
+  scanId                  String
+  authenticationProfileId String?
+  credentialReference     String?
+  // ACTIVE | EXPIRED | LOGGED_OUT | FAILED
+  status                  String    @default("ACTIVE")
+  // Presence flags + fingerprints only (§53).
+  redactedSummary         Json      @default("{}")
+  expiresAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([workspaceId, scanId])
+}
+
+// §113–§116: sanitized V2 evidence. Request/response copies are
+// redacted BEFORE persistence and body-capped; large material lives
+// in object storage behind artifactRef — never as a Postgres blob.
+model WebVaptEvidence {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  scanId            String?
+  findingId         String?
+  // REQUEST | RESPONSE | MARKER | SCREENSHOT | TOOL_OUTPUT | ENDPOINT_METADATA
+  kind              String
+  sanitizedRequest  String?
+  sanitizedResponse String?
+  marker            String?
+  artifactRef       String?
+  sizeBytes         Int      @default(0)
+  sha256            String?
+  createdAt         DateTime @default(now())
+
+  @@index([workspaceId, scanId])
+  @@index([findingId])
+}
+
+// §147: the coverage record of a V2 scan — the report's limitations
+// section, computed from what was actually tested (§148).
+model WebVaptCoverage {
+  id                    String   @id @default(uuid())
+  workspaceId           String
+  scanId                String   @unique
+  discoveredEndpoints   Int      @default(0)
+  testedEndpoints       Int      @default(0)
+  endpointCoverage      Float?
+  parameterCoverage     Float?
+  authenticatedCoverage Float?
+  toolCoverage          Json     @default("{}")
+  skipped               Json     @default("[]")
+  limitations           Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+// §146: per-workspace tool health for the V2 tool set — installed,
+// version, last success, error rate, parser compatibility.
+model WebToolHealth {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  slug              String
+  installed         Boolean   @default(false)
+  version           String?
+  lastSuccessfulRun DateTime?
+  errorRate         Float     @default(0)
+  parserCompatible  Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
 }

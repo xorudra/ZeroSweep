@@ -289,3 +289,10 @@ export * from "./analytics/index";
 export * from "./soc/index";
 export * from "./remediation/index";
 export * from "./easm/index";
+
+// Prompt 32: Web/API VAPT V2 — capability registry with risk classes,
+// scope lock, preflight, budgets, endpoint identity, header/CORS/CSRF
+// analysis, GraphQL bounds, authorization-matrix + business-logic
+// foundations, coverage honesty, and the governed detection-only
+// adapters (Dalfox/XSStrike/SQLmap/Commix/SSTImap/WPScan).
+export * from "./webvapt/index";
