@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 25 complete (Prompts 1–25).** Production monorepo, backend and
+> **Status — Phase 26 complete (Prompts 1–26).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -253,9 +253,38 @@ and the AI health endpoint.
 23. ✅ Enterprise authentication, SSO, MFA, SCIM & organization management (Prompt 23)
 24. ✅ Enterprise integrations, DevSecOps & security workflow engine (Prompt 24)
 25. ✅ Enterprise deployment, Kubernetes, high availability, backup/DR & production hardening (Prompt 25) — incl. the first fully live end-to-end run: Docker-less local PostgreSQL/Redis, all migrations + seed applied, register→verify→approve→scan→findings proven (see `scripts/local-stack/`)
+26. ✅ Compliance, Audit & GRC platform (Prompt 26) — versioned framework catalog (ISO 27001, SOC 2, PCI DSS 4.0, NIST CSF/800-53, CIS Controls, OWASP), control library with cross-framework mappings, snapshot evidence + freshness, continuous control monitoring, risk register, audit packages; assessment evidence, never certification — GRC migration also applied to the live local stack
 
 ## Changelog
 
+- **2026-10-08 — Prompt 26: Compliance, Audit & GRC Platform.** The GRC
+  engine layers over the platform's identity, findings, posture and
+  audit systems (no duplicate VM or audit log). Versioned framework
+  catalog (ISO/IEC 27001:2022, SOC 2 TSC 2017, PCI DSS 4.0, NIST CSF
+  2.0, NIST SP 800-53 Rev. 5, CIS Controls v8, OWASP ASVS 4.0.3 + Top
+  10) with immutable published versions and assessments pinned to the
+  version they were created against; a 30-control normalized library
+  with ~110 cross-framework mappings under coverage discipline (a
+  PARTIAL/SUPPORTING mapping can never make a requirement compliant);
+  control evaluation from real platform signals only — no evidence
+  means INCONCLUSIVE / NOT_ASSESSED, never a pass; snapshot evidence
+  sealed with SHA-256 and per-control freshness policies (CURRENT →
+  STALE → EXPIRED), hostile-upload defenses, review segregation of
+  duties, RESTRICTED evidence withheld by capability; continuous
+  control monitoring with drift events and targeted re-evaluation;
+  a risk register whose residual score exists only when control
+  effectiveness is known, with SoD-guarded, expiring acceptances;
+  versioned governance policies with explicit acknowledgements; audit
+  engagements, evidence requests, audit findings kept separate from
+  technical findings, and CONFIDENTIAL evidence packages sealed by a
+  hash manifest with redaction and expiring explicit-share auditor
+  grants; finding→control links; vendor risk foundation; a grounded
+  AI GRC assistant that refuses certification claims and answers
+  INSUFFICIENT_EVIDENCE without evidence; immutable report snapshots
+  and GRC backup/restore with hash verification. **No certification
+  claims anywhere** — the headline metric is "Assessment Coverage /
+  Control Status". Migration `20261007220000_enterprise_grc` applied
+  to the live local stack.
 - **2026-10-08 — Prompt 25: Enterprise Deployment, High Availability &
   Disaster Recovery.** New `deploy/` tree: hardened multi-stage production
   images (digest-pinned bases, non-root), production Compose profile

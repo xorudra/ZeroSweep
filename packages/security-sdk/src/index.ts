@@ -266,3 +266,8 @@ export { sha256Hex } from "./identity/crypto";
 // event bus/outbox reliability, ticketing, messaging, SIEM, SARIF and
 // repository-ingestion safety (all pure, fixture-verified).
 export * from "./integrations/index";
+
+// Prompt 26: GRC engine — versioned framework catalog, control library,
+// cross-framework mappings, evidence integrity/freshness, risk-register
+// mathematics, audit-package manifests and AI GRC safety rails (pure).
+export * from "./grc/index";

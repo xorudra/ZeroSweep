@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { BUNDLED_WORDLISTS } from "@dsrclone/security-sdk";
+import { BUNDLED_WORDLISTS, FRAMEWORK_CATALOG } from "@dsrclone/security-sdk";
 
 const prisma = new PrismaClient();
 
@@ -685,8 +685,8 @@ async function main(): Promise<void> {
     // column) and requires a framework description.
     const frameworkDescription = `${fw.name} ${fw.version} — governed posture-evidence catalog; assessments are evidence, never a certification.`;
     const framework = await prisma.complianceFramework.upsert({
-      where: { key: fw.key },
-      update: { name: fw.name, version: fw.version, description: frameworkDescription },
+      where: { key_version: { key: fw.key, version: fw.version } },
+      update: { name: fw.name, description: frameworkDescription },
       create: { key: fw.key, name: fw.name, version: fw.version, description: frameworkDescription },
     });
     for (const c of fw.controls) {
@@ -694,6 +694,33 @@ async function main(): Promise<void> {
         where: { frameworkId_controlId: { frameworkId: framework.id, controlId: c.controlId } },
         update: { title: c.title, description: `Default severity: ${c.severityDefault}` },
         create: { frameworkId: framework.id, controlId: c.controlId, title: c.title, description: `Default severity: ${c.severityDefault}` },
+      });
+    }
+  }
+  // Prompt 26 §3/§4: the GRC framework reference catalog (versioned,
+  // immutable once published). Workspace control libraries, freshness
+  // policies and cross-framework mappings seed lazily per workspace
+  // from the same SDK catalog (ControlService.ensureCatalog), so the
+  // seed only installs the framework + requirement reference data.
+  for (const fw of FRAMEWORK_CATALOG) {
+    const framework = await prisma.complianceFramework.upsert({
+      where: { key_version: { key: fw.key, version: fw.version } },
+      update: { name: fw.name, publisher: fw.publisher, status: "ACTIVE" },
+      create: {
+        key: fw.key, name: fw.name, publisher: fw.publisher, version: fw.version,
+        description: `${fw.name} ${fw.version} — GRC reference catalog; DSRclone assessments are evidence and preparation, never a certification.`,
+        status: "ACTIVE", effectiveDate: new Date(fw.effectiveDate),
+      },
+    });
+    for (const r of fw.requirements) {
+      await prisma.complianceRequirement.upsert({
+        where: { frameworkId_requirementId: { frameworkId: framework.id, requirementId: r.requirementId } },
+        update: { title: r.title, description: r.description, category: r.category, level: r.level, parentRequirementId: r.parentRequirementId ?? null },
+        create: {
+          frameworkId: framework.id, requirementId: r.requirementId,
+          parentRequirementId: r.parentRequirementId ?? null, title: r.title,
+          description: r.description, category: r.category, level: r.level,
+        },
       });
     }
   }

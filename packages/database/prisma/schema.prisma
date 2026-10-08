@@ -792,6 +792,28 @@ enum AuditAction {
   WEBHOOK_DELIVERY_FAILED
   PIPELINE_SCAN_REQUESTED
   TICKET_SYNC_CONFLICT_DETECTED
+  // Prompt 26 §112: GRC audit actions. GRC history uses this same
+  // append-only audit infrastructure (§113) — never edited in place.
+  FRAMEWORK_IMPORTED
+  CONTROL_CREATED
+  CONTROL_UPDATED
+  CONTROL_TESTED
+  CONTROL_FAILED
+  CONTROL_RECOVERED
+  EVIDENCE_COLLECTED
+  EVIDENCE_UPLOADED
+  EVIDENCE_EXPIRED
+  // ASSESSMENT_CREATED already exists above (Prompt 1); the GRC
+  // completion event is distinct from a scan completing.
+  GRC_ASSESSMENT_COMPLETED
+  RISK_CREATED
+  RISK_UPDATED
+  // RISK_ACCEPTED / RISK_ACCEPTANCE_EXPIRED already exist (Prompt 11).
+  POLICY_APPROVED
+  AUDIT_CREATED
+  AUDIT_EVIDENCE_SUBMITTED
+  AUDIT_EVIDENCE_ACCEPTED
+  AUDIT_PACKAGE_GENERATED
 }
 
 enum NotificationType {
@@ -2860,12 +2882,25 @@ model InfrastructureManifest {
 // Kubernetes, NSA/CISA Kubernetes Hardening. Mappings support reporting
 // structure only — the platform never claims certification.
 model ComplianceFramework {
-  id          String              @id @default(uuid())
-  key         String              @unique // CIS_DOCKER | CIS_KUBERNETES | NSA_CISA_KUBERNETES
-  name        String
-  version     String
-  description String
-  controls    ComplianceControl[]
+  id            String                  @id @default(uuid())
+  key           String // CIS_DOCKER | … (P13) | ISO_27001 | SOC_2 | … (P26 §3)
+  name          String
+  version       String
+  description   String
+  // Prompt 26 §3/§5: GRC framework registry fields. Versions are
+  // immutable after publication (§4) — enforced in the GRC service.
+  publisher     String                  @default("")
+  status        String                  @default("ACTIVE") // DRAFT | ACTIVE | DEPRECATED | RETIRED
+  effectiveDate DateTime?
+  retiredDate   DateTime?
+  metadata      Json                    @default("{}")
+  controls      ComplianceControl[]
+  requirements  ComplianceRequirement[]
+
+  // P13 uniqueness was on key alone; GRC versions a framework by
+  // (key, version) so V1 and V2 coexist (§4/§122).
+  @@unique([key, version])
+  @@index([status])
 }
 
 model ComplianceControl {
@@ -6562,4 +6597,593 @@ model IntegrationSyncCheckpoint {
 
   @@unique([integrationId, resourceKind])
   @@index([workspaceId])
+}
+
+// ------------------------------- Prompt 26: GRC Engine -------------------------------
+// Governance, Risk & Compliance. DSRclone provides evidence, control
+// monitoring, assessment support, risk tracking and audit preparation —
+// it NEVER certifies (§143). A control/requirement without evidence is
+// NOT_EVALUATED / NOT_ASSESSED, never compliant by default. Framework
+// versions are immutable once published (§4); assessments stay tied to
+// the exact framework version they were created against (§122).
+// Status fields are Strings with the value sets documented per model
+// (the platform's established convention, cf. RiskException).
+
+// §6: hierarchical framework requirements (parent → children).
+model ComplianceRequirement {
+  id                  String              @id @default(uuid())
+  frameworkId         String
+  requirementId       String // e.g. A.8.5 | CC6.1 | 8.4 | PR.AA | IA-2
+  parentRequirementId String?
+  title               String
+  description         String              @default("")
+  category            String              @default("")
+  level               Int                 @default(1)
+  metadata            Json                @default("{}")
+  framework           ComplianceFramework @relation(fields: [frameworkId], references: [id], onDelete: Cascade)
+
+  @@unique([frameworkId, requirementId])
+  @@index([frameworkId])
+}
+
+// §7: DSRclone's internal normalized control library entry, per workspace
+// (seeded from the SDK catalog; workspaces may add their own controls).
+model SecurityControl {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  code                 String
+  title                String
+  description          String   @default("")
+  controlType          String // PREVENTIVE | DETECTIVE | CORRECTIVE | GOVERNANCE
+  implementationType   String // TECHNICAL | ADMINISTRATIVE | PHYSICAL | HYBRID
+  implementationStatus String   @default("NOT_IMPLEMENTED") // §14
+  effectiveness        String   @default("NOT_TESTED") // §15
+  catalogSource        Boolean  @default(false) // seeded from the SDK control library
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+}
+
+// §13: control ownership (user / team / business unit).
+model ControlOwner {
+  id          String   @id @default(uuid())
+  workspaceId String
+  controlId   String
+  ownerType   String // USER | TEAM | BUSINESS_UNIT
+  ownerRef    String // user id or team/business-unit name
+  isPrimary   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, controlId])
+}
+
+// §10–§12: control ↔ requirement mapping (cross-framework, shared evidence).
+model ControlFrameworkMapping {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  controlId     String
+  requirementId String // ComplianceRequirement.id
+  mappingType   String // DIRECT | PARTIAL | SUPPORTING (§11)
+  coverage      Float    @default(0) // 0..1
+  notes         String   @default("")
+  source        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([workspaceId, controlId, requirementId])
+  @@index([workspaceId, requirementId])
+  @@index([workspaceId, controlId])
+}
+
+// §16–§18: a test definition for a control.
+model ControlTest {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  controlId            String
+  name                 String
+  method               String // AUTOMATED | MANUAL | HYBRID
+  automationLevel      String // FULL | PARTIAL | NONE
+  frequency            String   @default("CONTINUOUS")
+  expectedResult       String   @default("")
+  evidenceRequirements String   @default("")
+  ownerRef             String?
+  signalKeys           Json     @default("[]") // technical signal keys evaluated (§29)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId, controlId])
+}
+
+// §29: an observed security-state signal feeding control evaluation.
+model ControlSignal {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  controlId    String
+  signalKey    String
+  state        String? // PASS | FAIL | PARTIAL | null (unknown)
+  detail       String   @default("")
+  evidenceRefs Json     @default("[]")
+  sourceType   String   @default("")
+  observedAt   DateTime @default(now())
+
+  @@index([workspaceId, controlId, signalKey])
+  @@index([workspaceId, observedAt])
+}
+
+// §30–§32: the recorded result of evaluating a control at a point in time.
+model ControlEvaluation {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  controlId     String
+  result        String // PASS | FAIL | PARTIAL | INCONCLUSIVE | NOT_APPLICABLE
+  confidence    String // LOW | MEDIUM | HIGH
+  effectiveness String   @default("NOT_TESTED")
+  reason        String   @default("")
+  evidenceRefs  Json     @default("[]")
+  evaluatedBy   String   @default("SYSTEM") // SYSTEM | user id
+  evaluatedAt   DateTime @default(now())
+
+  @@index([workspaceId, controlId])
+  @@index([workspaceId, evaluatedAt])
+}
+
+// §20–§24: snapshot-based, hashed compliance evidence. Immutable once
+// referenced by an issued assessment (§21) — the service never updates
+// snapshot/hash after creation; freshness is derived, not stored (§25).
+model ComplianceEvidence {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  controlId      String
+  sourceType     String // §19 source types | MANUAL_UPLOAD
+  sourceId       String
+  snapshot       Json      @default("{}")
+  classification String    @default("INTERNAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED
+  status         String    @default("CURRENT") // CURRENT | STALE | EXPIRED | INVALID | SUPERSEDED (freshness derived at read)
+  hash           String
+  filename       String? // sanitized manual-upload filename (§40)
+  mimeType       String?
+  sizeBytes      Int?
+  collectedAt    DateTime  @default(now())
+  validFrom      DateTime  @default(now())
+  validUntil     DateTime?
+  createdBy      String
+  reviewStatus   String    @default("NOT_REQUIRED") // NOT_REQUIRED | PENDING | APPROVED | REJECTED | CHANGES_REQUESTED (§38)
+  reviewedBy     String?
+  reviewNotes    String?
+
+  @@index([workspaceId, controlId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, collectedAt])
+}
+
+// §25: per-control evidence freshness policy (never one global duration).
+model EvidenceFreshnessPolicy {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  controlId       String
+  staleAfterDays  Int
+  expireAfterDays Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([workspaceId, controlId])
+  @@index([workspaceId])
+}
+
+// §33–§35: a compliance assessment pinned to an exact framework version.
+model ComplianceAssessment {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  frameworkId      String
+  frameworkKey     String
+  frameworkVersion String // denormalized pin — never follows later imports (§122)
+  name             String
+  scope            Json      @default("{}") // §35 scope descriptor
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  status           String    @default("PLANNED") // PLANNED | IN_PROGRESS | READY_FOR_REVIEW | COMPLETED | ARCHIVED
+  ownerId          String
+  reviewerId       String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([workspaceId, frameworkId])
+  @@index([workspaceId, status])
+}
+
+// §36/§37: per-requirement result inside an assessment, computed from
+// mapped controls + evidence at completion time (snapshot semantics).
+model AssessmentRequirementResult {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  assessmentId  String
+  requirementId String // ComplianceRequirement.id
+  result        String // COMPLIANT | PARTIALLY_COMPLIANT | NON_COMPLIANT | NOT_APPLICABLE | NOT_ASSESSED
+  controlIds    Json     @default("[]")
+  evidenceIds   Json     @default("[]")
+  exceptionIds  Json     @default("[]")
+  notes         String   @default("")
+  reviewStatus  String   @default("PENDING") // PENDING | APPROVED | REJECTED | CHANGES_REQUESTED
+  reviewedBy    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([assessmentId, requirementId])
+  @@index([workspaceId, assessmentId])
+}
+
+// §95: continuous-compliance drift events.
+model ComplianceDriftEvent {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  controlId      String?
+  type           String // CONTROL_FAILED | CONTROL_RECOVERED | EVIDENCE_STALE | EVIDENCE_EXPIRED | NEW_GAP | RISK_INCREASED
+  detail         String   @default("")
+  previousResult String?
+  newResult      String?
+  createdAt      DateTime @default(now())
+
+  @@index([workspaceId, controlId])
+  @@index([workspaceId, createdAt])
+}
+
+// §104/§105: control-test schedule — SAFE/READ-ONLY re-evaluations only,
+// materialized through the existing scheduler infrastructure.
+model ControlTestSchedule {
+  id          String    @id @default(uuid())
+  workspaceId String
+  controlId   String
+  cron        String
+  enabled     Boolean   @default(true)
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, controlId])
+}
+
+// §42: the risk register (one per workspace, created on demand).
+model RiskRegister {
+  id          String   @id @default(uuid())
+  workspaceId String   @unique
+  name        String   @default("Risk Register")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// §47: organization-configurable risk matrix (within platform bounds).
+model RiskMatrix {
+  id          String   @id @default(uuid())
+  workspaceId String   @unique
+  config      Json     @default("{}") // bands + effectiveness multipliers (SDK-validated)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// §43/§48–§50: a risk record. Inherent risk is stored at assessment
+// time; residual risk stays NULL until control effectiveness is known
+// (§49 — never an invented exact number).
+model RiskRecord {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  registerId    String
+  title         String
+  description   String    @default("")
+  category      String    @default("SECURITY")
+  source        String // TECHNICAL_FINDING | CONTROL_FAILURE | AUDIT_FINDING | MANUAL | VENDOR | BUSINESS
+  sourceRef     String? // finding id / control id / audit finding id / vendor id
+  likelihood    Int
+  impacts       Json      @default("{}") // dimension → 1..5 (§46)
+  inherentScore Int
+  inherentBand  String // LOW | MEDIUM | HIGH | CRITICAL
+  residualScore Int?
+  residualBand  String?
+  residualBasis String    @default("")
+  ownerId       String
+  status        String    @default("IDENTIFIED") // §50 lifecycle
+  treatment     String? // MITIGATE | AVOID | TRANSFER | ACCEPT
+  reviewDate    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, ownerId])
+}
+
+// §53: risk ↔ finding / asset / control / requirement links.
+model RiskLink {
+  id          String   @id @default(uuid())
+  workspaceId String
+  riskId      String
+  linkType    String // FINDING | ASSET | CONTROL | REQUIREMENT
+  linkId      String
+  createdAt   DateTime @default(now())
+
+  @@unique([riskId, linkType, linkId])
+  @@index([workspaceId, riskId])
+}
+
+// §51/§52: treatment plan + tracked actions.
+model RiskTreatmentPlan {
+  id          String   @id @default(uuid())
+  workspaceId String
+  riskId      String
+  strategy    String // MITIGATE | AVOID | TRANSFER | ACCEPT
+  description String   @default("")
+  status      String   @default("PLANNED") // PLANNED | IN_PROGRESS | COMPLETED
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, riskId])
+}
+
+model RiskTreatmentAction {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  planId           String
+  action           String
+  ownerId          String
+  dueDate          DateTime?
+  status           String    @default("OPEN") // OPEN | IN_PROGRESS | DONE | OVERDUE
+  relatedFindingId String?
+  relatedControlId String?
+  ticketRef        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([workspaceId, planId])
+  @@index([workspaceId, status])
+}
+
+// §55–§59: risk acceptance — extends the RiskException pattern to
+// register risks. Approval workflow with SoD (§57); expiry returns the
+// risk to review (§59) via RiskAcceptanceExpiry bookkeeping here.
+model RiskAcceptance {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  riskId               String
+  requestedBy          String
+  approvedBy           String?
+  reason               String
+  scope                Json     @default("{}")
+  compensatingControls Json     @default("[]")
+  status               String   @default("PENDING") // PENDING | ACCEPTED | REJECTED | EXPIRED
+  expiresAt            DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workspaceId, riskId])
+  @@index([workspaceId, status])
+  @@index([expiresAt])
+}
+
+// §58: recurring risk reviews.
+model RiskReview {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  riskId       String
+  reviewerId   String
+  decision     String // CONFIRMED | CHANGED | ESCALATED | CLOSED
+  changes      String    @default("")
+  nextReviewAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId, riskId])
+}
+
+// §60–§63: governance policy library. Issued versions immutable (§62) —
+// a new version is a new row; status transitions never rewrite content.
+model GovernancePolicy {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  title          String
+  ownerId        String
+  version        String
+  status         String    @default("DRAFT") // DRAFT | REVIEW | APPROVED | ACTIVE | RETIRED
+  effectiveDate  DateTime?
+  reviewDate     DateTime?
+  classification String    @default("INTERNAL")
+  documentRef    String    @default("") // reference only — never document content with secrets
+  contentHash    String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([workspaceId, title, version])
+  @@index([workspaceId, status])
+}
+
+model PolicyAcknowledgement {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  policyId       String
+  userId         String
+  acknowledgedAt DateTime @default(now())
+
+  @@unique([policyId, userId])
+  @@index([workspaceId, userId])
+}
+
+// §64–§66: audit engagements.
+model AuditEngagement {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  frameworkId  String?
+  assessmentId String?
+  type         String // INTERNAL | EXTERNAL | READINESS | CUSTOMER | REGULATORY
+  auditorRef   String    @default("") // auditor/reviewer reference — a name/label, not credentials
+  scope        Json      @default("{}")
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  status       String    @default("PLANNED") // PLANNED | IN_PROGRESS | EVIDENCE_COLLECTION | REVIEW | COMPLETED | ARCHIVED
+  createdBy    String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+// §67/§68: evidence requests inside an engagement.
+model AuditEvidenceRequest {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  auditId       String
+  controlId     String?
+  requirementId String?
+  title         String
+  ownerId       String
+  dueDate       DateTime?
+  status        String    @default("OPEN") // OPEN | IN_PROGRESS | SUBMITTED | ACCEPTED | REJECTED | OVERDUE
+  evidenceIds   Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId, auditId])
+  @@index([workspaceId, status])
+}
+
+// §69/§70: audit findings — deliberately SEPARATE from technical
+// canonical Findings; links are references, never merges.
+model AuditFinding {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  auditId          String
+  title            String
+  description      String    @default("")
+  severity         String    @default("MEDIUM")
+  requirementId    String?
+  ownerId          String
+  dueDate          DateTime?
+  status           String    @default("OPEN") // OPEN | IN_REMEDIATION | RESOLVED | CLOSED
+  remediation      String    @default("")
+  linkedFindingIds Json      @default("[]") // technical Finding ids (§70)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([workspaceId, auditId])
+  @@index([workspaceId, status])
+}
+
+// §71–§73: an issued audit evidence package — immutable manifest with
+// per-file hashes; content is the redacted snapshot bundle (§73).
+model AuditEvidencePackage {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  auditId          String
+  assessmentId     String
+  frameworkKey     String
+  frameworkVersion String
+  classification   String    @default("CONFIDENTIAL")
+  manifest         Json      @default("{}") // AuditPackageManifest (SDK)
+  manifestHash     String
+  bundle           Json      @default("{}") // path → redacted content (integrity-verifiable)
+  generatedBy      String
+  generatedAt      DateTime  @default(now())
+  downloadCount    Int       @default(0)
+  lastDownloadAt   DateTime?
+
+  @@index([workspaceId, auditId])
+}
+
+// §74/§75: restricted, time-limited auditor access to explicitly
+// shared assessments/evidence only. Expiry revokes automatically —
+// the service checks expiresAt on every access.
+model AuditorAccessGrant {
+  id            String    @id @default(uuid())
+  workspaceId   String
+  userId        String // the auditor's platform user (external label in metadata)
+  assessmentIds Json      @default("[]")
+  evidenceIds   Json      @default("[]")
+  grantedBy     String
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([workspaceId, userId])
+  @@index([expiresAt])
+}
+
+// §84–§87: finding ↔ control links (automatic suggestions + analyst
+// overrides, both preserved).
+model FindingControlLink {
+  id          String   @id @default(uuid())
+  workspaceId String
+  findingId   String
+  controlId   String
+  confidence  String // HIGH | MEDIUM | LOW
+  origin      String   @default("AUTOMATIC") // AUTOMATIC | ANALYST_OVERRIDE
+  ruleId      String?
+  rationale   String   @default("")
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, findingId])
+  @@index([workspaceId, controlId])
+}
+
+// §106–§108: vendor risk foundation.
+model ThirdPartyVendor {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  name               String
+  ownerId            String
+  criticality        String    @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  serviceDescription String    @default("")
+  status             String    @default("ACTIVE") // ACTIVE | UNDER_REVIEW | OFFBOARDED
+  reviewDate         DateTime?
+  riskRating         String? // LOW | MEDIUM | HIGH | CRITICAL | null (not yet assessed)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+model VendorRiskAssessment {
+  id          String   @id @default(uuid())
+  workspaceId String
+  vendorId    String
+  method      String   @default("QUESTIONNAIRE") // QUESTIONNAIRE | MANUAL_EVIDENCE | INTEGRATION
+  riskRating  String // LOW | MEDIUM | HIGH | CRITICAL
+  findings    String   @default("")
+  treatment   String   @default("")
+  evidenceIds Json     @default("[]")
+  assessedBy  String
+  assessedAt  DateTime @default(now())
+
+  @@index([workspaceId, vendorId])
+}
+
+// §114/§115: issued GRC reports are immutable snapshots (content +
+// hash), rendered through the platform redaction discipline.
+model GrcReportSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  reportType  String // COMPLIANCE_ASSESSMENT | CONTROL_EFFECTIVENESS | RISK_REGISTER | RISK_TREATMENT | AUDIT_READINESS | EVIDENCE_FRESHNESS | EXECUTIVE_GRC
+  title       String
+  content     Json     @default("{}")
+  contentHash String
+  generatedBy String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, reportType])
+  @@index([workspaceId, createdAt])
+}
+
+// §118: GRC data-retention configuration per workspace.
+model GrcRetentionPolicy {
+  id                      String   @id @default(uuid())
+  workspaceId             String   @unique
+  assessmentRetentionDays Int      @default(2555)
+  evidenceRetentionDays   Int      @default(2555)
+  packageRetentionDays    Int      @default(2555)
+  riskRetentionDays       Int      @default(2555)
+  auditRetentionDays      Int      @default(2555)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
