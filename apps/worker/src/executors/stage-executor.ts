@@ -8,6 +8,7 @@ import {
   idempotencyKey, makeEvent, type ScanEventRecord,
 } from "@dsrclone/orchestration";
 import { InMemoryObjectStore, rawArtifactKey, type ObjectStore } from "../artifacts/object-store";
+import { S3ObjectStore } from "../artifacts/s3-object-store";
 import { processNormalizedResult, type ProcessedResult } from "./result-processor";
 
 /**
@@ -247,7 +248,10 @@ export class StageExecutor {
     objectStore?: ObjectStore,
     options: StageExecutorOptions = {},
   ) {
-    this.objectStore = objectStore ?? new InMemoryObjectStore();
+    // Prompt 38 §58: when S3-compatible object storage is configured in
+    // the worker's environment, artifacts go there; otherwise the
+    // labelled in-memory store (tests / local dev without infra).
+    this.objectStore = objectStore ?? S3ObjectStore.fromEnv() ?? new InMemoryObjectStore();
     this.workerCapabilities = options.workerCapabilities ?? [];
   }
 

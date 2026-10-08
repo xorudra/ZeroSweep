@@ -1,0 +1,26 @@
+# Reference Prometheus configuration (Prompt 38 §117). Optional
+# monitoring stack — the platform runs without it; these files make the
+# §118 dashboards and §120 alerts work when an operator enables it.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+# Alert rules live in deploy/monitoring/prometheus-rules.yaml as a
+# PrometheusRule CRD for operator-managed clusters; point rule_files at
+# an extracted plain-rules copy when running vanilla Prometheus.
+rule_files:
+  - /etc/prometheus/rules/*.yaml
+scrape_configs:
+  - job_name: dsrclone-api
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ["api:4000"]
+    # The scrape endpoint is additionally restricted by NetworkPolicy to
+    # the monitoring namespace (Prompt 25 §102) — never Internet-exposed.
+  - job_name: dsrclone-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker-general:9100"]
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]

@@ -80,6 +80,50 @@ export DATABASE_URL="postgresql://dsrclone@127.0.0.1:54329/dsrclone?schema=publi
 ( cd "$REPO/packages/database" && npx tsx prisma/seed.ts ) \
   && echo "[stack] seed: applied" || { echo "FATAL: seed failed"; exit 1; }
 
+# --- MinIO object storage (Prompt 38) -------------------------------------------
+# Provisioned from the official MinIO source release built with the
+# official Go toolchain (the prebuilt download endpoints returned
+# 410/404 in this environment; see docs/architecture/
+# production-deployment-v2.md and the Phase 38 notes). Binary +
+# credentials live under $STACK/minio (local-only, never committed).
+# If the binary is absent, health reports object storage down — the
+# honest status, never a fabricated one.
+if [ -x "$STACK/minio/minio" ]; then
+  if [ ! -f "$STACK/minio/minio.env" ]; then
+    umask 077
+    printf 'MINIO_ROOT_USER=dsrclone-local\nMINIO_ROOT_PASSWORD=%s\n' \
+      "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" > "$STACK/minio/minio.env"
+  fi
+  if ! curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
+    mkdir -p "$STACK/minio/data"
+    ( cd "$STACK/minio" && set -a && . ./minio.env && set +a && \
+      setsid nohup ./minio server "$STACK/minio/data" --address 127.0.0.1:9000 \
+        --console-address 127.0.0.1:9001 >>"$STACK/minio/minio.log" 2>&1 & )
+    for i in $(seq 1 30); do
+      curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+  echo "[stack] MinIO: running at http://127.0.0.1:9000 (console 9001)"
+else
+  echo "[stack] MinIO: not provisioned under $STACK/minio — health reports object storage down."
+fi
+
+# Platform operations env (Prompt 38): pg tools for the backup
+# orchestrator, a local backup dir, and an operator passphrase file so
+# live backups are encrypted (§166). Appended to smoke.env if absent.
+ensure_env() { grep -q "^$1=" "$STACK/smoke.env" 2>/dev/null || echo "$1=$2" >> "$STACK/smoke.env"; }
+mkdir -p "$STACK/backups"
+[ -f "$STACK/backup-passphrase" ] || { umask 077; openssl rand -hex 24 > "$STACK/backup-passphrase"; }
+PG_BIN="$STACK/venv/lib/python3.12/site-packages/pgserver/pginstall/bin"
+ensure_env PG_BIN_DIR "$PG_BIN"
+ensure_env PLATFORM_BACKUP_DIR "$STACK/backups"
+ensure_env PLATFORM_BACKUP_PASSPHRASE_FILE "$STACK/backup-passphrase"
+if [ -f "$STACK/minio/minio.env" ]; then
+  ensure_env MINIO_ROOT_USER "$(grep '^MINIO_ROOT_USER=' "$STACK/minio/minio.env" | cut -d= -f2)"
+  ensure_env MINIO_ROOT_PASSWORD "$(grep '^MINIO_ROOT_PASSWORD=' "$STACK/minio/minio.env" | cut -d= -f2)"
+fi
+
 # --- App processes ---------------------------------------------------------------
 cd "$REPO"
 if ! curl -sf http://127.0.0.1:4000/api/v1/health/live >/dev/null 2>&1; then

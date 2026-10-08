@@ -39,3 +39,36 @@ Do not promote to production until every item is verifiably true.
       routed; on-call knows the incident runbook location.
 - [ ] Release manifest committed with real image digests.
 - [ ] Rollback target (previous manifest) identified before rollout.
+
+## Prompt 38 V2 gates (§240–§242)
+
+### Security
+- [ ] No default credentials anywhere (§242 blocker); MFA on operator
+      accounts; break-glass accounts exist and are sealed (§213).
+- [ ] Secrets are references only (§23/§24); repo scan shows no secret
+      material (§242 blocker: secrets in repo = NO-GO).
+- [ ] Database not publicly exposed (§242 blocker); scanner egress
+      governed; admission policies Enforce.
+### Reliability
+- [ ] Backup taken AND restore test passed within the last cycle
+      (§242 blocker: untested backup = NO-GO).
+- [ ] Kill switches + maintenance mode drilled once in staging
+      (audited records exist).
+- [ ] SLO table reviewed; unmeasured entries read INSUFFICIENT_DATA —
+      nobody has typed an uptime figure into a slide (§127).
+### Data protection
+- [ ] Tenant-isolation tests green (§242 blocker); retention rules
+      active; encryption-at-rest confirmed on DB + object storage.
+### Operations
+- [ ] On-call rota + alert receivers wired; Alertmanager inhibition
+      on; dashboards load with live series (no silent "no data").
+- [ ] DR exercise recorded with measured or NOT_MEASURED RPO/RTO
+      (§235); runbooks linked from every alert (§120).
+### Release
+- [ ] Release promoted by digest from staging (§147/§148); deployment
+      recorded in `/admin/platform`; rollback digests retained.
+- [ ] Go-live approval recorded with the approver's name (§242).
+
+**NO-GO blockers (§242):** default credentials · no TLS · backup
+untested · tenant-isolation failure · critical migration pending ·
+secrets in repo · database publicly exposed. Any one blocks launch.

@@ -1,0 +1,23 @@
+{{- if .Values.autoscaling.enabled }}
+{{- range $name := .Values.autoscaling.targets }}
+{{- $svc := index $.Values.services $name }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels: { app: {{ $name }}, app.kubernetes.io/part-of: dsrclone }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $name }} }
+  minReplicas: {{ $.Values.autoscaling.minReplicas }}
+  maxReplicas: {{ $.Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: {{ $.Values.autoscaling.cpuUtilization }} } }
+    - type: Resource
+      resource: { name: memory, target: { type: Utilization, averageUtilization: {{ $.Values.autoscaling.memoryUtilization }} } }
+  # Queue-depth custom metrics (dsrclone_queue_waiting_jobs) can be added
+  # by the operator's prometheus-adapter; scanner pools must not scale on
+  # HTTP rate (Prompt 38 §77/§78) and stay concurrency-governed (§79).
+{{- end }}
+{{- end }}

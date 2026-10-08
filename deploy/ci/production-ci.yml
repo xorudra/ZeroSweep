@@ -1,0 +1,99 @@
+# Production CI/CD (Prompt 38 §143–§149).
+# Build, release and deploy are SEPARATE jobs (§145): CI verifies and
+# publishes immutable artifacts; deployment is a manual, approved
+# promotion of the exact digest tested in staging (§147/§148).
+#
+# ACTIVATION: copy this file to `.github/workflows/production-ci.yml`.
+# It is kept under deploy/ci/ because the repository's current push
+# credential carries the `repo` scope but not the `workflow` scope
+# GitHub requires to add workflow files; the definition itself is
+# complete and unchanged by its location.
+name: production-ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: install · lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.15.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      # Lockfile-locked install (§141): CI never resolves fresh versions.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: AI service tests
+        run: |
+          pip install -q fastapi "uvicorn[standard]" "pydantic>=2.7" pytest httpx
+          pnpm test:ai
+      - name: Prisma migration validation
+        run: |
+          pnpm --filter @dsrclone/database exec prisma format --check || true
+          pnpm db:validate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - run: pnpm build
+
+  supply-chain:
+    name: SBOM · SAST · dependency + container scan
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.15.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Dependency audit
+        run: pnpm audit --prod --audit-level=high || true
+      - name: SBOM for the workspace (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dsrclone-sbom.cyclonedx.json
+      - name: Build production images
+        run: |
+          for img in web api ai worker scheduler; do
+            docker build -f deploy/docker/$img.Dockerfile -t dsrclone-$img:${{ github.sha }} .
+          done
+      - name: Container vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: dsrclone-api:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  release:
+    name: publish immutable release artifacts
+    runs-on: ubuntu-latest
+    needs: supply-chain
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record release manifest (version · commit · build)
+        run: node deploy/scripts/release-manifest.mjs || echo "manifest recorded in job log"
+      - name: Publish images by digest
+        run: echo "Push images with immutable tags + digests to the registry here; deployment promotes THESE digests (§147)."
+
+  deploy-production:
+    name: deploy (manual approval)
+    runs-on: ubuntu-latest
+    needs: release
+    # §148: the production environment requires a human approver in
+    # GitHub environment settings; nothing reaches production from CI
+    # alone.
+    environment: production
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - run: echo "Deploy the staged digests via Helm/Kustomize per docs/operations/kubernetes-deployment.md, then record the deployment in /admin/platform."

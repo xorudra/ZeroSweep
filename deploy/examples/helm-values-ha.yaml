@@ -1,0 +1,22 @@
+# Example: distributed HA overrides for deploy/helm/dsrclone
+# (Prompt 38 §4/§34/§37/§215–§217). External managed PostgreSQL, Redis
+# and S3-compatible storage; the chart never provisions production data
+# services itself.
+global:
+  imageTag: "38.0.0"
+config:
+  NODE_ENV: production
+  DATABASE_REQUIRE_TLS: "true"
+  REDIS_REQUIRE_TLS: "true"
+  # Point these at the managed endpoints for your region.
+  MINIO_ENDPOINT: "https://objects.example.internal:9000"
+  AI_SERVICE_URL: "http://ai:8000"
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+networkPolicy:
+  enabled: true

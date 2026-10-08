@@ -83,6 +83,7 @@ export const NAV = [
   { href: "/devsecops", label: "DevSecOps" },
   { href: "/remediation/tickets", label: "Remediation Tickets" },
   { href: "/audit-logs", label: "Audit Logs" },
+  { href: "/admin/platform", label: "Platform Admin" },
   { href: "/settings", label: "Settings" },
 ] as const;
 

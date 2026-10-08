@@ -219,7 +219,86 @@ services:
       resources:
         limits: { cpus: "1.0", memory: 1G }
 
+  # ---- Prompt 38 §117/§206: optional observability profile -----------
+  # Reference monitoring stack. Enable with `--profile observability`.
+  # Images are pinned release tags; dashboards/rules/configs mount from
+  # deploy/monitoring. None of these services is required for the
+  # platform itself to run.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: [observability]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Alert rules ship as a PrometheusRule CRD (deploy/monitoring/
+      # prometheus-rules.yaml) for operator-managed clusters; for this
+      # compose stack, extract the spec.groups into a plain rules file
+      # and mount it at /etc/prometheus/rules/ to enable alerting.
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    <<: *hardening
+    tmpfs: ["/tmp"]
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: [observability]
+    restart: unless-stopped
+    command: [--config.file=/etc/alertmanager/alertmanager.yml]
+    volumes:
+      - ../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    <<: *hardening
+    tmpfs: ["/tmp"]
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: [observability]
+    restart: unless-stopped
+    environment:
+      # No default production password ships anywhere (§214): the admin
+      # password comes from the operator's env file or first-run setup.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in the external env file}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../monitoring/dashboards:/var/lib/grafana/dashboards/dsrclone:ro
+      - ../monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    <<: *hardening
+    tmpfs: ["/tmp"]
+  loki:
+    image: grafana/loki:3.2.0
+    profiles: [observability]
+    restart: unless-stopped
+    command: [-config.file=/etc/loki/loki-config.yaml]
+    volumes:
+      - ../monitoring/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    <<: *hardening
+    tmpfs: ["/tmp"]
+  otel-collector:
+    image: otel/opentelemetry-collector:0.114.0
+    profiles: [observability]
+    restart: unless-stopped
+    command: [--config=/etc/otelcol/otel-collector.yaml]
+    volumes:
+      - ../monitoring/otel-collector.yaml:/etc/otelcol/otel-collector.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    <<: *hardening
+    tmpfs: ["/tmp"]
+
 volumes:
   postgres-data:
   redis-data:
   object-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:

@@ -3,6 +3,7 @@ import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { loadEnv, QUEUES } from "@dsrclone/config";
 import { createLogger } from "@dsrclone/logger";
+import { operatorRetryAllowed } from "@dsrclone/security-sdk";
 
 const logger = createLogger("dsrclone-api");
 
@@ -119,8 +120,95 @@ export class QueueService implements OnModuleDestroy {
     }
   }
 
+  // ---- Prompt 38 §198: queue administration plane -------------------
+  // Read models + bounded operator actions over the governed queues.
+  // Permission checks and audit live in the platform-ops module; this
+  // service only touches Redis. Retry is limited to IDs-only job kinds
+  // (operatorRetryAllowed) — a retry re-runs the worker's full
+  // authorization/scope gates, never bypasses them.
+  private adminQueues = new Map<string, Queue>();
+
+  private adminQueue(name: string): Queue {
+    if (!Object.values(QUEUES).includes(name as never)) {
+      throw new Error(`unknown queue ${name}`);
+    }
+    if (!this.connection) this.ensure();
+    let q = this.adminQueues.get(name);
+    if (!q) {
+      q = new Queue(name, { connection: this.connection! });
+      this.adminQueues.set(name, q);
+    }
+    return q;
+  }
+
+  async adminSnapshot(): Promise<Array<{
+    name: string; waiting: number; active: number; completed: number;
+    failed: number; delayed: number; paused: boolean; oldestWaitingAgeMs: number | null;
+  }>> {
+    const out = [];
+    for (const name of Object.values(QUEUES)) {
+      try {
+        const q = this.adminQueue(name);
+        const [counts, waiting] = await Promise.all([
+          q.getJobCounts("waiting", "active", "completed", "failed", "delayed"),
+          q.getWaiting(0, 0),
+        ]);
+        out.push({
+          name,
+          waiting: counts.waiting ?? 0, active: counts.active ?? 0,
+          completed: counts.completed ?? 0, failed: counts.failed ?? 0,
+          delayed: counts.delayed ?? 0, paused: await q.isPaused(),
+          oldestWaitingAgeMs: waiting[0]?.timestamp ? Date.now() - waiting[0].timestamp : null,
+        });
+      } catch {
+        out.push({ name, waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: false, oldestWaitingAgeMs: null });
+      }
+    }
+    return out;
+  }
+
+  async adminFailedJobs(name: string, limit = 25): Promise<Array<{
+    id: string; kind: string; attemptsMade: number; failedReason: string;
+  }>> {
+    const q = this.adminQueue(name);
+    const jobs = await q.getFailed(0, Math.min(limit, 100) - 1);
+    return jobs.map((j) => ({
+      id: String(j.id),
+      kind: typeof (j.data as { kind?: unknown })?.kind === "string" ? (j.data as { kind: string }).kind : j.name,
+      attemptsMade: j.attemptsMade,
+      failedReason: (j.failedReason ?? "unknown").slice(0, 300),
+    }));
+  }
+
+  /** Returns the job kind when the retry/cancel was applied, or a
+   *  refusal reason. Cancelling an ACTIVE job is refused — workers own
+   *  in-flight jobs via their leases (§45). */
+  async adminRetryJob(name: string, jobId: string): Promise<{ ok: boolean; kind?: string; reason?: string }> {
+    const q = this.adminQueue(name);
+    const job = await q.getJob(jobId);
+    if (!job) return { ok: false, reason: "job not found" };
+    const kind = typeof (job.data as { kind?: unknown })?.kind === "string" ? (job.data as { kind: string }).kind : job.name;
+    if (!operatorRetryAllowed(kind)) return { ok: false, reason: `job kind ${kind} is not operator-retryable (§198)` };
+    const state = await job.getState();
+    if (state !== "failed") return { ok: false, reason: `only failed jobs can be retried (state: ${state})` };
+    await job.retry();
+    return { ok: true, kind };
+  }
+
+  async adminCancelJob(name: string, jobId: string): Promise<{ ok: boolean; kind?: string; reason?: string }> {
+    const q = this.adminQueue(name);
+    const job = await q.getJob(jobId);
+    if (!job) return { ok: false, reason: "job not found" };
+    const kind = typeof (job.data as { kind?: unknown })?.kind === "string" ? (job.data as { kind: string }).kind : job.name;
+    const state = await job.getState();
+    if (state === "active") return { ok: false, reason: "active jobs are owned by their worker lease and cannot be cancelled from the admin plane (§45)" };
+    if (state === "completed") return { ok: false, reason: "completed jobs cannot be cancelled" };
+    await job.remove();
+    return { ok: true, kind };
+  }
+
   async onModuleDestroy(): Promise<void> {
-    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close(), this.retestQueue?.close(), this.validationQueue?.close()]);
+    await Promise.allSettled([this.placeholder?.close(), this.orchestration?.close(), this.scanOrchestration?.close(), this.retestQueue?.close(), this.validationQueue?.close(), ...[...this.adminQueues.values()].map((q) => q.close())]);
     this.connection?.disconnect();
   }
 }

@@ -1004,6 +1004,22 @@ enum AuditAction {
   FINDING_TEMPLATE_CREATED
   REPORT_TEMPLATE_VERSION_CREATED
   REPORT_ARCHIVED
+  // Prompt 38 §204: platform operations audit actions.
+  PLATFORM_MAINTENANCE_ENABLED
+  PLATFORM_MAINTENANCE_DISABLED
+  SCAN_KILL_SWITCH_ENABLED
+  SCAN_KILL_SWITCH_DISABLED
+  BACKUP_STARTED
+  BACKUP_COMPLETED
+  BACKUP_FAILED
+  RESTORE_STARTED
+  RESTORE_COMPLETED
+  RESTORE_FAILED
+  QUEUE_JOB_RETRIED
+  QUEUE_JOB_CANCELLED
+  PRODUCTION_DEPLOYMENT_STARTED
+  PRODUCTION_DEPLOYMENT_COMPLETED
+  PRODUCTION_ROLLBACK_STARTED
 }
 
 enum NotificationType {
@@ -10728,4 +10744,137 @@ model VulnerabilityMetricsSnapshot {
   capturedAt  DateTime @default(now())
 
   @@index([workspaceId, capturedAt])
+}
+
+// ------------------------- Prompt 38: Platform Operations V2 -------------------------
+
+// Operator control plane (§158/§159): a single global row. Kill switches
+// halt ONE work class each; maintenance mode halts all new work classes.
+// Reads, health and this admin plane are never blocked by either.
+model PlatformControl {
+  id                 String   @id @default(uuid())
+  key                String   @unique @default("platform")
+  maintenanceMode    Boolean  @default(false)
+  maintenanceMessage String?
+  // Partial<Record<KillSwitch, {enabled, reason?, setById?, setAt?}>>
+  killSwitches       Json     @default("{}")
+  updatedById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+enum PlatformBackupStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+// Backup record (§171): status, size, duration, storage reference,
+// checksum and retention expiry are recorded for every run. A FAILED
+// run is a record too — backup health is measured from these rows, and
+// a backup counts as operationally valid only via PlatformRestore
+// tests (§175).
+model PlatformBackup {
+  id                 String               @id @default(uuid())
+  kind               String // POSTGRES | OBJECT_STORAGE | CONFIG_METADATA | FULL
+  status             PlatformBackupStatus @default(STARTED)
+  sizeBytes          BigInt?
+  durationMs         Int?
+  reference          String? // storage URI/path of the artifact — never credentials
+  checksumSha256     String?
+  encrypted          Boolean              @default(false)
+  retentionExpiresAt DateTime?
+  errorSummary       String?
+  createdById        String?
+  startedAt          DateTime             @default(now())
+  completedAt        DateTime?
+  restores           PlatformRestore[]
+
+  @@index([status, startedAt])
+  @@index([kind, startedAt])
+}
+
+enum PlatformRestoreStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+// Restore / restore-test record (§172–§175): confirmation-gated,
+// integrity-checked before any write, isolated target only. The
+// validation checklist (§174) is stored verbatim.
+model PlatformRestore {
+  id             String                @id @default(uuid())
+  backupId       String
+  backup         PlatformBackup        @relation(fields: [backupId], references: [id], onDelete: Restrict)
+  status         PlatformRestoreStatus @default(STARTED)
+  targetDatabase String // isolated recovery database name — never the production DB
+  isRestoreTest  Boolean               @default(true)
+  validation     Json? // RestoreValidationChecks (§174)
+  errorSummary   String?
+  startedById    String?
+  startedAt      DateTime              @default(now())
+  completedAt    DateTime?
+
+  @@index([backupId, startedAt])
+  @@index([status, startedAt])
+}
+
+enum PlatformDeploymentStatus {
+  STARTED
+  COMPLETED
+  FAILED
+  ROLLBACK_STARTED
+  ROLLED_BACK
+}
+
+// Immutable release record (§147/§156): version, commit, build,
+// migration version, deployment time. Deploys promote the exact digest
+// tested in staging; this row is the platform-side evidence.
+model PlatformDeployment {
+  id               String                   @id @default(uuid())
+  version          String
+  commit           String
+  build            String?
+  migrationVersion String?
+  environment      String
+  status           PlatformDeploymentStatus @default(STARTED)
+  notes            String?
+  deployedById     String?
+  startedAt        DateTime                 @default(now())
+  completedAt      DateTime?
+
+  @@index([environment, startedAt])
+  @@index([status, startedAt])
+}
+
+// SLO definition (§124–§126): targets are operator policy. Status is
+// computed at read time from measured rows (backups, restores, scans) —
+// a definition alone never yields an availability claim (§127).
+model ServiceLevelObjective {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  kind       String // BACKUP_SUCCESS | RESTORE_TEST_SUCCESS | SCAN_COMPLETION | API_AVAILABILITY | REPORT_GENERATION
+  target     Float // success ratio, 0 < target <= 1
+  windowDays Int      @default(30)
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// DR exercise record (§176–§182, §235): RPO/RTO are recorded ONLY as
+// measured during an exercise (§180). Null means NOT_MEASURED — the
+// platform never presents a target as an achievement.
+model PlatformDrExercise {
+  id                 String   @id @default(uuid())
+  scenario           String
+  measuredRpoSeconds Int?
+  measuredRtoSeconds Int?
+  targetRpoSeconds   Int?
+  targetRtoSeconds   Int?
+  issues             String?
+  runById            String?
+  createdAt          DateTime @default(now())
+
+  @@index([createdAt])
 }

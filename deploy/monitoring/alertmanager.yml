@@ -1,0 +1,19 @@
+# Reference Alertmanager configuration (Prompt 38 §120/§123):
+# grouping + inhibition are configured so one root failure (e.g. DB
+# down) does not page once per symptom — alert fatigue is an
+# availability bug.
+route:
+  receiver: platform-oncall
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+inhibit_rules:
+  - source_matchers: [severity = "critical"]
+    target_matchers: [severity = "warning"]
+    equal: [alertname]
+receivers:
+  - name: platform-oncall
+    # Operators wire their own webhook/email here via secret-managed
+    # config; no receiver credential is ever committed.
+    webhook_configs: []

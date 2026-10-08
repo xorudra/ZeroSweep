@@ -323,6 +323,13 @@ export * from "./cloudv2/index";
 // signals, deterministic NL plans and the defensive AI guard. The
 // V1 engines (Prompts 17/18) remain the execution substrate.
 export * from "./mobbin/index";
+// Prompt 38: production deployment, observability & operations V2 —
+// platform RBAC/audit vocabulary, grouped production-config validation,
+// queue retry/lease policy, backup/restore governance (isolated targets,
+// integrity-gated), measured-only SLO math, observability safety
+// (cardinality + trace screening) and release/operator controls.
+export * from "./platformops/index";
+
 // Prompt 37: reporting/VM V2 decision layer + client-portal projection.
 export * from "./reporting2/index";
 export * from "./portal/index";

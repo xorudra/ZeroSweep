@@ -65,3 +65,17 @@ expiry (120s TTL), then scale back to 1.
   `deploy/disaster-recovery/README.md`.
 - TLS certificates: rotate via the ingress secret; the platform tolerates
   rotation on restart of the ingress controller only — no app restart.
+
+## Prompt 38 additions — measured recovery (§176–§184, §235)
+
+- Every recovery (real or drill) is recorded via
+  `POST /api/v1/platform/dr-exercises` with the **measured** RPO/RTO
+  actually observed, or left null — NOT_MEASURED is the honest state
+  until a drill measures it (§180).
+- Restore path is the platform RestoreOrchestrator: integrity
+  verified before any database is created (§234), isolated target
+  first (§173), §174 validation recorded — see
+  `docs/operations/restore-runbook.md`.
+- Failure classes beyond P25's set: accidental deletion and
+  ransomware follow the same sequence, with full credential rotation
+  before services return (ransomware: assume compromise).

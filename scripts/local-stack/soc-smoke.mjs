@@ -34,7 +34,7 @@ async function call(method, path, body, auth = true) {
 }
 
 const health = await call("GET", "/health", undefined, false);
-record("health (postgres ok, minio honestly down)", health.status === 200 && health.json.checks?.postgres?.status === "ok" && health.json.checks?.minio?.status === "down",
+record("health (postgres ok, minio provisioned)", health.status === 200 && health.json.checks?.postgres?.status === "ok" && health.json.checks?.minio?.status === "ok",
   `postgres=${health.json.checks?.postgres?.status} minio=${health.json.checks?.minio?.status}`);
 
 const reg = await call("POST", "/auth/register", { email: EMAIL, password: PASSWORD, name: "Smoke Operator", organizationName: `SOC Smoke Org ${stamp}` }, false);

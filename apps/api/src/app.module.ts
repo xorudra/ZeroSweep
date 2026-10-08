@@ -51,6 +51,7 @@ import { KubernetesSecurityModule } from "./modules/kubernetes-security/kubernet
 import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelligence/vulnerability-intelligence.module";
 import { RemediationModule } from "./modules/remediation/remediation.module";
 import { MobileBinaryV2Module } from "./modules/mobile-binary-v2/mobile-binary-v2.module";
+import { PlatformOpsModule } from "./modules/platform-ops/platform-ops.module";
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { MobileBinaryV2Module } from "./modules/mobile-binary-v2/mobile-binary-v
     ContainerSecurityModule,
     KubernetesSecurityModule,
     MobileBinaryV2Module,
+    PlatformOpsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

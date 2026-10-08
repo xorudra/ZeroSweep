@@ -75,3 +75,27 @@ services:
     resources:
       requests: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
       limits: { cpu: "2", memory: "2Gi", ephemeral-storage: "4Gi" }
+
+# Prompt 38 §76–§85: autoscaling + disruption budgets for the Helm path
+# (the Kustomize base carries the same semantics). HPAs scale the
+# stateless control plane on CPU/memory; scanner worker pools scale on
+# queue-depth custom metrics where the metrics adapter is installed,
+# and NEVER on HTTP request rate (§78). Scheduler is lease-guarded and
+# deliberately excluded (keep replicas: 1).
+autoscaling:
+  enabled: true
+  targets: [api, web, ai, worker-general]
+  minReplicas: 2
+  maxReplicas: 6
+  cpuUtilization: 70
+  memoryUtilization: 80
+
+podDisruptionBudget:
+  enabled: true
+  targets: [api, web]
+  minAvailable: 1
+
+# §53–§57: default-deny ingress/egress for the release namespace with
+# explicit allows (API → DB/Redis/object storage, ingress → web/api).
+networkPolicy:
+  enabled: true

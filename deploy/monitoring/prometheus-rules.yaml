@@ -57,6 +57,27 @@ spec:
           annotations:
             summary: "Automated restore verification failed — backups are NOT proven restorable"
             runbook: "docs/operations/backup-restore-runbook.md"
+        - alert: DsrcloneCertificateExpiringSoon
+          expr: (dsrclone_tls_certificate_expiry_timestamp - time()) < 14 * 24 * 3600
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "A production TLS certificate expires within 14 days (Prompt 38 §121)"
+            runbook: "docs/security/production-tls.md"
+        - alert: DsrcloneMigrationFailed
+          expr: dsrclone_db_migration_current == 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "Database migration state is not current — a migration job failed or is pending (Prompt 38 §121)"
+            runbook: "docs/operations/upgrade-runbook.md"
+        - alert: DsrcloneWorkerPoolUnavailable
+          expr: sum by (pool) (dsrclone_worker_heartbeat_age_ms) > 600000
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "An entire worker pool has no fresh heartbeat — its queue class is not being processed (Prompt 38 §121)"
+            runbook: "docs/operations/monitoring-runbook.md"
         - alert: DsrcloneDiskPressureRisk
           expr: dsrclone_ephemeral_storage_used_ratio > 0.85
           for: 10m
@@ -66,6 +87,20 @@ spec:
             runbook: "docs/operations/monitoring-alerting-runbook.md"
     - name: dsrclone.security
       rules:
+        - alert: DsrcloneRepeatedAuthenticationFailures
+          expr: sum(rate(dsrclone_auth_failures_total[5m])) > 0.5
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Repeated authentication failures — possible credential probing (Prompt 38 §122)"
+            runbook: "docs/operations/platform-incident-runbook.md"
+        - alert: DsrcloneSecretProviderFailure
+          expr: sum(rate(dsrclone_secret_provider_errors_total[5m])) > 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "Secret provider errors — workloads may fail to start or rotate credentials (Prompt 38 §122)"
+            runbook: "docs/security/production-secrets.md"
         - alert: DsrcloneAuthorizationDenialsSpike
           expr: sum(rate(dsrclone_authorization_denied_total[5m])) > 1
           for: 5m

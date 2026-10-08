@@ -1,0 +1,21 @@
+# Reference Loki configuration (Prompt 38 §112): structured JSON logs
+# (§108) are shipped by the operator's log agent (promtail/fluent-bit —
+# deployment choice); Loki stores them with tenant-safe labels only
+# (service, environment, level). Workspace ids may label a stream ONLY
+# where policy permits (§109); secrets never reach logs (§110).
+auth_enabled: false
+server: { http_listen_port: 3100 }
+common:
+  path_prefix: /loki
+  storage: { filesystem: { chunks_directory: /loki/chunks, rules_directory: /loki/rules } }
+  replication_factor: 1
+  ring: { kvstore: { store: inmemory } }
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index: { prefix: index_, period: 24h }
+limits_config:
+  retention_period: 720h

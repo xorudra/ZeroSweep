@@ -7,6 +7,6 @@ import { MetricsService } from "./metrics.service";
 @Module({
   controllers: [HealthController, MetricsController],
   providers: [HealthService, MetricsService],
-  exports: [MetricsService],
+  exports: [MetricsService, HealthService],
 })
 export class HealthModule {}

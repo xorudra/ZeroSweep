@@ -1,0 +1,27 @@
+# Reference OpenTelemetry Collector (Prompt 38 §113–§116). Receives
+# OTLP from platform services, redacts sensitive attributes at the
+# collector as a second line of defence (§116 — services must ALSO
+# screen attributes before export), and forwards to the operator's
+# tracing backend.
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+processors:
+  batch: { timeout: 5s }
+  attributes/redact:
+    actions:
+      - { key: http.request.header.authorization, action: delete }
+      - { key: http.request.header.cookie, action: delete }
+      - { key: db.statement, action: delete }
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls: { insecure: true }
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [otlp/jaeger]

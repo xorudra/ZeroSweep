@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import {
   API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
   apiHealthBySlug, binaryHealthRecord, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, mobileHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
@@ -13,6 +13,7 @@ import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
+import { PlatformControlService } from "../platform-ops/platform-control.service";
 import { QueueService } from "../../queue/queue.service";
 import { ScanEventsService } from "./scan-events.service";
 
@@ -53,6 +54,10 @@ export class OrchestrationService {
     private readonly audit: AuditService,
     private readonly queue: QueueService,
     private readonly events: ScanEventsService,
+    // Prompt 38 §158: operator kill switch / maintenance gate. Optional
+    // so unit specs that construct this service directly keep working;
+    // in the running app PlatformOpsModule provides the shared state.
+    @Optional() private readonly platformControl?: PlatformControlService,
   ) {}
 
   private registryCache: { registry: ToolRegistry; healthBySlug: Record<string, string> } | undefined;
@@ -232,6 +237,21 @@ export class OrchestrationService {
   async startScan(user: RequestUser, assessmentId: string) {
     const loaded = await this.load(user, assessmentId);
     const { assessment } = loaded;
+
+    // Prompt 38 §158/§159: the operator kill switch and maintenance
+    // mode sit ABOVE the per-scan authorization gate — when an operator
+    // has halted scan starts, no assessment state can override that.
+    if (this.platformControl) {
+      const decision = await this.platformControl.checkWork("SCAN_START");
+      if (!decision.allowed) {
+        await this.audit.record({
+          actorId: user.id, organizationId: user.organizationId, workspaceId: loaded.workspaceId,
+          action: "POLICY_DENIED", resourceType: "Assessment", resourceId: assessment.id,
+          metadata: { reasonCode: "PLATFORM_WORK_BLOCKED", reason: decision.reason ?? "blocked by platform control" },
+        });
+        throw new BadRequestException(`Scan refused: ${decision.reason} (PLATFORM_WORK_BLOCKED)`);
+      }
+    }
     const target = assessment.target;
 
     const gate = evaluateAuthorizationGate({

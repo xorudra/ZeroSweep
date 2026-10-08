@@ -1,0 +1,14 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $name := .Values.podDisruptionBudget.targets }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels: { app: {{ $name }}, app.kubernetes.io/part-of: dsrclone }
+spec:
+  minAvailable: {{ $.Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels: { app: {{ $name }} }
+{{- end }}
+{{- end }}

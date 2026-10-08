@@ -16,11 +16,30 @@ export class MetricsService {
 
   constructor(private readonly health: HealthService) {}
 
+  private readonly histogram = new Map<string, number>();
+  private static readonly LATENCY_BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+
   middleware() {
     return (req: Request, res: Response, next: NextFunction): void => {
+      const startedAt = process.hrtime.bigint();
       res.on("finish", () => {
         const key = `dsrclone_http_requests_total{method="${req.method}",status_class="${Math.floor(res.statusCode / 100)}xx"}`;
         this.counters.set(key, (this.counters.get(key) ?? 0) + 1);
+        // Prompt 38 §99: latency histogram by ROUTE TEMPLATE (the
+        // Express route pattern, e.g. /api/v1/scans/:id) — never the
+        // raw URL, whose IDs would explode cardinality (§107).
+        const route = (req as Request & { route?: { path?: string } }).route?.path ?? "unmatched";
+        const seconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
+        for (const le of MetricsService.LATENCY_BUCKETS) {
+          if (seconds <= le) {
+            const k = `dsrclone_http_request_duration_seconds_bucket{route="${route}",le="${le}"}`;
+            this.histogram.set(k, (this.histogram.get(k) ?? 0) + 1);
+          }
+        }
+        const inf = `dsrclone_http_request_duration_seconds_bucket{route="${route}",le="+Inf"}`;
+        this.histogram.set(inf, (this.histogram.get(inf) ?? 0) + 1);
+        const count = `dsrclone_http_request_duration_seconds_count{route="${route}"}`;
+        this.histogram.set(count, (this.histogram.get(count) ?? 0) + 1);
       });
       next();
     };
@@ -49,6 +68,9 @@ export class MetricsService {
       "# TYPE dsrclone_process_memory_bytes gauge",
       `dsrclone_process_memory_bytes{kind="rss"} ${mem.rss}`,
       `dsrclone_process_memory_bytes{kind="heap_used"} ${mem.heapUsed}`,
+      "# HELP dsrclone_http_request_duration_seconds HTTP request latency by route template.",
+      "# TYPE dsrclone_http_request_duration_seconds histogram",
+      ...[...this.histogram.entries()].map(([k, v]) => `${k} ${v}`),
       "# HELP dsrclone_dependency_up 1 when a checked dependency is reachable.",
       "# TYPE dsrclone_dependency_up gauge",
       ...(await this.dependencyLines()),
