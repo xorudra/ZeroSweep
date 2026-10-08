@@ -271,3 +271,10 @@ export * from "./integrations/index";
 // cross-framework mappings, evidence integrity/freshness, risk-register
 // mathematics, audit-package manifests and AI GRC safety rails (pure).
 export * from "./grc/index";
+
+// Prompt 27: security data lake & advanced analytics — canonical
+// analytics events, governed query DSL, deterministic aggregations,
+// lifecycle/MTTR math, search indexing safety, correlation rules,
+// bounded graph analytics, AI analytics grounding, retention and
+// tenant-safe cache keys (all pure, fixture-verified).
+export * from "./analytics/index";

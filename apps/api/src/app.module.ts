@@ -39,6 +39,7 @@ import { AiSecurityModule } from "./modules/ai-security/ai-security.module";
 import { ContinuousSecurityModule } from "./modules/continuous-security/continuous-security.module";
 import { IdentityModule } from "./modules/identity/identity.module";
 import { GrcModule } from "./modules/grc/grc.module";
+import { SecurityAnalyticsModule } from "./modules/security-analytics/security-analytics.module";
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { GrcModule } from "./modules/grc/grc.module";
     ContinuousSecurityModule,
     IdentityModule,
     GrcModule,
+    SecurityAnalyticsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 26 complete (Prompts 1–26).** Production monorepo, backend and
+> **Status — Phase 27 complete (Prompts 1–27).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -254,8 +254,33 @@ and the AI health endpoint.
 24. ✅ Enterprise integrations, DevSecOps & security workflow engine (Prompt 24)
 25. ✅ Enterprise deployment, Kubernetes, high availability, backup/DR & production hardening (Prompt 25) — incl. the first fully live end-to-end run: Docker-less local PostgreSQL/Redis, all migrations + seed applied, register→verify→approve→scan→findings proven (see `scripts/local-stack/`)
 26. ✅ Compliance, Audit & GRC platform (Prompt 26) — versioned framework catalog (ISO 27001, SOC 2, PCI DSS 4.0, NIST CSF/800-53, CIS Controls, OWASP), control library with cross-framework mappings, snapshot evidence + freshness, continuous control monitoring, risk register, audit packages; assessment evidence, never certification — GRC migration also applied to the live local stack
+27. ✅ Security data lake, advanced analytics, attack-surface intelligence & enterprise search (Prompt 27) — append-only canonical event lake with idempotent ingestion + dead-letter quarantine, lifecycle/risk projections, governed DSL search (tenant + classification enforced before retrieval, secrets redacted at index time), correlation signals, evidence-backed attack-path candidates, MTTR/SLA/regression analytics over real records only; data-lake migration also applied to the live local stack
 
 ## Changelog
+
+- **2026-10-08 — Prompt 27: Security Data Lake, Advanced Analytics,
+  Attack Surface Intelligence & Enterprise Search Engine.** A logical
+  data lake over PostgreSQL: canonical security events land append-only
+  through a validating ingestion pipeline (transactional outbox +
+  finding-history consumers, per-partition checkpoints, poison records
+  quarantined in a dead-letter with machine codes — never dropped).
+  Lifecycle and risk-history projections are pure functions of landed
+  events, so rebuilds are deterministic. Enterprise search indexes
+  redacted documents (secrets removed before indexing) and enforces
+  tenant scope + classification ceiling in the query itself; the
+  governed query DSL is allowlisted and evaluated over typed records —
+  no user input ever becomes SQL, and natural-language questions are
+  translated to the same DSL deterministically. Correlation rules
+  produce fingerprint-deduped signals; attack-path candidates chain
+  internet → asset → finding → sensitive downstream with evidence on
+  every edge and are labelled analyst aids, never exploitation
+  procedures. Analytics (overview, vulnerabilities, attack surface,
+  DevSecOps, cloud, identity, GRC) compute only over real records —
+  empty stays empty, MTTR excludes unresolved findings, growth needs
+  two snapshots. Retention deletes lake-owned records only; the audit
+  trail is untouchable. GUI: /analytics (+5 sub-dashboards) and
+  /search. Migration `20261008033253_security_data_lake` applied to
+  the live local stack.
 
 - **2026-10-08 — Prompt 26: Compliance, Audit & GRC Platform.** The GRC
   engine layers over the platform's identity, findings, posture and

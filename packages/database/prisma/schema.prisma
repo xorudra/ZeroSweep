@@ -814,6 +814,16 @@ enum AuditAction {
   AUDIT_EVIDENCE_SUBMITTED
   AUDIT_EVIDENCE_ACCEPTED
   AUDIT_PACKAGE_GENERATED
+  // Prompt 27 §110: analytics query audit — sensitive enterprise
+  // searches, large exports and attack-path access are audited.
+  // Metadata carries identifiers/counts only, never query secrets.
+  SECURITY_SEARCH_EXECUTED
+  ANALYTICS_EXPORTED
+  ATTACK_PATH_ACCESSED
+  ANALYTICS_INGESTION_RUN
+  ANALYTICS_REINDEX_RUN
+  ANALYTICS_RETENTION_RUN
+  SAVED_QUERY_CREATED
 }
 
 enum NotificationType {
@@ -7186,4 +7196,359 @@ model GrcRetentionPolicy {
   auditRetentionDays      Int      @default(2555)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+// ------------------------------- Prompt 27: Security Data Lake, Advanced Analytics & Enterprise Search -------------------------------
+
+// §4: canonical analytics event — the append-only historical record of
+// the lake. Events are NEVER rewritten when current state changes (§7);
+// corrections arrive as new events. eventId is the stable idempotency
+// key (§9): a duplicate delivery updates nothing. Tenant context
+// (organizationId + workspaceId) is validated before landing (§12) and
+// every query is scoped by it — analytics is never an authorization
+// bypass. Attributes hold references/summaries only (§13): large raw
+// artifacts stay in object storage.
+model SecurityAnalyticsEvent {
+  id             String   @id @default(uuid())
+  eventId        String   @unique // stable producer id (§9)
+  organizationId String
+  workspaceId    String
+  eventType      String // §5 catalog (ASSET_DISCOVERED | FINDING_CREATED | ...)
+  eventTime      DateTime // when it happened (producer clock) — timelines sort by this (§132)
+  ingestedAt     DateTime @default(now())
+  sourceType     String // OUTBOX | FINDING_HISTORY | POSTURE_SNAPSHOT | MANUAL_SYNC | FIXTURE
+  sourceId       String? // originating record id (outbox row / history row / snapshot id)
+  resourceType   String // ASSET | FINDING | SCAN | CONTROL | RISK | REPOSITORY | IDENTITY | TICKET | PLATFORM
+  resourceId     String
+  assetId        String?
+  findingId      String?
+  scanId         String?
+  severity       String? // CRITICAL | HIGH | MEDIUM | LOW | INFO (as recorded at event time)
+  priority       String? // P0..P4
+  riskScore      Float?
+  classification String   @default("INTERNAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED
+  schemaVersion  String   @default("1.0") // §6 controlled evolution
+  attributes     Json     @default("{}") // bounded summary attributes — no secrets (§111)
+  checksum       String // sha256 over the canonical event body (lineage, §8)
+
+  @@index([organizationId, workspaceId])
+  @@index([workspaceId, eventTime])
+  @@index([workspaceId, eventType])
+  @@index([workspaceId, assetId])
+  @@index([workspaceId, findingId])
+  @@index([workspaceId, severity])
+  @@index([workspaceId, riskScore])
+  @@index([workspaceId, classification])
+}
+
+// §10: per-consumer ingestion checkpoint. Partition = source stream
+// (e.g. OUTBOX, FINDING_HISTORY). lastEventKey is the cursor of the
+// last successfully landed source record; status surfaces lag (§118).
+model AnalyticsIngestionCheckpoint {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  consumer     String // ANALYTICS_INGESTION
+  partition    String // OUTBOX | FINDING_HISTORY | POSTURE_SNAPSHOT
+  lastEventKey String? // source cursor (createdAt|id composite or history id)
+  lastEventAt  DateTime?
+  status       String    @default("IDLE") // IDLE | RUNNING | STALLED | ERROR
+  processed    Int       @default(0)
+  rejected     Int       @default(0)
+  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+
+  @@unique([workspaceId, consumer, partition])
+  @@index([workspaceId, status])
+}
+
+// §11: bounded dead-letter for invalid/unprocessable analytics events.
+// Poison records are quarantined WITH their validation errors — never
+// silently dropped, never blocking the stream.
+model AnalyticsDeadLetterEvent {
+  id          String    @id @default(uuid())
+  workspaceId String?
+  eventId     String?
+  sourceType  String
+  rawSummary  Json      @default("{}") // sanitized summary of the rejected envelope — no secrets
+  errors      Json      @default("[]") // validation error codes (§12)
+  status      String    @default("QUARANTINED") // QUARANTINED | REPLAYED | DISCARDED
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  @@index([workspaceId, status])
+  @@index([createdAt])
+}
+
+// §21: enterprise-search document. searchableText is built ONLY from
+// redacted summaries (§112) — secrets never reach the index (§130).
+// Classification is enforced BEFORE retrieval: a search executes with
+// the caller's tenant + classification ceiling (§23/§24), it never
+// retrieves globally and filters afterwards.
+model SecuritySearchDocument {
+  id             String   @id @default(uuid())
+  organizationId String
+  workspaceId    String
+  documentType   String // ASSET | FINDING | SCAN | REPORT | REPOSITORY | CONTROL | RISK | AUDIT | TICKET | SECURITY_EVENT
+  resourceId     String
+  title          String // escaped at render; stored as data (§129)
+  summary        String   @default("")
+  searchableText String // redacted, lowercased token text
+  facets         Json     @default("{}") // severity/status/cwe/cve/technology/kev/exposure/... (§30)
+  classification String   @default("INTERNAL") // PUBLIC | INTERNAL | CONFIDENTIAL | RESTRICTED
+  riskScore      Float?
+  severity       String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  @@unique([workspaceId, documentType, resourceId])
+  @@index([organizationId, workspaceId])
+  @@index([workspaceId, documentType])
+  @@index([workspaceId, classification])
+  @@index([workspaceId, severity])
+}
+
+// §32: saved enterprise query. The query is stored as DSL TEXT plus its
+// parsed AST — re-validated on every execution, never trusted blind.
+model SavedSecurityQuery {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String
+  name        String
+  queryText   String // SecurityQueryDSL source (§34)
+  filters     Json     @default("{}")
+  visibility  String   @default("PRIVATE") // PRIVATE | WORKSPACE (§33)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, userId])
+  @@index([workspaceId, visibility])
+}
+
+// §41: point-in-time asset security projection (analytics-optimized;
+// the operational Asset row stays authoritative, §3).
+model AssetSecuritySnapshot {
+  id            String   @id @default(uuid())
+  workspaceId   String
+  assetId       String
+  capturedAt    DateTime @default(now())
+  exposure      String   @default("UNKNOWN") // INTERNET_FACING | INTERNAL | UNKNOWN
+  criticality   String   @default("UNSPECIFIED")
+  technologies  Json     @default("[]") // [{name, version}]
+  services      Json     @default("[]") // [{port, protocol, name}]
+  findingCounts Json     @default("{}") // severity → count (open only)
+  riskScore     Float?
+  postureState  String   @default("UNKNOWN")
+  stateHash     String
+
+  @@index([workspaceId, assetId, capturedAt])
+  @@index([workspaceId, capturedAt])
+}
+
+// §43: finding lifecycle projection — derived deterministically from
+// the analytics event history, so a replay/rebuild reproduces it
+// exactly (§133). Timestamps are eventTime-based (§132).
+model FindingLifecycleProjection {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  findingId          String
+  firstSeenAt        DateTime
+  lastSeenAt         DateTime
+  triagedAt          DateTime?
+  verifiedAt         DateTime?
+  resolvedAt         DateTime?
+  reopenedAt         DateTime?
+  regressionCount    Int       @default(0) // resolve → reappear cycles (§48)
+  remediationSeconds Int? // firstSeen → first resolution (MTTR input, §44)
+  currentStatus      String    @default("OPEN")
+  severity           String?
+  cwe                String?
+  cve                String?
+  assetId            String?
+  repositoryId       String?
+  rebuiltAt          DateTime  @default(now())
+
+  @@unique([workspaceId, findingId])
+  @@index([workspaceId, currentStatus])
+  @@index([workspaceId, severity])
+}
+
+// §50: risk history projection — risk score/priority/KEV/verification
+// over time. Historical context is never overwritten by later EPSS
+// updates (§65); each point is a recorded observation.
+model RiskHistoryProjection {
+  id                String   @id @default(uuid())
+  workspaceId       String
+  findingId         String?
+  assetId           String?
+  recordedAt        DateTime
+  riskScore         Float?
+  priority          String?
+  kevListed         Boolean  @default(false)
+  epssScore         Float?
+  verificationState String?
+  criticality       String?
+  sourceEventId     String?
+
+  @@index([workspaceId, recordedAt])
+  @@index([workspaceId, findingId, recordedAt])
+  @@index([workspaceId, assetId, recordedAt])
+}
+
+// §52: attack-surface exposure snapshot (one row per capture run).
+model ExposureSnapshot {
+  id                   String   @id @default(uuid())
+  workspaceId          String
+  capturedAt           DateTime @default(now())
+  internetFacingAssets Int      @default(0)
+  totalAssets          Int      @default(0)
+  openServices         Int      @default(0)
+  newServices          Int      @default(0)
+  removedServices      Int      @default(0)
+  highRiskTechnologies Int      @default(0)
+  criticalFindings     Int      @default(0)
+  kevFindings          Int      @default(0)
+  unknownAssets        Int      @default(0)
+  contentHash          String
+
+  @@index([workspaceId, capturedAt])
+}
+
+// §55: shadow-asset SIGNAL — controlled evidence that an asset may be
+// unowned/unexpected. A signal is never a maliciousness verdict.
+model ShadowAssetSignal {
+  id          String   @id @default(uuid())
+  workspaceId String
+  assetId     String?
+  host        String
+  signalType  String // UNEXPECTED_SUBDOMAIN | UNKNOWN_PUBLIC_HOST | UNOWNED_CLOUD_ASSET | UNMAPPED_SERVICE
+  evidence    Json     @default("{}")
+  status      String   @default("OPEN") // OPEN | ACKNOWLEDGED | DISMISSED
+  detectedAt  DateTime @default(now())
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, detectedAt])
+}
+
+// §74: correlation rule — typed declarative conditions ONLY (§75).
+// Conditions are data evaluated by the engine; a rule can never carry
+// executable code (§148).
+model CorrelationRule {
+  id          String   @id @default(uuid())
+  workspaceId String? // null = platform built-in rule
+  name        String
+  description String   @default("")
+  inputTypes  Json     @default("[]") // resource types the rule reads
+  conditions  Json     @default("[]") // [{field, op, value}] typed conditions
+  severity    String   @default("MEDIUM")
+  outputType  String // INTERNET_EXPOSED_KEV | CRITICAL_ASSET_CRITICAL_FINDING | ...
+  enabled     Boolean  @default(true)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, enabled])
+}
+
+// §76: correlation signal. Dedup by stable fingerprint (§78): repeated
+// matches update the SAME row's lifecycle instead of spamming (§79).
+// Signals may raise CONTEXTUAL risk / propose GRC risk candidates —
+// they never overwrite canonical finding severity (§80).
+model SecurityCorrelationSignal {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  ruleId          String?
+  signalType      String
+  fingerprint     String // workspace-scoped stable dedup key
+  severity        String   @default("MEDIUM")
+  confidence      String   @default("LOW") // LOW | MEDIUM | HIGH — evidence completeness (§77)
+  status          String   @default("OPEN") // OPEN | ACKNOWLEDGED | RESOLVED | SUPPRESSED (§79)
+  assetId         String?
+  findingId       String?
+  resourceType    String?
+  resourceId      String?
+  evidence        Json     @default("{}") // observed evidence references (§86 analogue)
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  occurrenceCount Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, status])
+  @@index([workspaceId, signalType])
+}
+
+// §83: attack-path CANDIDATE — analytical correlation over known
+// graph relationships + findings. It is never an exploitation plan
+// (§148); every edge references observed evidence (§86) and snapshots
+// are preserved so appearance/removal can be answered historically
+// (§87).
+model AttackPathCandidate {
+  id          String   @id @default(uuid())
+  workspaceId String
+  fingerprint String
+  title       String
+  score       Float // §85: exposure/criticality/finding risk/verification/length/confidence
+  confidence  String   @default("LOW")
+  status      String   @default("ACTIVE") // ACTIVE | REMOVED
+  nodes       Json     @default("[]") // [{kind, id, label}]
+  edges       Json     @default("[]") // [{from, to, evidenceType, evidenceId}]
+  assetId     String?
+  findingId   String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, fingerprint])
+  @@index([workspaceId, status])
+  @@index([workspaceId, score])
+}
+
+// §113: analytics retention policy — by event type / classification /
+// workspace. Retention NEVER destroys required audit/evidence records
+// (§114/§148): only lake-owned projections and events are eligible.
+model AnalyticsRetentionPolicy {
+  id                           String   @id @default(uuid())
+  workspaceId                  String   @unique
+  eventRetentionDays           Int      @default(730)
+  searchDocRetentionDays       Int      @default(730)
+  snapshotRetentionDays        Int      @default(365)
+  restrictedEventRetentionDays Int      @default(365)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+}
+
+// §115: controlled search reindex job. Reindex preserves tenant
+// boundaries, classification and redaction (§116) — it rebuilds
+// documents from operational records through the same indexing path.
+model SecuritySearchReindexJob {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  documentType String? // null = all types
+  status       String    @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
+  indexedCount Int       @default(0)
+  requestedBy  String
+  startedAt    DateTime?
+  completedAt  DateTime?
+  errorSummary String?
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId, status])
+}
+
+// Scheduled/persisted analytics snapshot (§88 dashboards + brief):
+// a deterministic capture of one analytics view at a point in time,
+// content-hashed like every other platform snapshot.
+model AnalyticsDashboardSnapshot {
+  id          String   @id @default(uuid())
+  workspaceId String
+  view        String // OVERVIEW | FINDINGS | ASSETS | ATTACK_SURFACE | RISK | DEVSECOPS | CLOUD | IDENTITY | GRC
+  capturedAt  DateTime @default(now())
+  source      String   @default("MANUAL") // MANUAL | SCHEDULED
+  content     Json     @default("{}")
+  contentHash String
+  generatedBy String?
+
+  @@index([workspaceId, view, capturedAt])
 }
