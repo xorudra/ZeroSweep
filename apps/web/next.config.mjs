@@ -3,7 +3,20 @@
 // headers): the web UI previously served no security headers of its
 // own. The CSP is deliberately pragmatic for the Next.js App Router
 // (hydration uses inline scripts/styles); frame-ancestors + DENY make
-// clickjacking a non-issue, and everything else is 'self'-locked.
+// clickjacking a non-issue, and everything else is 'self'-locked —
+// with ONE deliberate exception: connect-src must allow the API origin,
+// or the browser blocks every API call the UI makes (this exact bug
+// broke sign-in on the first hosted deployment: the API, its CORS and
+// the credentials were all correct, but the page's own CSP refused the
+// connection). The origin is derived from the same public env var the
+// API client uses, so the two can never drift apart.
+function apiConnectOrigin() {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (base) {
+    try { return new URL(base).origin; } catch { /* fall through */ }
+  }
+  return "http://localhost:4000"; // api-client's dev default
+}
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
@@ -13,7 +26,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      `connect-src 'self' ${apiConnectOrigin()}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
