@@ -6,3 +6,137 @@ body {
   background-color: #020617;
   color: #e2e8f0;
 }
+
+/* ===== Horizon hero (src/components/ui/horizon-hero-section.tsx) =====
+   The component was supplied without its stylesheet; this is the
+   reconstructed one. Everything is scoped under .hero-container so it
+   cannot leak into the console UI. The canvas is fixed so the WebGL
+   scene stays put while the three text sections scroll over it. */
+.hero-container {
+  position: relative;
+  background: #000;
+  color: #fff;
+  overflow-x: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.hero-container .hero-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+}
+.hero-container .hero-content {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8vw;
+  pointer-events: none;
+}
+.hero-container .hero-title {
+  font-size: clamp(3.5rem, 13vw, 11rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 0.95;
+  margin: 0;
+  text-transform: uppercase;
+}
+.hero-container .hero-title .title-char {
+  display: inline-block;
+}
+.hero-container .hero-subtitle {
+  margin-top: 1.5rem;
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.75);
+}
+.hero-container .hero-subtitle p {
+  margin: 0;
+}
+.hero-container .side-menu {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  padding: 2rem 1.25rem;
+}
+.hero-container .menu-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hero-container .menu-icon span {
+  display: block;
+  width: 26px;
+  height: 2px;
+  background: #fff;
+}
+.hero-container .vertical-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.6em;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+.hero-container .scroll-progress {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 2rem;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: min(420px, 80vw);
+}
+.hero-container .scroll-text {
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.hero-container .progress-track {
+  flex: 1;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.hero-container .progress-fill {
+  height: 100%;
+  background: #fff;
+  transition: width 0.2s ease-out;
+}
+.hero-container .section-counter {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+.hero-container .scroll-sections {
+  position: relative;
+  z-index: 2;
+}
+.hero-container .content-section {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8vw;
+  pointer-events: none;
+}
+@media (max-width: 768px) {
+  .hero-container .side-menu {
+    display: none;
+  }
+  .hero-container .hero-content,
+  .hero-container .content-section {
+    padding: 0 6vw;
+  }
+}
