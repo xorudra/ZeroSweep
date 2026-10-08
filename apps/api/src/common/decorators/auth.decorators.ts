@@ -9,6 +9,7 @@ export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 export interface RequestUser {
   id: string;
   email: string;
+  name?: string;
   organizationId: string;
   role: Role;
   /** Deployment-level platform administrator (Prompt 40 §96). Carried in

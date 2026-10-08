@@ -52,7 +52,7 @@ export class AuthService {
     const workspace = await this.prisma.workspace.create({ data: { organizationId: org.id, name: "Default Workspace" } });
     await this.audit.record({ actorId: user.id, organizationId: org.id, workspaceId: workspace.id, action: "REGISTER", resourceType: "User", resourceId: user.id });
     const session = await this.createSession(user.id as string, org.id as string, "AAL1");
-    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.isPlatformAdmin }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER", user.isPlatformAdmin), ...session };
+    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.isPlatformAdmin }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER", user.isPlatformAdmin, user.name), ...session };
   }
 
   async login(raw: unknown, ip = "unknown") {
@@ -123,7 +123,7 @@ export class AuthService {
     }
     await this.audit.record({ actorId: user.id as string, organizationId, action: "LOGIN", resourceType: "User", resourceId: user.id as string });
     const session = await this.createSession(user.id as string, organizationId, assurance);
-    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin }, ...this.issueToken(user.id as string, user.email as string, organizationId, membership.role as string, isPlatformAdmin), ...session };
+    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin }, ...this.issueToken(user.id as string, user.email as string, organizationId, membership.role as string, isPlatformAdmin, user.name as string), ...session };
   }
 
   private async createSession(userId: string, organizationId: string, assurance: string) {
@@ -184,7 +184,7 @@ export class AuthService {
     });
   }
 
-  private issueToken(sub: string, email: string, organizationId: string, role: string, isPlatformAdmin = false) {
-    return { accessToken: this.jwt.sign({ sub, email, organizationId, role, isPlatformAdmin }) };
+  private issueToken(sub: string, email: string, organizationId: string, role: string, isPlatformAdmin = false, name?: string) {
+    return { accessToken: this.jwt.sign({ sub, email, name, organizationId, role, isPlatformAdmin }) };
   }
 }
