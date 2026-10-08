@@ -10,7 +10,7 @@ The user never touches a command line: every workflow is clicks, forms and butto
 Security tools run only inside isolated workers — never in the web server, and never
 without verified scope and approval.
 
-> **Status — Phase 29 complete (Prompts 1–29).** Production monorepo, backend and
+> **Status — Phase 30 complete (Prompts 1–30).** Production monorepo, backend and
 > database foundation, the complete Tool Adapter SDK, a 129-tool metadata
 > catalog, the scan orchestration engine, ten reconnaissance adapters, the
 > web attack-surface discovery engine (ffuf, Feroxbuster, Gobuster dir-mode
@@ -257,8 +257,34 @@ and the AI health endpoint.
 27. ✅ Security data lake, advanced analytics, attack-surface intelligence & enterprise search (Prompt 27) — append-only canonical event lake with idempotent ingestion + dead-letter quarantine, lifecycle/risk projections, governed DSL search (tenant + classification enforced before retrieval, secrets redacted at index time), correlation signals, evidence-backed attack-path candidates, MTTR/SLA/regression analytics over real records only; data-lake migration also applied to the live local stack
 28. ✅ Enterprise SOC, SIEM, detection engineering, threat intelligence & incident response (Prompt 28) — canonical telemetry store (scoped ingestion auth, fingerprint idempotency, content hashes, secret redaction before storage), safe declarative detection DSL with immutable rule versions and ATT&CK-mapped templates, fingerprint-deduped alerts with a deterministic priority engine and scoped expiring suppressions, incidents with append-only timelines and hash-anchored access-logged evidence, STIX/fixture threat-intel with provenance + deterministic confidence (live transports NOT_CONFIGURED, honestly), SOC correlation over the Prompt 27 engine, a closed response-action catalog behind single/dual approval with segregation of duties, declarative playbooks, SIEM forwarding only through the Prompt 24 governed outbox, and SOC analytics over recorded rows only; SOC migration also applied to the live local stack
 29. ✅ Enterprise External Attack Surface Management (Prompt 29) — EASM programs + root assets with challenge-based ownership verification and a SEPARATE, segregated active-testing grant (discovered assets land UNVERIFIED/UNMANAGED with activeTestingStatus NOT_AUTHORIZED and can never be scanned without the standard VERIFIED + APPROVED gates), passive-first discovery via governed adapters (live transports NOT_CONFIGURED, honestly), normalization/dedup with wildcard suppression, DNS intelligence with snapshot history + dangling-DNS *candidates* (never claimed takeovers), certificate intelligence (SAN → candidate only), approved-port service discovery and redirect-recording HTTP discovery for authorized roots only, independent-source technology confidence (family-only ⇒ version null), evidence-based ownership resolution, promotion to canonical assets that stay UNVERIFIED, immutable drift baselines with flapping control and threshold disappearance, risk signals into RiskEngine V3 context + P28 SOC alerts, continuous monitoring on the P22 scheduler (discovery-class only), grounded AI copilot that cannot authorize, and an 8-page EASM console; EASM migration also applied to the live local stack
+30. ✅ Advanced Vulnerability Intelligence (Prompt 30) — a deepened intel layer over Prompt 11: per-field source provenance on every CVE record, multi-source/multi-version CVSS preserved with deterministic preferred selection, append-only EPSS history with staleness (missing EPSS is null, never 0), the full KEV catalog lifecycle (add/update/remove + transition events that re-evaluate affected findings, recalculate Risk V3 and notify exposed workspaces via P22 policies), software product/PURL/CPE identity with identifier mappings, ecosystem-aware branch-specific version ranges (never flattened), advisory dedup + patch intelligence that never invents a fix (source disagreement on the fixed version is shown, never silently resolved), SBOM correlation over the Prompt 12 subsystem with match evidence (heuristic/name-only matches are POTENTIALLY_AFFECTED only — never confirmed, never cleared; scanner disagreement preserved verbatim), defensive-only exploit context (metadata + references; no exploit code stored/fetched/executed, ever), reachability where NOT_REACHABLE requires positive evidence, blast radius with confirmed vs potential always separate, explainable multi-factor prioritization (never CVSS-only) feeding a remediation queue, KEV/EPSS/patch/intelligence dashboards + typed-filter search + analytics (KEV response times, patch latency, three separate vulnerability ages), a grounded AI copilot that states the governed no-fix sentence verbatim, governed snapshot import with checksums (fixture imports are provenance-labelled and never advance sync state — the shipped dataset stays NEVER_SYNCED and live sync attempts honestly record NOT_CONFIGURED), and a 7-page console (intelligence dashboard, remediation queue, KEV, EPSS, patches, deep CVE detail, SBOM explorer + component detail); VI migration also applied to the live local stack
 
 ## Changelog
+
+- **2026-10-08 — Prompt 30: Advanced Vulnerability Intelligence,
+  CVE/CWE/CVSS/EPSS/KEV Enrichment, SBOM Correlation & Patch
+  Intelligence.** Expands the Prompt 11 intelligence subsystem with a
+  deterministic SDK layer (`packages/security-sdk/src/vulnintel/`) and
+  19 new models: canonical CVE records with per-field provenance,
+  per-source CVSS assessments (history never rewritten; preferred
+  value selected by source priority → version → score), append-only
+  EPSS history with freshness, the KEV lifecycle (catalog events,
+  removals as data, affected-finding re-evaluation + Risk V3
+  recalculation + policy notification on entry), product/PURL/CPE
+  identity + mappings, branch-aware affected ranges, advisory dedup
+  and patch intelligence (agreements cite a fixed version;
+  disagreements are preserved and presented as disagreements), SBOM
+  correlation with typed match evidence (scanner disagreement
+  downgrades to POTENTIALLY_AFFECTED with both observations kept;
+  heuristic matches never confirm), exploit context as defensive
+  metadata only, reachability with positive-evidence NOT_REACHABLE,
+  blast radius with confirmed/potential separation, explainable
+  prioritization + remediation queue, dashboards/search/analytics, a
+  grounded copilot (verbatim no-fix sentence; numeric answers from
+  stored values only), and governed snapshot import — recorded
+  fixture feeds in tests, fixture imports provenance-labelled and
+  never advancing the NEVER_SYNCED dataset state; live transports
+  remain honestly NOT_CONFIGURED.
 
 - **2026-10-08 — Prompt 29: Enterprise External Attack Surface
   Management (EASM).** An external-surface layer over the asset

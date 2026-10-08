@@ -7,6 +7,98 @@ import { PageHeader } from "@/components/Shell";
 import { Badge, Card, EmptyState } from "@dsrclone/ui";
 import { apiFetch, ApiError } from "@/lib/api-client";
 
+interface DeepIntel {
+  hasRecord: boolean;
+  status: string;
+  provenance: Record<string, unknown>;
+  cvssAssessments: { version: string; baseScore: number; source: string; vector?: string }[];
+  preferredCvss?: { version: string; baseScore: number; source: string };
+  epssPoints: { score: number; percentile: number; date: string }[];
+  epssFreshness: string;
+  kev?: { status: string; dateAdded?: string; dueDate?: string; requiredAction?: string; ransomwareAssociation?: string };
+  ranges: { vendor: string; product: string; introducedVersion?: string; fixedVersion?: string; lastAffectedVersion?: string; source: string }[];
+  affectedProducts: { vendor: string; product: string; identifier?: string }[];
+  patch: { status: string; fixedVersion?: string; conflictingFixedVersions?: Record<string, unknown> };
+  advisories: { provider: string; advisoryId: string; title: string }[];
+  exploitContext?: { publicExploitKnown: boolean; exploitationObserved: boolean; exploitMaturity: string; source: string };
+  conflicts: { id: string; conflictType: string; status: string }[];
+  exposure: { componentsConfirmed: number; componentsPotential: number; componentsUnknown: number };
+  blastRadius?: { confirmed: { components: number; assets: number }; potential: { components: number; assets: number } };
+  noIntelligence?: string;
+  intelSnapshotId: string;
+}
+
+/**
+ * Prompt 30 deep intelligence: multi-source CVSS with provenance,
+ * EPSS history, affected ranges, patch state, exploit context
+ * (defensive metadata only), conflicts and blast radius — all from
+ * governed records; the section renders nothing on API error.
+ */
+function DeepIntelSection({ cveId }: { cveId: string }) {
+  const [deep, setDeep] = useState<DeepIntel | null>(null);
+  useEffect(() => {
+    apiFetch<DeepIntel>(`/vulnerability-intelligence/cves/${encodeURIComponent(cveId)}`).then(setDeep).catch(() => undefined);
+  }, [cveId]);
+  if (!deep) return null;
+  return (
+    <>
+      <Card>
+        <h3 className="text-sm font-semibold text-slate-200">Advanced intelligence (Prompt 30) · snapshot {deep.intelSnapshotId}</h3>
+        {deep.noIntelligence ? <p className="mt-1 text-sm text-slate-400">{deep.noIntelligence}</p> : null}
+        <p className="mt-1 text-xs text-slate-500">Status {deep.status} · provenance origin {String((deep.provenance as { snapshotOrigin?: string }).snapshotOrigin ?? "recorded feed")}</p>
+        <h4 className="mt-3 text-sm font-semibold text-slate-200">CVSS assessments by source</h4>
+        {deep.cvssAssessments.length === 0 ? <p className="text-sm text-slate-500">No CVSS assessments recorded.</p> : (
+          <ul className="mt-1 space-y-1 text-sm text-slate-300">
+            {deep.cvssAssessments.map((a, i) => <li key={i}>{a.baseScore} · v{a.version} · {a.source}{deep.preferredCvss && a.baseScore === deep.preferredCvss.baseScore && a.source === deep.preferredCvss.source ? <> <Badge>preferred</Badge></> : null}{a.vector ? ` · ${a.vector}` : ""}</li>)}
+          </ul>
+        )}
+        <h4 className="mt-3 text-sm font-semibold text-slate-200">EPSS history ({deep.epssFreshness})</h4>
+        {deep.epssPoints.length === 0 ? <p className="text-sm text-slate-500">No EPSS recorded — absence is never shown as 0.</p> : (
+          <p className="mt-1 text-sm text-slate-300">{deep.epssPoints.map((p) => `${p.date}: ${p.score} (pct ${p.percentile})`).join(" → ")}</p>
+        )}
+        {deep.kev ? <p className="mt-2 text-sm text-slate-300">KEV: {deep.kev.status}{deep.kev.dateAdded ? ` · added ${deep.kev.dateAdded}` : ""}{deep.kev.dueDate ? ` · due ${deep.kev.dueDate}` : ""}{deep.kev.ransomwareAssociation ? ` · ransomware ${deep.kev.ransomwareAssociation}` : ""}</p> : null}
+      </Card>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <h3 className="text-sm font-semibold text-slate-200">Affected products & version ranges</h3>
+          {deep.affectedProducts.length === 0 ? <p className="mt-1 text-sm text-slate-500">No affected products recorded.</p> : (
+            <ul className="mt-2 space-y-1 text-sm text-slate-300">
+              {deep.affectedProducts.map((p, i) => <li key={i}>{p.vendor} · {p.product}{p.identifier ? ` · ${p.identifier}` : ""}</li>)}
+            </ul>
+          )}
+          <ul className="mt-2 space-y-1 text-sm text-slate-400">
+            {deep.ranges.map((r, i) => <li key={i}>{r.vendor}/{r.product}: {r.introducedVersion ? `≥ ${r.introducedVersion}` : "any"} → {r.fixedVersion ? `fixed ${r.fixedVersion}` : r.lastAffectedVersion ? `last affected ${r.lastAffectedVersion}` : "no fix bound"} ({r.source})</li>)}
+          </ul>
+          <h3 className="mt-4 text-sm font-semibold text-slate-200">Patch intelligence</h3>
+          <p className="mt-1 text-sm text-slate-300"><Badge>{deep.patch.status}</Badge>{deep.patch.fixedVersion ? ` fixed in ${deep.patch.fixedVersion}` : ""}{deep.patch.conflictingFixedVersions ? " · sources disagree on the fixed version (§86) — none is presented as definitive" : ""}</p>
+          {deep.advisories.length ? (
+            <ul className="mt-2 space-y-1 text-sm text-slate-400">
+              {deep.advisories.map((a, i) => <li key={i}>{a.provider} · {a.advisoryId} · {a.title}</li>)}
+            </ul>
+          ) : null}
+        </Card>
+        <Card>
+          <h3 className="text-sm font-semibold text-slate-200">Exposure & blast radius (this workspace)</h3>
+          <p className="mt-1 text-sm text-slate-300">Components: {deep.exposure.componentsConfirmed} confirmed · {deep.exposure.componentsPotential} potential · {deep.exposure.componentsUnknown} unknown — always counted separately.</p>
+          {deep.blastRadius ? <p className="mt-1 text-sm text-slate-300">Blast radius: {deep.blastRadius.confirmed.components} confirmed components / {deep.blastRadius.confirmed.assets} assets; {deep.blastRadius.potential.components} potential components / {deep.blastRadius.potential.assets} assets.</p> : null}
+          <h3 className="mt-4 text-sm font-semibold text-slate-200">Exploit context (defensive metadata only)</h3>
+          {deep.exploitContext ? (
+            <p className="mt-1 text-sm text-slate-300">Maturity {deep.exploitContext.exploitMaturity} · public exploit known: {String(deep.exploitContext.publicExploitKnown)} · exploitation observed: {String(deep.exploitContext.exploitationObserved)} · source {deep.exploitContext.source}. No exploit code is stored or executed — ever.</p>
+          ) : <p className="mt-1 text-sm text-slate-500">No exploit context recorded from a trusted source.</p>}
+          {deep.conflicts.filter((c) => c.status === "OPEN").length ? (
+            <>
+              <h3 className="mt-4 text-sm font-semibold text-slate-200">Open intelligence conflicts</h3>
+              <ul className="mt-1 space-y-1 text-sm text-amber-300">
+                {deep.conflicts.filter((c) => c.status === "OPEN").map((c) => <li key={c.id}>{c.conflictType} — values from all sources are preserved; the deterministic preferred value is used until review.</li>)}
+              </ul>
+            </>
+          ) : null}
+        </Card>
+      </div>
+    </>
+  );
+}
+
 interface CveDetail {
   cveId: string;
   hasIntelligenceData: boolean;
@@ -95,6 +187,7 @@ export default function Page() {
           </ul>
         )}
       </Card>
+      <DeepIntelSection cveId={detail.cveId} />
     </>
   );
 }

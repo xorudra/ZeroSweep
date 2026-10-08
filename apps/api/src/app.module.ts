@@ -42,6 +42,7 @@ import { GrcModule } from "./modules/grc/grc.module";
 import { SecurityAnalyticsModule } from "./modules/security-analytics/security-analytics.module";
 import { SocModule } from "./modules/soc/soc.module";
 import { EasmModule } from "./modules/easm/easm.module";
+import { VulnerabilityIntelligenceModule } from "./modules/vulnerability-intelligence/vulnerability-intelligence.module";
 
 @Module({
   imports: [
@@ -49,7 +50,16 @@ import { EasmModule } from "./modules/easm/easm.module";
     OrganizationsModule, WorkspacesModule, TargetsModule, ScopesModule, AssessmentsModule,
     ScansModule, FindingsModule, ReportsModule, ToolsModule, IntegrationsModule,
     CredentialsModule, NotificationsModule, OrchestrationModule, AssetsModule, ScannersModule,
-    ApiSecurityModule, NetworkModule, VulnerabilitiesModule, RepositoriesModule, CloudNativeModule, CloudSecurityModule, ActiveDirectoryModule,
+    ApiSecurityModule, NetworkModule,
+    // Prompt 30: registered BEFORE VulnerabilitiesModule on purpose —
+    // the Prompt 11 controller owns a legacy GET
+    // "vulnerability-intelligence/:cveId" wildcard; Nest matches in
+    // registration order, so the P30 literal routes (kev, epss,
+    // providers, dashboard, …) must register first. The P11 bare GET,
+    // ":cveId" lookup and "sync/:source" patterns do not overlap any
+    // P30 route and keep working unchanged.
+    VulnerabilityIntelligenceModule,
+    VulnerabilitiesModule, RepositoriesModule, CloudNativeModule, CloudSecurityModule, ActiveDirectoryModule,
     SecurityValidationModule, MobileSecurityModule, BinarySecurityModule, WirelessSecurityModule, VulnerabilityManagementModule,
     AiSecurityModule,
     ContinuousSecurityModule,

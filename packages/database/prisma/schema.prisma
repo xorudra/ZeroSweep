@@ -861,6 +861,18 @@ enum AuditAction {
   EASM_EXPOSURE_CHANGED
   EASM_DRIFT_DETECTED
   EASM_BASELINE_CREATED
+  // Prompt 30 §115: vulnerability-intelligence audit actions.
+  CVE_INTELLIGENCE_UPDATED
+  EPSS_UPDATED
+  KEV_ADDED
+  KEV_REMOVED
+  PATCH_INTELLIGENCE_UPDATED
+  SBOM_CORRELATED
+  COMPONENT_VULNERABILITY_MATCHED
+  INTELLIGENCE_CONFLICT_DETECTED
+  INTELLIGENCE_CONFLICT_REVIEWED
+  FINDING_REENRICHED
+  RISK_RECALCULATED_FROM_INTELLIGENCE
 }
 
 enum NotificationType {
@@ -1430,14 +1442,14 @@ model ToolExecution {
 
 // ------------------------------- Findings -------------------------------
 model Finding {
-  id                      String                     @id @default(uuid())
+  id                      String                          @id @default(uuid())
   workspaceId             String
   scanId                  String
   assetId                 String?
   title                   String
   description             String
   severity                Severity
-  confidence              Float                      @default(0.5)
+  confidence              Float                           @default(0.5)
   cvssScore               Float?
   cvssVector              String?
   cve                     String?
@@ -1451,8 +1463,8 @@ model Finding {
   technicalImpact         String?
   businessImpact          String?
   remediation             String?
-  status                  FindingStatus              @default(OPEN)
-  verificationStatus      FindingVerificationStatus  @default(UNVERIFIED)
+  status                  FindingStatus                   @default(OPEN)
+  verificationStatus      FindingVerificationStatus       @default(UNVERIFIED)
   duplicateOfId           String?
   fingerprint             String?
   // Prompt 7: curated vulnerability class + cross-tool correlation state.
@@ -1460,7 +1472,7 @@ model Finding {
   // Contributing tool slugs after correlation (§18/§21): one canonical
   // finding, many sources; duplicates point at it via duplicateOfId and
   // their evidence rows are re-homed here, never deleted (§20).
-  sources                 String[]                   @default([])
+  sources                 String[]                        @default([])
   // Deterministic risk engine output (§34/§35): 0–100 score, band and the
   // explained inputs (JSON: base/confidence/criticality/exposure factors).
   riskScore               Float?
@@ -1475,32 +1487,34 @@ model Finding {
   reviewNotes             String?
   // Provenance (Prompt 4 §35): fixture findings are permanently flagged so
   // they can never be presented as real security results.
-  isMock                  Boolean                    @default(false)
+  isMock                  Boolean                         @default(false)
   toolExecutionId         String?
   // Prompt 11: vulnerability-management layer (§47 lifecycle, §39/§40
   // priority separate from severity, §41–§43 SLA, §44 ownership, §46 tags).
-  lifecycleStatus         VmLifecycleStatus          @default(NEW)
-  detectionKind           String                     @default("DETECTED_VULNERABILITY") // DETECTED_VULNERABILITY | POTENTIAL_EXPOSURE (§34)
+  lifecycleStatus         VmLifecycleStatus               @default(NEW)
+  detectionKind           String                          @default("DETECTED_VULNERABILITY") // DETECTED_VULNERABILITY | POTENTIAL_EXPOSURE (§34)
   cpe                     String?
   priority                String? // P0..P4 remediation priority (§40)
   riskFactors             Json? // Risk Engine V2 factor breakdown (§38)
   riskCalcVersion         String?
   intelSnapshot           Json? // intelligence snapshot/version used (§31)
+  // Prompt 30 §60: point-in-time vulnerability-intelligence enrichment.
+  vulnEnrichment          FindingVulnerabilityEnrichment?
   intelCvssScore          Float? // intelligence CVSS — preserved separately from the scanner score (§32)
   epssScore               Float?
   epssPercentile          Float?
-  kevListed               Boolean                    @default(false)
-  exploitRefExists        Boolean                    @default(false)
+  kevListed               Boolean                         @default(false)
+  exploitRefExists        Boolean                         @default(false)
   assignedToId            String?
   assignedToTeam          String?
   assignedBy              String?
   assignedAt              DateTime?
-  tags                    String[]                   @default([])
+  tags                    String[]                        @default([])
   slaPolicyId             String?
   dueAt                   DateTime?
   resolvedAt              DateTime?
   reopenedAt              DateTime?
-  recurrenceCount         Int                        @default(0)
+  recurrenceCount         Int                             @default(0)
   riskAcceptanceReason    String?
   riskAcceptedBy          String?
   riskAcceptanceExpiresAt DateTime?
@@ -1572,7 +1586,7 @@ model Finding {
   owaspMobile             String? // OWASP Mobile Top 10 category (§46)
   masvsControl            String? // OWASP MASVS control id (§47)
   crossBuildFingerprint   String?
-  dynamicConfirmed        Boolean                    @default(false)
+  dynamicConfirmed        Boolean                         @default(false)
   // Prompt 18 (§50–§63): binary extension block — the registered
   // binary artifact (identity = SHA-256), §56 finding type, concerned
   // function/library/section, §62 reachability evidence state (never
@@ -1585,7 +1599,7 @@ model Finding {
   binaryReachability      String?
   binaryFingerprint       String?
   staticConfidence        String?
-  binaryArtifact          BinaryArtifact?            @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
+  binaryArtifact          BinaryArtifact?                 @relation(fields: [binaryArtifactId], references: [id], onDelete: SetNull)
   // Prompt 19 (§52/§53): wireless extension block — the registered
   // wireless environment, the AP identity (BSSID, §5), the §52
   // finding type and the §53 canonical fingerprint (environment +
@@ -1595,8 +1609,8 @@ model Finding {
   wirelessBssid           String?
   wirelessFindingType     String?
   wirelessFingerprint     String?
-  wirelessEnvironment     WirelessEnvironment?       @relation(fields: [wirelessEnvironmentId], references: [id], onDelete: SetNull)
-  wirelessAccessPoint     WirelessAccessPoint?       @relation(fields: [wirelessAccessPointId], references: [id], onDelete: SetNull)
+  wirelessEnvironment     WirelessEnvironment?            @relation(fields: [wirelessEnvironmentId], references: [id], onDelete: SetNull)
+  wirelessAccessPoint     WirelessAccessPoint?            @relation(fields: [wirelessAccessPointId], references: [id], onDelete: SetNull)
   // Prompt 20 §5/§6: unified finding source domain + category so every
   // engine's findings are queryable in one architecture without
   // flattening domain identity. sourceDomain: WEB | NETWORK | API |
@@ -1620,11 +1634,11 @@ model Finding {
   retestDueAt             DateTime?
   slaPausedAt             DateTime?
   slaPauseReason          String?
-  cluster                 FindingCluster?            @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  cluster                 FindingCluster?                 @relation(fields: [clusterId], references: [id], onDelete: SetNull)
   ownership               FindingOwnership?
   riskExceptions          RiskException[]
-  correlationsFrom        FindingCorrelation[]       @relation("CorrelationFrom")
-  correlationsTo          FindingCorrelation[]       @relation("CorrelationTo")
+  correlationsFrom        FindingCorrelation[]            @relation("CorrelationFrom")
+  correlationsTo          FindingCorrelation[]            @relation("CorrelationTo")
   externalReferences      ExternalFindingReference[]
   secretMetadata          SecretFindingMetadata?
   observations            FindingObservation[]
@@ -1633,17 +1647,17 @@ model Finding {
   retests                 RetestRequest[]
   validationRequests      ValidationRequest[]
   manualValidations       ManualValidationRecord[]
-  firstSeen               DateTime                   @default(now())
-  lastSeen                DateTime                   @updatedAt
-  scan                    Scan                       @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  asset                   Asset?                     @relation(fields: [assetId], references: [id])
-  duplicateOf             Finding?                   @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
-  duplicates              Finding[]                  @relation("FindingDuplicates")
+  firstSeen               DateTime                        @default(now())
+  lastSeen                DateTime                        @updatedAt
+  scan                    Scan                            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  asset                   Asset?                          @relation(fields: [assetId], references: [id])
+  duplicateOf             Finding?                        @relation("FindingDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates              Finding[]                       @relation("FindingDuplicates")
   evidence                FindingEvidence[]
   references              FindingReference[]
   history                 FindingHistory[]
-  createdAt               DateTime                   @default(now())
-  updatedAt               DateTime                   @updatedAt
+  createdAt               DateTime                        @default(now())
+  updatedAt               DateTime                        @updatedAt
 
   @@index([workspaceId])
   @@index([scanId])
@@ -1761,6 +1775,10 @@ model CweRecord {
   name         String
   description  String
   category     String?
+  // Prompt 30 §16: weakness hierarchy + lifecycle status. Parents are
+  // recorded relationships from the source catalog, never inferred.
+  parentCweIds String[]  @default([])
+  status       String    @default("STABLE") // STABLE | DEPRECATED | OBSOLETE
   references   Json      @default("[]")
   source       String    @default("CURATED")
   lastSyncedAt DateTime?
@@ -1808,6 +1826,12 @@ model KevRecord {
   dueDate            DateTime?
   knownRansomwareUse String?
   source             String    @default("CISA_KEV")
+  // Prompt 30 §23/§24: catalog provenance + lifecycle. A CVE the catalog
+  // retracts becomes REMOVED — the row is preserved (history), never
+  // deleted, and stops counting as actively KEV-listed.
+  catalogSource      String    @default("CISA_KEV")
+  status             String    @default("ACTIVE") // ACTIVE | REMOVED
+  removedAt          DateTime?
   lastSyncedAt       DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -1828,7 +1852,362 @@ model IntelligenceSyncState {
   updatedAt     DateTime  @updatedAt
 }
 
-// ------------------------------- Vulnerability management (Prompt 11) -------------------------------
+// --------------------- Advanced vulnerability intelligence (Prompt 30) ---------------------
+// Global public intelligence (CVE/CVSS/EPSS/KEV/products/patches) is
+// shared reference data with per-field provenance (§6); tenant exposure
+// (component matches, enrichments, risk history) is workspace-scoped
+// and never crosses organizations (§155). Every value below originates
+// from a parsed provider record — the platform never invents a score,
+// a fixed version, or an affected range.
+
+// §3: the vulnerability identity record. Status (§5): PUBLISHED |
+// MODIFIED | REJECTED | WITHDRAWN | UNKNOWN. Rejected/withdrawn CVEs
+// are preserved but never treated as active vulnerabilities.
+model VulnerabilityRecord {
+  id               String    @id @default(uuid())
+  cveId            String    @unique
+  status           String    @default("UNKNOWN")
+  publishedAt      DateTime?
+  modifiedAt       DateTime?
+  description      String    @default("")
+  descriptionLang  String    @default("en")
+  // §6: field-level provenance { description: {source, at}, cvss: {...} }.
+  provenance       Json      @default("{}")
+  source           String // primary source, e.g. NVD
+  snapshotChecksum String? // checksum of the provider snapshot that last updated this record
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+}
+
+// §12–§15: one row per (CVE, CVSS version, source). Multiple sources and
+// multiple CVSS versions coexist; the preferred assessment is SELECTED
+// deterministically at read time — rows are never rewritten (§15).
+model CvssAssessment {
+  id                 String    @id @default(uuid())
+  cveId              String
+  version            String // 2.0 | 3.0 | 3.1 | 4.0
+  vector             String?
+  baseScore          Float
+  severity           String?
+  temporalScore      Float?
+  environmentalScore Float?
+  source             String
+  publishedAt        DateTime?
+  observedAt         DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+
+  @@unique([cveId, version, source])
+  @@index([cveId])
+}
+
+// §17: CVE → CWE mappings (many-to-many, provenance per mapping).
+model VulnerabilityWeaknessMapping {
+  id        String   @id @default(uuid())
+  cveId     String
+  cweId     String
+  source    String
+  createdAt DateTime @default(now())
+
+  @@unique([cveId, cweId, source])
+  @@index([cveId])
+  @@index([cweId])
+}
+
+// §24/§25: KEV catalog lifecycle events — added / updated / removed.
+// CVE_ADDED_TO_KEV events drive impact re-evaluation (§26).
+model KevCatalogEvent {
+  id         String   @id @default(uuid())
+  cveId      String
+  eventType  String // ADDED | UPDATED | REMOVED
+  source     String   @default("CISA_KEV")
+  detail     Json     @default("{}")
+  occurredAt DateTime @default(now())
+
+  @@index([cveId])
+  @@index([eventType])
+}
+
+// §28: normalized software product identity.
+model SoftwareProduct {
+  id             String            @id @default(uuid())
+  vendor         String
+  product        String
+  normalizedName String // lower(vendor):lower(product)
+  ecosystem      String? // npm | pypi | maven | ... | os | generic
+  metadata       Json              @default("{}")
+  versions       SoftwareVersion[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([normalizedName, ecosystem])
+  @@index([vendor, product])
+}
+
+// §29: a known version of a product (identity for range endpoints).
+model SoftwareVersion {
+  id                String   @id @default(uuid())
+  productId         String
+  version           String
+  normalizedVersion String
+  releaseMetadata   Json     @default("{}")
+  createdAt         DateTime @default(now())
+
+  product SoftwareProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, normalizedVersion])
+  @@index([productId])
+}
+
+// §32: PURL ↔ CPE ↔ vendor/product mapping with confidence + source.
+model SoftwareIdentifierMapping {
+  id         String   @id @default(uuid())
+  purl       String?
+  cpe        String?
+  ecosystem  String?
+  vendor     String
+  product    String
+  confidence String // EXACT | HIGH | MEDIUM | LOW
+  source     String
+  createdAt  DateTime @default(now())
+
+  @@index([purl])
+  @@index([cpe])
+  @@index([vendor, product])
+}
+
+// §37: a product a CVE affects, per a governed source.
+model VulnerabilityAffectedProduct {
+  id              String                 @id @default(uuid())
+  cveId           String
+  vendor          String
+  product         String
+  identifier      String? // CPE or PURL the source used
+  identifierType  String? // CPE | PURL
+  platformContext String?
+  source          String
+  ranges          AffectedVersionRange[]
+  createdAt       DateTime               @default(now())
+
+  @@unique([cveId, vendor, product, identifier])
+  @@index([cveId])
+  @@index([vendor, product])
+}
+
+// §35/§36/§39: version range for one affected product. Branch-specific
+// ranges are separate rows — never flattened into one global fix (§39).
+model AffectedVersionRange {
+  id                  String   @id @default(uuid())
+  cveId               String
+  affectedProductId   String?
+  vendor              String
+  product             String
+  ecosystem           String?
+  introducedVersion   String?
+  fixedVersion        String?
+  lastAffectedVersion String?
+  rangeExpression     String? // source range text, e.g. CPE criteria / GHSA range
+  confidence          String   @default("MEDIUM") // LOW | MEDIUM | HIGH (§36)
+  source              String
+  createdAt           DateTime @default(now())
+
+  affectedProduct VulnerabilityAffectedProduct? @relation(fields: [affectedProductId], references: [id], onDelete: SetNull)
+
+  @@index([cveId])
+  @@index([vendor, product])
+}
+
+// §44/§45: security advisories. One CVE may have many advisories; all
+// are preserved with provenance. References are validated http/https
+// strings only — never fetched by the backend (§128/§129).
+model SecurityAdvisory {
+  id            String    @id @default(uuid())
+  provider      String // NVD | GHSA | OSV | vendor slug
+  advisoryId    String
+  title         String
+  publishedAt   DateTime?
+  updatedAt     DateTime?
+  references    Json      @default("[]")
+  cveIds        String[]  @default([])
+  fixedVersions Json      @default("{}") // productKey -> fixed version(s), as the advisory states
+  source        String
+  createdAt     DateTime  @default(now())
+
+  @@unique([provider, advisoryId])
+  @@index([advisoryId])
+}
+
+// §41–§43: patch intelligence. fixedVersion exists ONLY where a reliable
+// source provides it (§85); status (§42): PATCH_AVAILABLE |
+// FIXED_VERSION_AVAILABLE | MITIGATION_ONLY | NO_KNOWN_FIX | UNKNOWN.
+model PatchRecord {
+  id            String    @id @default(uuid())
+  cveId         String
+  productKey    String // normalized vendor:product or purl-ish key
+  affectedRange String?
+  fixedVersion  String?
+  advisoryId    String? // SecurityAdvisory.advisoryId that supports this record
+  mitigation    String? // vendor/authoritative mitigation text/reference (§43)
+  releaseDate   DateTime?
+  status        String    @default("UNKNOWN")
+  confidence    String    @default("MEDIUM")
+  source        String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([cveId, productKey, source])
+  @@index([cveId])
+  @@index([status])
+}
+
+// §72–§75: exploit context — DEFENSIVE METADATA ONLY. There is no column
+// that could hold exploit code, payloads, or instructions (§73/§159).
+model ExploitContext {
+  id                   String   @id @default(uuid())
+  cveId                String   @unique
+  publicExploitKnown   Boolean  @default(false)
+  exploitationObserved Boolean  @default(false)
+  kevListed            Boolean  @default(false)
+  exploitMaturity      String   @default("UNKNOWN") // §74 maturity ladder
+  source               String
+  confidence           String   @default("LOW")
+  references           Json     @default("[]") // validated http/https reference metadata only
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+
+  @@index([exploitMaturity])
+}
+
+// §53–§56: component ↔ vulnerability correlation result (tenant-scoped).
+// matchType (§55): PURL_EXACT | CPE_EXACT | PACKAGE_EXACT | VERSION_RANGE
+// | SCANNER_CONFIRMED | HEURISTIC. HEURISTIC ⇒ POTENTIALLY_AFFECTED,
+// never AFFECTED (§52/§56). affectedStatus (§54): AFFECTED |
+// NOT_AFFECTED | POTENTIALLY_AFFECTED | UNKNOWN.
+model ComponentVulnerabilityMatch {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  componentId    String // SoftwareComponent.id
+  cveId          String
+  matchType      String
+  confidence     String // EXACT | HIGH | MEDIUM | LOW | AMBIGUOUS (§50)
+  affectedStatus String
+  evidence       Json     @default("{}")
+  firstDetected  DateTime @default(now())
+  lastEvaluated  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  component SoftwareComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, componentId, cveId])
+  @@index([workspaceId, cveId])
+  @@index([workspaceId, affectedStatus])
+  @@index([componentId])
+}
+
+// §76/§77: reachability for a component in a CVE context. NOT_REACHABLE
+// requires positive evidence — a failed static search is UNKNOWN (§77).
+model ComponentReachabilityAssessment {
+  id          String   @id @default(uuid())
+  workspaceId String
+  componentId String
+  cveId       String?
+  status      String // UNKNOWN | POTENTIALLY_REACHABLE | REACHABLE | NOT_REACHABLE
+  confidence  String   @default("LOW")
+  evidence    Json     @default("{}")
+  assessedAt  DateTime @default(now())
+
+  @@index([workspaceId, componentId])
+  @@index([cveId])
+}
+
+// §60/§61: finding enrichment snapshot — the intelligence context a
+// finding's risk was computed with, so history stays reproducible.
+model FindingVulnerabilityEnrichment {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  findingId       String   @unique
+  cveId           String?
+  preferredCvss   Json? // { score, version, vector, source } as selected at enrichment time
+  epssScore       Float?
+  epssPercentile  Float?
+  kevListed       Boolean  @default(false)
+  patchStatus     String   @default("UNKNOWN")
+  componentId     String?
+  intelSnapshotId String
+  enrichedAt      DateTime @default(now())
+
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, cveId])
+  @@index([findingId])
+}
+
+// §90: risk recalculation history driven by intelligence changes — old
+// score, new score, reason, and the intelligence snapshot used.
+model IntelligenceRiskHistory {
+  id              String   @id @default(uuid())
+  workspaceId     String
+  findingId       String
+  oldScore        Float?
+  newScore        Float?
+  reason          String
+  intelSnapshotId String
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId, findingId])
+  @@index([findingId])
+}
+
+// §69–§71: material disagreement between trusted sources. Conflicting
+// records are PRESERVED; resolution is deterministic source priority
+// plus optional analyst review — never silent overwrite.
+model VulnerabilityIntelConflict {
+  id           String    @id @default(uuid())
+  cveId        String
+  conflictType String // CVSS_MISMATCH | VERSION_RANGE_MISMATCH | FIXED_VERSION_MISMATCH | CWE_MISMATCH | STATUS_MISMATCH
+  detail       Json      @default("{}") // per-source values, verbatim
+  status       String    @default("OPEN") // OPEN | REVIEWED
+  resolution   String?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([cveId])
+  @@index([status])
+}
+
+// §68: per-provider health/freshness. A provider outage marks freshness
+// — it never erases existing intelligence (§67).
+model VulnerabilityIntelProviderHealth {
+  id             String    @id @default(uuid())
+  provider       String    @unique // NVD | FIRST_EPSS | CISA_KEV | OSV | GHSA
+  status         String    @default("NOT_CONFIGURED") // OK | DEGRADED | DOWN | NOT_CONFIGURED
+  lastSuccessAt  DateTime?
+  lastFailureAt  DateTime?
+  latencyMs      Int?
+  rateLimitState String    @default("UNKNOWN")
+  freshness      String    @default("NEVER_SYNCED")
+  detail         String?
+  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+}
+
+// §98 companion: workspace watchlist — CVEs/components an operator is
+// tracking. Criteria are data (filters), never executable expressions.
+model VulnerabilityWatchlist {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  cveIds      String[] @default([])
+  criteria    Json     @default("{}")
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+}
 
 // A public exploit REFERENCE (§20): "a public exploit reference exists" —
 // never a claim that the target is exploitable (§21). Reference-only.
@@ -2620,32 +2999,34 @@ model SourceSnapshot {
 
 // One inventoried software component (§45) — PURL identity (§46).
 model SoftwareComponent {
-  id               String          @id @default(uuid())
-  snapshotId       String?
+  id                   String                        @id @default(uuid())
+  snapshotId           String?
   // Prompt 13 §13/§14: image package inventory (Syft) binds components
   // to the image instead of a source snapshot — same component model.
-  imageId          String?
+  imageId              String?
   // Prompt 17 §42: mobile dependency inventory binds components to the
   // mobile build — same component model, never invented versions (§45).
-  buildId          String?
+  buildId              String?
   // Prompt 18 §26: binary dependency inventory binds components to the
   // binary artifact — same component model; a version exists ONLY
   // where reliably known (§25), never inferred from a soname major.
-  binaryArtifactId String?
-  name             String
-  version          String?
-  ecosystem        String
-  purl             String
-  sourceManifest   String
-  scope            String          @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
-  dependencyScope  String          @default("RUNTIME")
-  licenses         String[]        @default([])
-  supplier         String?
-  snapshot         SourceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  image            ContainerImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  build            MobileBuild?    @relation(fields: [buildId], references: [id], onDelete: Cascade)
-  binaryArtifact   BinaryArtifact? @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
-  createdAt        DateTime        @default(now())
+  binaryArtifactId     String?
+  name                 String
+  version              String?
+  ecosystem            String
+  purl                 String
+  sourceManifest       String
+  scope                String                        @default("UNKNOWN") // DIRECT | TRANSITIVE | UNKNOWN
+  dependencyScope      String                        @default("RUNTIME")
+  licenses             String[]                      @default([])
+  supplier             String?
+  snapshot             SourceSnapshot?               @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  image                ContainerImage?               @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  build                MobileBuild?                  @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  binaryArtifact       BinaryArtifact?               @relation(fields: [binaryArtifactId], references: [id], onDelete: Cascade)
+  // Prompt 30 §53: vulnerability correlation results for this component.
+  vulnerabilityMatches ComponentVulnerabilityMatch[]
+  createdAt            DateTime                      @default(now())
 
   @@unique([snapshotId, purl])
   @@unique([imageId, purl])
