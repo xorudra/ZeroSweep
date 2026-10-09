@@ -141,6 +141,7 @@ interface SidebarContentProps {
   allItems: NavItem[];
   logout: () => void;
   onNavigate?: () => void;
+  drawer?: boolean;
   searchRef?: { current: HTMLInputElement | null };
   onSearchEnter?: (href: string) => void;
 }
@@ -149,13 +150,13 @@ interface SidebarContentProps {
  *  identically, inside the mobile slide-in drawer (same design, same
  *  state). Mobile previously dumped all ~86 links as wrapping chips in a
  *  header, burying the page; the drawer is the proper pattern. */
-function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery, results, logout, onNavigate, searchRef, onSearchEnter }: SidebarContentProps) {
+function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery, results, logout, onNavigate, searchRef, onSearchEnter, drawer }: SidebarContentProps) {
   const initials = (me?.name ?? "Rudra Singh").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const go = () => { setQuery(""); onNavigate?.(); };
   return (
     <>
       <div className="px-4 pb-1 pt-4">
-        <div className="flex items-center gap-3 rounded-xl bg-[#262626] px-3 py-2.5">
+        <div className={`flex items-center gap-3 rounded-xl bg-[#262626] px-3 py-2.5 ${drawer ? "pr-11" : ""}`}>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
             <ShieldIcon width="16" height="16" />
           </span>
@@ -163,7 +164,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
             <span className="block truncate text-[13px] font-semibold leading-tight text-white">DSRclone</span>
             <span className="block text-[11px] leading-tight text-[#9C9C9C]">VAPT Console</span>
           </span>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8A8A8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>
+          {drawer ? null : (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8A8A8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>)}
         </div>
 
         <div className="relative mt-3">
@@ -324,7 +325,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 className="absolute right-3 top-3 z-10 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
-              <SidebarContent {...contentProps} onNavigate={() => setMobileOpen(false)} />
+              <SidebarContent {...contentProps} drawer onNavigate={() => setMobileOpen(false)} />
             </div>
           </div>
         ) : null}
