@@ -102,12 +102,12 @@ export function Shell({ children }: { children: ReactNode }) {
   const { logout } = useAuth();
   const [me, setMe] = useState<MeInfo | null>(null);
   useEffect(() => {
-    if (pathname === "/login" || pathname === "/horizon" || !getToken()) return;
+    if (pathname === "/login" || !getToken()) return;
     let cancelled = false;
     apiFetch<MeInfo>("/auth/me").then((m) => { if (!cancelled) setMe(m); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [pathname]);
-  if (pathname === "/login" || pathname === "/horizon") return <>{children}</>;
+  if (pathname === "/login") return <>{children}</>;
   const canAdmin = Boolean(me?.isPlatformAdmin) || me?.role === "OWNER" || me?.role === "ADMIN";
   return (
     <div className="flex min-h-screen bg-slate-950">
