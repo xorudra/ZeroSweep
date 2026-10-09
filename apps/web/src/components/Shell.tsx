@@ -124,6 +124,121 @@ const isActive = (pathname: string, href: string) =>
 
 interface MeInfo { name?: string; email?: string; role?: string; isPlatformAdmin?: boolean; }
 
+const rowCls = (active: boolean) =>
+  `flex h-[38px] items-center gap-[11px] rounded-lg px-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+const subCls = (active: boolean) =>
+  `block rounded-lg py-[7px] pl-10 pr-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+
+interface SidebarContentProps {
+  me: MeInfo | null;
+  canAdmin: boolean;
+  pathname: string;
+  open: Record<string, boolean>;
+  setOpen: (fn: (o: Record<string, boolean>) => Record<string, boolean>) => void;
+  query: string;
+  setQuery: (q: string) => void;
+  results: NavItem[] | null;
+  allItems: NavItem[];
+  logout: () => void;
+  onNavigate?: () => void;
+  searchRef?: { current: HTMLInputElement | null };
+  onSearchEnter?: (href: string) => void;
+}
+
+/** The sidebar's inner content — rendered in the desktop flush panel and,
+ *  identically, inside the mobile slide-in drawer (same design, same
+ *  state). Mobile previously dumped all ~86 links as wrapping chips in a
+ *  header, burying the page; the drawer is the proper pattern. */
+function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery, results, logout, onNavigate, searchRef, onSearchEnter }: SidebarContentProps) {
+  const initials = (me?.name ?? "Rudra Singh").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const go = () => { setQuery(""); onNavigate?.(); };
+  return (
+    <>
+      <div className="px-4 pb-1 pt-4">
+        <div className="flex items-center gap-3 rounded-xl bg-[#262626] px-3 py-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
+            <ShieldIcon width="16" height="16" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold leading-tight text-white">DSRclone</span>
+            <span className="block text-[11px] leading-tight text-[#9C9C9C]">VAPT Console</span>
+          </span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8A8A8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>
+        </div>
+
+        <div className="relative mt-3">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A8A]" width="15" height="15" />
+          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && results?.[0]) { onSearchEnter?.(results[0].href); go(); } if (e.key === "Escape") setQuery(""); }}
+            placeholder="Search" aria-label="Search navigation"
+            className="h-[38px] w-full rounded-lg bg-[#262626] pl-9 pr-12 text-[13px] text-white placeholder-[#8A8A8A] outline-none ring-white/20 transition focus:ring-1" />
+          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-[#3A3A3A] px-1.5 py-0.5 text-[10px] font-medium text-[#C9C9C9]">⌘K</kbd>
+        </div>
+      </div>
+
+      <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
+        {results ? (
+          results.length === 0 ? (
+            <p className="px-3 py-2 text-[12.5px] text-[#8A8A8A]">No pages match your search.</p>
+          ) : results.map((item) => (
+            <Link key={item.href} href={item.href} onClick={go} className={rowCls(isActive(pathname, item.href))}>
+              <span className="truncate">{item.label}</span>
+            </Link>
+          ))
+        ) : (
+          <>
+            <Link href="/" onClick={go} className={rowCls(isActive(pathname, "/"))}>
+              <GridIcon className="shrink-0" /><span>Overview</span>
+            </Link>
+            {GROUPS.map((group) => {
+              const GroupIcon = group.icon;
+              const expanded = Boolean(open[group.label]);
+              const groupActive = group.items.some((i) => isActive(pathname, i.href));
+              return (
+                <div key={group.label}>
+                  <button type="button" onClick={() => setOpen((o) => ({ ...o, [group.label]: !o[group.label] }))}
+                    className={`${rowCls(groupActive)} w-full`}>
+                    <GroupIcon className="shrink-0" />
+                    <span className="flex-1 text-left">{group.label}</span>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#8A8A8A] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}><path d="m9.5 5.5 6.5 6.5-6.5 6.5" /></svg>
+                  </button>
+                  {expanded ? (
+                    <div className="space-y-0.5 py-0.5">
+                      {group.items.map((item) => (
+                        <Link key={item.href} href={item.href} onClick={go} className={subCls(isActive(pathname, item.href))}>{item.label}</Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            {canAdmin ? (
+              <Link href="/admin" onClick={go} className={rowCls(pathname.startsWith("/admin"))}>
+                <DiamondIcon className="shrink-0" /><span>Admin Panel</span>
+              </Link>
+            ) : null}
+          </>
+        )}
+      </nav>
+
+      <div className="border-t border-white/[0.06] p-3">
+        <div className="flex items-center gap-3 rounded-lg px-2 py-1.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#333333] text-[12px] font-semibold text-white">{initials}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium leading-tight text-white">{me?.name ?? "…"}</span>
+            <span className="block truncate text-[11.5px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</span>
+          </span>
+          <button type="button" onClick={logout} title="Sign out" aria-label="Sign out"
+            className="shrink-0 rounded-lg p-2 text-[#8A8A8A] transition-colors hover:bg-[#262626] hover:text-white">
+            <LogoutIcon width="16" height="16" />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -131,6 +246,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeInfo | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -144,6 +260,12 @@ export function Shell({ children }: { children: ReactNode }) {
     const group = GROUPS.find((g) => g.items.some((i) => isActive(pathname, i.href)));
     if (group) setOpen((o) => ({ ...o, [group.label]: true }));
   }, [pathname]);
+
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -163,113 +285,50 @@ export function Shell({ children }: { children: ReactNode }) {
   if (pathname === "/login") return <>{children}</>;
   const canAdmin = Boolean(me?.isPlatformAdmin) || me?.role === "OWNER" || me?.role === "ADMIN";
   const initials = (me?.name ?? "Rudra Singh").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
-
-  const rowCls = (active: boolean) =>
-    `flex h-[38px] items-center gap-[11px] rounded-lg px-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
-  const subCls = (active: boolean) =>
-    `block rounded-lg py-[7px] pl-10 pr-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+  const contentProps = {
+    me, canAdmin, pathname, open, setOpen, query, setQuery, results, allItems, logout,
+    onSearchEnter: (href: string) => router.push(href),
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-950">
       <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-white/[0.06] bg-[#0F0F0F] md:flex">
-        <div className="px-4 pb-1 pt-4">
-          <div className="flex items-center gap-3 rounded-xl bg-[#262626] px-3 py-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
-              <ShieldIcon width="16" height="16" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-semibold leading-tight text-white">DSRclone</span>
-              <span className="block text-[11px] leading-tight text-[#9C9C9C]">VAPT Console</span>
-            </span>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8A8A8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>
-          </div>
-
-          <div className="relative mt-3">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A8A]" width="15" height="15" />
-            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && results?.[0]) { router.push(results[0].href); setQuery(""); } if (e.key === "Escape") setQuery(""); }}
-              placeholder="Search" aria-label="Search navigation"
-              className="h-[38px] w-full rounded-lg bg-[#262626] pl-9 pr-12 text-[13px] text-white placeholder-[#8A8A8A] outline-none ring-white/20 transition focus:ring-1" />
-            <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-[#3A3A3A] px-1.5 py-0.5 text-[10px] font-medium text-[#C9C9C9]">⌘K</kbd>
-          </div>
-        </div>
-
-        <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
-          {results ? (
-            results.length === 0 ? (
-              <p className="px-3 py-2 text-[12.5px] text-[#8A8A8A]">No pages match “{query}”.</p>
-            ) : results.map((item) => (
-              <Link key={item.href} href={item.href} onClick={() => setQuery("")} className={rowCls(isActive(pathname, item.href))}>
-                <span className="truncate">{item.label}</span>
-              </Link>
-            ))
-          ) : (
-            <>
-              <Link href="/" className={rowCls(isActive(pathname, "/"))}>
-                <GridIcon className="shrink-0" /><span>Overview</span>
-              </Link>
-              {GROUPS.map((group) => {
-                const GroupIcon = group.icon;
-                const expanded = Boolean(open[group.label]);
-                const groupActive = group.items.some((i) => isActive(pathname, i.href));
-                return (
-                  <div key={group.label}>
-                    <button type="button" onClick={() => setOpen((o) => ({ ...o, [group.label]: !o[group.label] }))}
-                      className={`${rowCls(groupActive)} w-full`}>
-                      <GroupIcon className="shrink-0" />
-                      <span className="flex-1 text-left">{group.label}</span>
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#8A8A8A] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}><path d="m9.5 5.5 6.5 6.5-6.5 6.5" /></svg>
-                    </button>
-                    {expanded ? (
-                      <div className="space-y-0.5 py-0.5">
-                        {group.items.map((item) => (
-                          <Link key={item.href} href={item.href} className={subCls(isActive(pathname, item.href))}>{item.label}</Link>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-              {canAdmin ? (
-                <Link href="/admin" className={rowCls(pathname.startsWith("/admin"))}>
-                  <DiamondIcon className="shrink-0" /><span>Admin Panel</span>
-                </Link>
-              ) : null}
-            </>
-          )}
-        </nav>
-
-        <div className="border-t border-white/[0.06] p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-1.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#333333] text-[12px] font-semibold text-white">{initials}</span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium leading-tight text-white">{me?.name ?? "…"}</span>
-              <span className="block truncate text-[11.5px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</span>
-            </span>
-            <button type="button" onClick={logout} title="Sign out" aria-label="Sign out"
-              className="shrink-0 rounded-lg p-2 text-[#8A8A8A] transition-colors hover:bg-[#262626] hover:text-white">
-              <LogoutIcon width="16" height="16" />
-            </button>
-          </div>
-        </div>
+        <SidebarContent {...contentProps} searchRef={searchRef} />
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="border-b border-white/[0.06] bg-[#0F0F0F] px-5 py-3 md:hidden">
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#333333] text-[11px] font-semibold text-white">{initials}</span>
-            <div>
-              <p className="text-[13px] font-semibold leading-tight text-white">{me?.name ?? "DSRclone"}</p>
-              <p className="text-[11px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</p>
+        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/[0.06] bg-[#0F0F0F] px-4 py-3 md:hidden">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
+            <ShieldIcon width="15" height="15" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">DSRclone</span>
+            <span className="block truncate text-[11px] leading-tight text-[#8A8A8A]">{me?.name ?? "VAPT Console"}</span>
+          </span>
+          {canAdmin ? (
+            <Link href="/admin" aria-label="Admin Panel" className="shrink-0 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
+              <DiamondIcon width="18" height="18" />
+            </Link>
+          ) : null}
+          <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu"
+            className="shrink-0 rounded-lg p-2 text-white transition-colors hover:bg-[#262626]">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+        </header>
+
+        {mobileOpen ? (
+          <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+            <button type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} className="absolute inset-0 h-full w-full bg-black/60" />
+            <div className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col bg-[#0F0F0F] shadow-2xl">
+              <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close menu"
+                className="absolute right-3 top-3 z-10 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+              <SidebarContent {...contentProps} onNavigate={() => setMobileOpen(false)} />
             </div>
           </div>
-          <nav className="mt-3 flex flex-wrap gap-2">
-            {allItems.map((item) => (
-              <Link key={item.href} href={item.href} className="rounded-full border border-white/10 px-3 py-1 text-xs text-[#C9C9C9]">{item.label}</Link>
-            ))}
-            {canAdmin ? <Link href="/admin" className="rounded-full border border-white/25 px-3 py-1 text-xs text-white">Admin Panel</Link> : null}
-          </nav>
-        </header>
+        ) : null}
+
         <main className="mx-auto max-w-7xl p-5 md:p-8">{children}</main>
       </div>
     </div>
