@@ -36,8 +36,11 @@ Verified live 2026-10-08: API health reports api / postgres / redis / ai **ok**.
 Object storage reports **down** — the free tier has no S3 bucket attached, so the
 overall status reads *degraded* for that reason alone; attach any S3-compatible
 bucket via the `S3_*` env vars to close it. Free-tier realities: services spin
-down after ~15 minutes idle (slow first wake) and free Postgres expires after
-30 days. For a real production topology (HA, DR, observability), see `deploy/`
+down after ~15 minutes idle (slow first wake). The database lives on Neon
+(free plan, no 30-day expiry) since 2026-10-09 — DATABASE_URL is a
+dashboard-managed env var on the API and worker services (`sync: false`
+in render.yaml), not a Render Postgres. For a real production topology
+(HA, DR, observability), see `deploy/`
 instead — the Render deployment is the public demo, not that path.
 
 Uptime is monitored by UptimeRobot (free): **DSRclone Web**, **DSRclone API**
