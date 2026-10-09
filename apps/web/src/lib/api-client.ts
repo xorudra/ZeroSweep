@@ -48,6 +48,8 @@ export const api = {
   me: () => apiFetch("/auth/me"),
   login: (email: string, password: string) =>
     apiFetch<{ accessToken: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (name: string, email: string, password: string, organizationName: string) =>
+    apiFetch<{ accessToken: string }>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password, organizationName }) }),
   targets: () => apiFetch("/targets"),
   assessments: () => apiFetch("/assessments"),
   scans: () => apiFetch("/scans"),
