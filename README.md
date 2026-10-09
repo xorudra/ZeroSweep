@@ -32,10 +32,10 @@ Deployed from this repository via the `render.yaml` blueprint (free tier, Oregon
 | Worker | https://dsrclone-worker.onrender.com (background jobs; health via API) |
 | Database / cache | Render Postgres 16 + Key Value, wired by the blueprint |
 
-Verified live 2026-10-08: API health reports api / postgres / redis / ai **ok**.
-Object storage reports **down** — the free tier has no S3 bucket attached, so the
-overall status reads *degraded* for that reason alone; attach any S3-compatible
-bucket via the `S3_*` env vars to close it. Free-tier realities: services spin
+Verified live 2026-10-09: API health reports **all checks ok** (api / postgres /
+redis / object storage / ai). Object storage is a private Supabase Storage
+bucket (S3-compatible) wired in via the `MINIO_*` env vars on the API and
+worker services on 2026-10-09, which closed the last free-tier gap. Free-tier realities: services spin
 down after ~15 minutes idle (slow first wake). The database lives on Neon
 (free plan, no 30-day expiry) since 2026-10-09 — DATABASE_URL is a
 dashboard-managed env var on the API and worker services (`sync: false`
