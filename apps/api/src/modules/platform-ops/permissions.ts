@@ -29,6 +29,13 @@ const MAP: Record<PlatformPermission, Role[]> = {
 };
 
 export function hasPlatformPermission(user: RequestUser, permission: PlatformPermission): boolean {
+  // Deployment-level platform administrators (§96 flag, reconciled from
+  // the deployment allowlist at login) hold the platform plane in ANY
+  // tenant context. The role map below governs tenant roles; without
+  // this, an admin whose current organization context carries a lesser
+  // role would find the admin plane closed while the console still
+  // offers it — curable only by logging out and back in.
+  if (user.isPlatformAdmin === true) return true;
   return MAP[permission].includes(user.role);
 }
 

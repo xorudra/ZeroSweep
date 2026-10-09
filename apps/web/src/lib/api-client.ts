@@ -32,6 +32,15 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       ...(init.headers ?? {}),
     },
   });
+  if (res.status === 401 && token && typeof window !== "undefined" && window.location.pathname !== "/login") {
+    // The session expired (tokens live 1h). Clear it and return to the
+    // sign-in page instead of leaving every screen failing quietly —
+    // gated pages like the admin plane otherwise look "gone" until a
+    // manual logout/login cycle.
+    clearToken();
+    window.location.assign("/login");
+    throw new ApiError(401, "Session expired — please sign in again.");
+  }
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {

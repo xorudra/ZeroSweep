@@ -255,7 +255,20 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (pathname === "/login" || !getToken()) return;
     let cancelled = false;
-    apiFetch<MeInfo>("/auth/me").then((m) => { if (!cancelled) setMe(m); }).catch(() => undefined);
+    (async () => {
+      // Retry a couple of times: while the API is waking up, a failed
+      // /auth/me used to leave the shell without the account (and its
+      // Admin Panel link) until the next navigation or a re-login.
+      for (const delay of [0, 1500, 3500]) {
+        if (delay) await new Promise((r) => setTimeout(r, delay));
+        if (cancelled) return;
+        try {
+          const m = await apiFetch<MeInfo>("/auth/me");
+          if (!cancelled) setMe(m);
+          return;
+        } catch { /* wake-up in progress — retry */ }
+      }
+    })();
     return () => { cancelled = true; };
   }, [pathname]);
 

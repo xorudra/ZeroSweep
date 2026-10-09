@@ -104,15 +104,37 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    apiFetch<Dashboard>("/platform/dashboard").then(setData).catch((e) => {
-      setError(e instanceof ApiError && e.status === 403
-        ? "Your account does not hold a platform role (OWNER / ADMIN), so the admin plane stays closed."
-        : "The admin data could not be loaded. Is the API running?");
-    });
+    // The API sleeps when idle on the free tier: the first request after
+    // a quiet spell can fail while it wakes. Retry with backoff before
+    // declaring the plane closed — one failed load used to stick until
+    // the page was remounted.
+    let cancelled = false;
+    const delays = [0, 1500, 3500];
+    (async () => {
+      for (let i = 0; i < delays.length; i++) {
+        if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
+        if (cancelled) return;
+        try {
+          const d = await apiFetch<Dashboard>("/platform/dashboard");
+          if (!cancelled) { setData(d); setError(null); }
+          return;
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 403) {
+            if (!cancelled) setError("Your account does not hold a platform role (OWNER / ADMIN), so the admin plane stays closed.");
+            return;
+          }
+          if (i === delays.length - 1 && !cancelled) {
+            setError("The admin data could not be loaded. The API may be waking up — try again in a few seconds.");
+          }
+        }
+      }
+    })();
     apiFetch<Me>("/auth/me").then(setMe).catch(() => undefined);
-  }, []);
+    return () => { cancelled = true; };
+  }, [attempt]);
 
   const firstName = (me?.name ?? "").split(" ")[0] || "Admin";
   const sevTotal = data?.findingsBySeverity.reduce((s, r) => s + r.count, 0) ?? 0;
@@ -131,7 +153,10 @@ export default function AdminDashboardPage() {
       </div>
 
       {error ? (
-        <div className="mt-6 rounded-xl border border-[#232E57] bg-[#131A38] p-6 text-[14px] text-[#FF9DB1]">{error}</div>
+        <div className="mt-6 rounded-xl border border-[#232E57] bg-[#131A38] p-6 text-[14px] text-[#FF9DB1]">
+          <p>{error}</p>
+          <button onClick={() => { setError(null); setData(null); setAttempt((a) => a + 1); }} className="mt-3 rounded-md bg-[#CB3CFF] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#b62fe8]">Retry</button>
+        </div>
       ) : !data ? (
         <p className="mt-6 text-[13px] text-[#6E779A]">Loading platform data…</p>
       ) : (
