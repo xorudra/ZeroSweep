@@ -6,14 +6,21 @@ work: prompt assembly with explicit instruction/data separation
 provider call (§14/§15). It has NO execution authority (§7/§120): no
 shell, no SQL, no scanner invocation — analysis only.
 
-No live LLM is connected in this build; the honest status is
-NOT_CONFIGURED, and the deterministic MOCK provider exists so the
-pipeline is testable offline with recorded behaviour.
+A live LLM is connected only when the deployment configures one
+(AI_LLM_BASE_URL + AI_LLM_API_KEY); otherwise the honest status is
+NOT_CONFIGURED and the deterministic MOCK provider keeps the
+pipeline testable offline with recorded behaviour.
 """
 from __future__ import annotations
 
+import json
 import re
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
+
+from .config import settings
 
 SYSTEM_POLICY = (
     "You are the DSRclone AI Security Copilot: an analyst assistant over "
@@ -103,12 +110,113 @@ class MockProvider:
         return {"status": "HEALTHY", "latency_ms": 1}
 
 
+@dataclass
+class OpenAICompatibleProvider:
+    """Live provider over any OpenAI-compatible chat-completions API
+    (stdlib urllib only — no new dependencies). Used when the service
+    is configured with AI_LLM_BASE_URL + AI_LLM_API_KEY."""
+
+    base_url: str
+    api_key: str
+    model: str
+    timeout_s: float = 30.0
+    name: str = "openai-compatible"
+    type: str = "OPENAI_COMPATIBLE"
+
+    def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
+        data = json.dumps(payload).encode() if payload is not None else None
+        req = urllib.request.Request(
+            f"{self.base_url}{path}",
+            data=data,
+            method=method,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as res:
+            return json.loads(res.read().decode())
+
+    def generate(self, prompt: dict, model: str | None = None) -> ProviderResult:
+        body = self._request("POST", "/chat/completions", {
+            "model": model or self.model,
+            "messages": [
+                {"role": "system", "content": prompt["system"]},
+                {"role": "user", "content": prompt["user"]},
+            ],
+            "temperature": 0.2,
+        })
+        text = body["choices"][0]["message"]["content"]
+        usage = body.get("usage") or {}
+        return ProviderResult(
+            text=text,
+            prompt_tokens=int(usage.get("prompt_tokens", 0)),
+            completion_tokens=int(usage.get("completion_tokens", 0)),
+        )
+
+    def health_check(self) -> dict:
+        started = time.monotonic()
+        try:
+            self._request("GET", "/models")
+            return {"status": "HEALTHY", "latency_ms": int((time.monotonic() - started) * 1000)}
+        except Exception as exc:  # noqa: BLE001 — status reporting, not control flow
+            return {"status": "UNHEALTHY", "latency_ms": int((time.monotonic() - started) * 1000),
+                    "detail": f"{type(exc).__name__}"}
+
+
+def live_provider_configured() -> bool:
+    return bool(settings.llm_base_url and settings.llm_api_key)
+
+
+def get_provider():
+    """The configured live provider, or the deterministic mock when no
+    live provider is configured."""
+    if live_provider_configured():
+        return OpenAICompatibleProvider(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            model=settings.llm_model,
+            timeout_s=settings.llm_timeout_s,
+        )
+    return MockProvider()
+
+
+_probe_cache: dict = {"at": 0.0, "ok": False, "detail": ""}
+
+
+def llm_connected() -> bool:
+    """True only when a live provider is configured AND reachable.
+    The reachability probe is cached for 60s so health polling stays
+    cheap and never hammers the provider."""
+    if not live_provider_configured():
+        return False
+    now = time.monotonic()
+    if now - _probe_cache["at"] < 60:
+        return bool(_probe_cache["ok"])
+    result = get_provider().health_check()
+    _probe_cache.update(at=now, ok=result["status"] == "HEALTHY",
+                        detail=result.get("detail", ""))
+    return bool(_probe_cache["ok"])
+
+
 def copilot_status() -> dict:
-    """Honest service status: no live model is connected in this build."""
+    """Honest service status, driven by the real configuration: a live
+    provider reports CONNECTED only when it actually answers."""
+    if not live_provider_configured():
+        return {
+            "llm_connected": False,
+            "provider_status": "NOT_CONFIGURED",
+            "detail": "No external model provider is connected. The copilot pipeline "
+                      "(context, redaction, grounding) is implemented and testable "
+                      "offline via the deterministic MOCK provider.",
+        }
+    connected = llm_connected()
     return {
-        "llm_connected": False,
-        "provider_status": "NOT_CONFIGURED",
-        "detail": "No external model provider is connected. The copilot pipeline "
-                  "(context, redaction, grounding) is implemented and testable "
-                  "offline via the deterministic MOCK provider.",
+        "llm_connected": connected,
+        "provider_status": "CONNECTED" if connected else "UNREACHABLE",
+        "provider": "openai-compatible",
+        "model": settings.llm_model,
+        "detail": "Live LLM connected via the configured OpenAI-compatible endpoint."
+                  if connected else
+                  f"Live LLM configured but the provider probe failed ({_probe_cache['detail'] or 'no response'}).",
     }
