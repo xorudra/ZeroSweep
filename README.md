@@ -71,7 +71,11 @@ checks also keep the free services warm during the day.
 - **AI copilot** — grounded analysis over *normalized findings only*: explanation,
   remediation drafting, summaries, and a governed planning layer. The AI never
   launches scans or exploitation, never executes tools, and refuses secret-shaped
-  data. No live LLM is connected in this build (`NOT_CONFIGURED` by design).
+  data. A live LLM is connected (2026-10-09): the service takes any
+  OpenAI-compatible endpoint via `AI_LLM_*` env vars and is supplied by
+  Nexus Local's key-gated `/v1` API (model `nexus-auto`, which fails over
+  across Nexus's provider lanes). With no endpoint configured it reports
+  `NOT_CONFIGURED` honestly and answers via the deterministic mock.
 - **Enterprise platform** — SSO / MFA / SCIM, compliance & GRC, a security data
   lake with governed search, SOC / SIEM detection and incident response,
   integrations & DevSecOps hooks, a client portal, and SaaS productization
