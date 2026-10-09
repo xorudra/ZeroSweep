@@ -223,12 +223,14 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
       </nav>
 
       <div className="border-t border-white/[0.06] p-3">
-        <div className="flex items-center gap-3 rounded-lg px-2 py-1.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#333333] text-[12px] font-semibold text-white">{initials}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium leading-tight text-white">{me?.name ?? "…"}</span>
-            <span className="block truncate text-[11.5px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</span>
-          </span>
+        <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
+          <Link href="/profile" onClick={go} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg" title="Your profile">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#333333] text-[12px] font-semibold text-white">{initials}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-medium leading-tight text-white">{me?.name ?? "…"}</span>
+              <span className="block truncate text-[11.5px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</span>
+            </span>
+          </Link>
           <button type="button" onClick={logout} title="Sign out" aria-label="Sign out"
             className="shrink-0 rounded-lg p-2 text-[#8A8A8A] transition-colors hover:bg-[#262626] hover:text-white">
             <LogoutIcon width="16" height="16" />

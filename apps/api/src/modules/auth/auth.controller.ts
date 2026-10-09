@@ -16,7 +16,7 @@ export class AuthController {
   async login(@Body() body: unknown, @Req() req: { ip?: string }) { return this.auth.login(body, req?.ip ?? "unknown"); }
 
   @Get("me")
-  async me(@CurrentUser() user: RequestUser) { return user; }
+  async me(@CurrentUser() user: RequestUser) { return this.auth.meProfile(user); }
 
   /** Harmless queue smoke test — proves the job pipeline; runs no tool. */
   @Post("queue-smoke-test")

@@ -8,6 +8,7 @@ import {
 import { isPlatformAdminEmail, loadEnv } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
+import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";
 
 /**
@@ -33,6 +34,43 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
   ) {}
+
+
+  /** Profile view behind GET /auth/me: the token identity plus persisted
+   *  account facts for the profile page (member since, last login,
+   *  organization and workspace names). Additive only — every field the
+   *  token already carried stays identical. A lookup failure degrades to
+   *  the token identity rather than breaking /me, which the shell's
+   *  profile block depends on. */
+  async meProfile(user: RequestUser) {
+    const base = {
+      id: user.id, email: user.email, name: user.name,
+      organizationId: user.organizationId, role: user.role,
+      isPlatformAdmin: Boolean(user.isPlatformAdmin),
+    };
+    try {
+      const row = await this.prisma.user.findUnique({ where: { id: user.id } });
+      const org = await this.prisma.organization.findUnique({ where: { id: user.organizationId } });
+      const ws = await this.prisma.workspace.findFirst({
+        where: { organizationId: user.organizationId }, orderBy: { createdAt: "asc" },
+      });
+      return {
+        ...base,
+        name: row?.name ?? user.name,
+        organizationName: org?.name ?? null,
+        workspaceName: ws?.name ?? null,
+        memberSince: row?.createdAt ?? null,
+        lastLoginAt: row?.lastLoginAt ?? null,
+        emailVerified: Boolean(row?.emailVerifiedAt),
+        accountStatus: row?.status ?? null,
+      };
+    } catch {
+      return {
+        ...base, organizationName: null, workspaceName: null, memberSince: null,
+        lastLoginAt: null, emailVerified: false, accountStatus: null,
+      };
+    }
+  }
 
   /** Registration creates the user + their first organization, OWNER membership
    *  and a default workspace — the multi-tenant root. Passwords are bcrypt-hashed. */
