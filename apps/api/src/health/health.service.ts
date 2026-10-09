@@ -46,7 +46,12 @@ export class HealthService {
 
     try {
       const minioUrl = new URL(env.MINIO_ENDPOINT);
-      const up = await tcpCheck(minioUrl.hostname, Number(minioUrl.port || 9000));
+      // Default the probe port by scheme: hosted S3 endpoints are HTTPS
+      // URLs whose port the URL parser normalizes away, and probing the
+      // MinIO default (9000) for them would report a healthy bucket as
+      // down. Non-HTTPS (bare MinIO) endpoints keep the 9000 default.
+      const defaultPort = minioUrl.protocol === "https:" ? 443 : 9000;
+      const up = await tcpCheck(minioUrl.hostname, Number(minioUrl.port || defaultPort));
       checks.minio = up ? { status: "ok" } : { status: "down", detail: "object storage unreachable" };
     } catch {
       checks.minio = { status: "down", detail: "object storage misconfigured" };
