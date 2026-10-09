@@ -129,6 +129,17 @@ export function Shell({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeInfo | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  // Rail fly-out: rendered position:fixed because the scrolling nav would
+  // otherwise clip an absolutely-positioned label (and grow a stray
+  // horizontal scrollbar). Position is measured from the hovered row.
+  const [fly, setFly] = useState<{ label: string; top: number } | null>(null);
+  const flyProps = (label: string) => collapsed ? {
+    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      setFly({ label, top: r.top + r.height / 2 });
+    },
+    onMouseLeave: () => setFly(null),
+  } : {};
 
   useEffect(() => {
     if (pathname === "/login" || !getToken()) return;
@@ -150,12 +161,6 @@ export function Shell({ children }: { children: ReactNode }) {
   const toggleRail = () => {
     setCollapsed((c) => { window.localStorage.setItem("dsr-sidebar", c ? "full" : "rail"); return !c; });
   };
-
-  const flyout = (label: string) => collapsed ? (
-    <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#2B1B13] px-3 py-1.5 text-[12px] font-medium text-white shadow-xl group-hover:block">
-      {label}
-    </span>
-  ) : null;
 
   const rowBase = "group relative flex items-center gap-3 rounded-[11px] px-3 text-[13px] transition-colors";
   const rowSize = collapsed ? "h-10 justify-center px-0" : "h-10";
@@ -186,9 +191,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
           {!collapsed ? <p className="px-4 pb-1 text-[10px] font-medium uppercase tracking-[0.2em] text-[#6E5B4D]">DSRclone Console</p> : null}
 
-          <nav className="mt-1 flex-1 space-y-1 overflow-y-auto px-3 pb-2 [scrollbar-width:thin]">
-            <Link href="/" className={`${rowBase} ${rowSize} ${isActive(pathname, "/") ? "bg-white/[0.13] font-semibold text-white" : "text-[#B3A397] hover:bg-white/[0.07] hover:text-white"}`}>
-              <GridIcon className="shrink-0" />{!collapsed ? <span>Overview</span> : null}{flyout("Overview")}
+          <nav className="mt-1 flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-3 pb-2 [scrollbar-width:thin]">
+            <Link href="/" {...flyProps("Overview")} className={`${rowBase} ${rowSize} ${isActive(pathname, "/") ? "bg-white/[0.13] font-semibold text-white" : "text-[#B3A397] hover:bg-white/[0.07] hover:text-white"}`}>
+              <GridIcon className="shrink-0" />{!collapsed ? <span>Overview</span> : null}
             </Link>
 
             {GROUPS.map((group) => {
@@ -197,7 +202,7 @@ export function Shell({ children }: { children: ReactNode }) {
               const groupActive = group.items.some((i) => isActive(pathname, i.href));
               return (
                 <div key={group.label}>
-                  <button type="button"
+                  <button type="button" {...flyProps(group.label)}
                     onClick={() => { if (collapsed) { toggleRail(); setOpen((o) => ({ ...o, [group.label]: true })); } else setOpen((o) => ({ ...o, [group.label]: !o[group.label] })); }}
                     className={`${rowBase} ${rowSize} w-full text-left ${groupActive || expanded ? "bg-white/[0.07] text-white" : "text-[#B3A397] hover:bg-white/[0.07] hover:text-white"}`}>
                     <GroupIcon className="shrink-0" />
@@ -205,7 +210,6 @@ export function Shell({ children }: { children: ReactNode }) {
                     {!collapsed ? (
                       <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className={`shrink-0 transition-transform duration-300 ${expanded ? "" : "rotate-180"}`}><path d="m6 14.5 6-6 6 6" /></svg>
                     ) : null}
-                    {flyout(group.label)}
                   </button>
                   {expanded ? (
                     <div className="relative mb-1 ml-[26px] space-y-0.5 border-l border-white/[0.16] pl-4 pt-1">
@@ -223,14 +227,14 @@ export function Shell({ children }: { children: ReactNode }) {
             })}
 
             {canAdmin ? (
-              <Link href="/admin" className={`${rowBase} ${rowSize} ${pathname.startsWith("/admin") ? "bg-[#CB3CFF]/20 font-semibold text-[#F3D1FF]" : "font-medium text-[#E3B7F5] hover:bg-[#CB3CFF]/10"}`}>
-                <DiamondIcon className="shrink-0" />{!collapsed ? <span>Admin Panel</span> : null}{flyout("Admin Panel")}
+              <Link href="/admin" {...flyProps("Admin Panel")} className={`${rowBase} ${rowSize} ${pathname.startsWith("/admin") ? "bg-[#CB3CFF]/20 font-semibold text-[#F3D1FF]" : "font-medium text-[#E3B7F5] hover:bg-[#CB3CFF]/10"}`}>
+                <DiamondIcon className="shrink-0" />{!collapsed ? <span>Admin Panel</span> : null}
               </Link>
             ) : null}
           </nav>
 
           {collapsed ? (
-            <Link href="/assessments" title="New Assessment"
+            <Link href="/assessments" title="New Assessment" {...flyProps("New Assessment")}
               className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-[#F2994A] text-[20px] font-semibold text-white transition-transform hover:scale-105">
               +
             </Link>
@@ -244,10 +248,15 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          <button type="button" onClick={logout}
+          <button type="button" onClick={logout} {...flyProps("Sign out")}
             className={`group relative mx-3 mb-4 flex items-center gap-3 rounded-[11px] px-3 py-2 text-[12.5px] text-[#9A887B] transition-colors hover:bg-white/[0.07] hover:text-white ${collapsed ? "justify-center px-0" : ""}`}>
-            <LogoutIcon className="shrink-0" />{!collapsed ? <span>Sign out</span> : null}{flyout("Sign out")}
+            <LogoutIcon className="shrink-0" />{!collapsed ? <span>Sign out</span> : null}
           </button>
+          {collapsed && fly ? (
+            <span className="pointer-events-none fixed z-50 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#2B1B13] px-3 py-1.5 text-[12px] font-medium text-white shadow-xl" style={{ left: 106, top: fly.top }}>
+              {fly.label}
+            </span>
+          ) : null}
         </aside>
       </div>
 
