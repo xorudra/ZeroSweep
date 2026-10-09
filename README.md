@@ -19,6 +19,10 @@ without verified scope and approval.
 - **Release status** — `V1_READY` per the Phase 40 launch gates; release-candidate
   audit: 0 blocker / 0 critical open (report in `docs/release/`).
 - **Live demo** — deployed on Render, monitored by UptimeRobot (next section).
+- **Console** — searchable sidebar navigation, a platform **Admin Panel**
+  (aggregate stats plus a live status list of every service), and a user
+  profile page. Opening the web console wakes the rest of the deployment
+  (API / AI / worker) in the background — one front door.
 
 ## Live deployment (Render)
 
@@ -33,7 +37,9 @@ Deployed from this repository via the `render.yaml` blueprint (free tier, Oregon
 | Database / cache | Render Postgres 16 + Key Value, wired by the blueprint |
 
 Verified live 2026-10-09: API health reports **all checks ok** (api / postgres /
-redis / object storage / ai). Object storage is a private Supabase Storage
+redis / object storage / ai), and the Admin Panel's system-status list —
+web console / API / AI copilot / worker / database / queue / object
+storage, each probed live over HTTP — reports the whole deployment **ok**. Object storage is a private Supabase Storage
 bucket (S3-compatible) wired in via the `MINIO_*` env vars on the API and
 worker services on 2026-10-09, which closed the last free-tier gap. Free-tier realities: services spin
 down after ~15 minutes idle (slow first wake). The database lives on Neon
