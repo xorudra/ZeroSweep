@@ -70,6 +70,34 @@ export class HealthService {
   }
 
   /**
+   * HTTP-level checks of the peer services (AI copilot, worker, web
+   * console) for the platform status view. Unlike the TCP probes in
+   * check(), an HTTP response proves the service itself is awake and
+   * serving — a sleeping free-tier service only answers after it boots,
+   * so a timeout honestly reads as down/"may be waking up", never "ok".
+   * Probing also wakes the service, which is the point of the view.
+   */
+  async serviceChecks(): Promise<HealthCheck["checks"]> {
+    const env = loadEnv();
+    const probe = async (url: string): Promise<{ status: "ok" | "down"; detail?: string }> => {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(4000), redirect: "manual" });
+        return res.status >= 200 && res.status < 400
+          ? { status: "ok" }
+          : { status: "down", detail: `HTTP ${res.status}` };
+      } catch {
+        return { status: "down", detail: "no response — may be waking up" };
+      }
+    };
+    const [ai, worker, web] = await Promise.all([
+      probe(`${env.AI_SERVICE_URL.replace(/\/$/, "")}/health`),
+      probe(env.WORKER_SERVICE_URL),
+      probe(`${env.WEB_APP_URL.replace(/\/$/, "")}/login`),
+    ]);
+    return { ai, worker, web };
+  }
+
+  /**
    * Liveness (Prompt 25 §86–§88): the process is up and its event loop is
    * responsive. Deliberately performs NO dependency checks.
    */

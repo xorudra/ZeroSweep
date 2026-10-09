@@ -41,7 +41,7 @@ export class AdminDashboardService {
     const [
       organizations, users, workspaces, targets, scansTotal, findingsTotal,
       usersW, scansW, findingsW, orgsW,
-      scanRows, findingRows, severityRows, scanStatusRows, recentUsers, health,
+      scanRows, findingRows, severityRows, scanStatusRows, recentUsers, health, svc,
     ] = await Promise.all([
       count("organization"), count("user"), count("workspace"), count("target"),
       count("scan"), count("finding"),
@@ -58,6 +58,7 @@ export class AdminDashboardService {
         },
       }),
       this.health.check(),
+      this.health.serviceChecks(),
     ]);
 
     const days: string[] = [];
@@ -89,7 +90,13 @@ export class AdminDashboardService {
           createdAt: u.createdAt, lastLoginAt: u.lastLoginAt,
         };
       }),
-      health: { status: health.status, checks: health.checks },
+      health: {
+        // Infrastructure checks (API/DB/Redis/storage) merged with the
+        // HTTP service checks (AI/worker/web) — the Admin Panel's status
+        // list is the whole deployment, not just this process's deps.
+        status: Object.values({ ...health.checks, ...svc }).some((c) => c.status === "down") ? "degraded" : health.status,
+        checks: { ...health.checks, ...svc },
+      },
     };
   }
 }

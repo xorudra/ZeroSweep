@@ -20,6 +20,11 @@ export const envSchema = z.object({
   MINIO_ENDPOINT: z.string().url().default("http://localhost:9000"),
   MINIO_BUCKET: z.string().default("dsrclone-artifacts"),
   AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
+  // Peer service URLs for the platform status view (Admin Panel). The
+  // defaults are the reference deployment's public URLs; a self-hosted
+  // deployment overrides them with its own.
+  WORKER_SERVICE_URL: z.string().url().default("https://dsrclone-worker.onrender.com"),
+  WEB_APP_URL: z.string().url().default("https://dsrclone-web.onrender.com"),
   API_PORT: z.coerce.number().int().positive().default(4000),
   JWT_SECRET: z.string().min(32).default("change-me-local-dev-secret-at-least-32-chars"),
   JWT_EXPIRES_IN: z.string().default("1h"),

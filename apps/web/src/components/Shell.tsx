@@ -271,6 +271,19 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [mobileOpen]);
 
   useEffect(() => {
+    // One front door: opening the console wakes the rest of the
+    // deployment. On the free tier the AI and worker services sleep when
+    // idle; these fire-and-forget pings start them booting in the
+    // background (the API is woken by the /auth/me call above). The
+    // replies don't matter — the requests themselves do the waking.
+    const ai = process.env.NEXT_PUBLIC_AI_URL ?? "https://dsrclone-ai.onrender.com";
+    const worker = process.env.NEXT_PUBLIC_WORKER_URL ?? "https://dsrclone-worker.onrender.com";
+    for (const url of [`${ai}/health`, worker]) {
+      fetch(url, { mode: "no-cors", cache: "no-store" }).catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current?.focus(); }
     };

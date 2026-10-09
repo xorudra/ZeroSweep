@@ -57,6 +57,10 @@ services:
         value: https://dsrclone-web.onrender.com
       - key: AI_SERVICE_URL
         value: https://dsrclone-ai.onrender.com
+      - key: WORKER_SERVICE_URL
+        value: https://dsrclone-worker.onrender.com
+      - key: WEB_APP_URL
+        value: https://dsrclone-web.onrender.com
       - key: PRODUCT_MODE
         value: SELF_HOSTED
       - key: PRODUCT_PLATFORM_ADMIN_EMAILS
@@ -108,3 +112,7 @@ services:
         value: production
       - key: NEXT_PUBLIC_API_BASE_URL
         value: https://dsrclone-api.onrender.com/api/v1
+      - key: NEXT_PUBLIC_AI_URL
+        value: https://dsrclone-ai.onrender.com
+      - key: NEXT_PUBLIC_WORKER_URL
+        value: https://dsrclone-worker.onrender.com

@@ -17,6 +17,19 @@ function apiConnectOrigin() {
   }
   return "http://localhost:4000"; // api-client's dev default
 }
+// The console also pings the AI and worker services directly (wake-up
+// pings when the console opens — see Shell), so their origins belong in
+// connect-src too, derived from the same public env vars with the
+// reference deployment as the default.
+function peerConnectOrigins() {
+  const ai = process.env.NEXT_PUBLIC_AI_URL ?? "https://dsrclone-ai.onrender.com";
+  const worker = process.env.NEXT_PUBLIC_WORKER_URL ?? "https://dsrclone-worker.onrender.com";
+  const origins = [];
+  for (const u of [ai, worker]) {
+    try { origins.push(new URL(u).origin); } catch { /* ignore malformed */ }
+  }
+  return origins.join(" ");
+}
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
@@ -26,7 +39,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      `connect-src 'self' ${apiConnectOrigin()}`,
+      `connect-src 'self' ${apiConnectOrigin()} ${peerConnectOrigins()}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

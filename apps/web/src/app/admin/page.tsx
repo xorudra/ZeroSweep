@@ -30,7 +30,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   CRITICAL: "#FF5C7A", HIGH: "#FF9F43", MEDIUM: "#F5C542", LOW: "#57C7FF", INFO: "#6E779A",
 };
 const CHECK_LABELS: Record<string, string> = {
-  api: "API", postgres: "Database", redis: "Queue / Redis", ai: "AI service", minio: "Object storage",
+  api: "API", postgres: "Database", redis: "Queue / Redis", minio: "Object storage", ai: "AI copilot service", worker: "Worker (background jobs)", web: "Web console",
 };
 
 function DeltaPill({ w }: { w: WindowStat }) {
@@ -182,7 +182,7 @@ export default function AdminDashboardPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-3 text-[11px] text-[#6E779A]">Live from the API health check · {new Date(data.generatedAt).toLocaleTimeString()}</p>
+                <p className="mt-3 text-[11px] text-[#6E779A]">Every service, checked live · {new Date(data.generatedAt).toLocaleTimeString()}</p>
               </div>
             </div>
           </div>
