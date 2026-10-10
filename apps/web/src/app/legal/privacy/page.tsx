@@ -34,7 +34,7 @@ export default function Page() {
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">Tracking</h3>
-            <p>This deployment runs no advertising trackers, no third-party analytics, and no session-replay tools. The only browser storage the console uses is your sign-in token, kept in local storage on your device.</p>
+            <p>This deployment runs no advertising trackers, no third-party analytics, and no session-replay tools. Your sign-in token is kept only in page memory while you use the console — it is never written to local storage — and your session is maintained with a secure, HttpOnly cookie that the server can revoke at any time.</p>
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">Storage and security</h3>

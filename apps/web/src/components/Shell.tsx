@@ -318,6 +318,42 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [query, allItems]);
 
   if (pathname === "/login") return <>{children}</>;
+  if (pathname === "/legal" || pathname.startsWith("/legal/")) {
+    // Public documents: no console chrome (the sidebar belongs to the
+    // signed-in console, and a signed-out reader has no session behind
+    // it). A slim header with a path back to sign-in is all they need.
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <header className="border-b border-white/[0.06] bg-[#0F0F0F] px-5 py-3">
+          <div className="mx-auto flex max-w-5xl items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
+              <ShieldIcon width="15" height="15" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">DSRclone</span>
+              <span className="block text-[11px] leading-tight text-[#8A8A8A]">Legal documents</span>
+            </span>
+            <Link href="/login" className="shrink-0 rounded-lg bg-[#262626] px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333]">Sign in</Link>
+          </div>
+          <nav aria-label="Legal documents" className="mx-auto mt-3 flex max-w-5xl flex-wrap gap-1.5">
+            {[
+              { href: "/legal/terms", label: "Terms of Service" },
+              { href: "/legal/privacy", label: "Privacy Policy" },
+              { href: "/legal/acceptable-use", label: "Acceptable Use" },
+              { href: "/legal/security", label: "Security" },
+              { href: "/legal/subprocessors", label: "Subprocessors" },
+            ].map((d) => (
+              <Link key={d.href} href={d.href}
+                className={`rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${pathname === d.href ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`}>
+                {d.label}
+              </Link>
+            ))}
+          </nav>
+        </header>
+        <main className="mx-auto max-w-5xl p-5 md:p-8">{children}</main>
+      </div>
+    );
+  }
   const canAdmin = Boolean(me?.isPlatformAdmin) || me?.role === "OWNER" || me?.role === "ADMIN";
   const initials = (me?.name ?? "Rudra Singh").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const contentProps = {

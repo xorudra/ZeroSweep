@@ -57,5 +57,13 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async redirects() {
+    // Short public aliases for the two documents people reach for by
+    // name — the canonical copies live under /legal.
+    return [
+      { source: "/privacy", destination: "/legal/privacy", permanent: false },
+      { source: "/terms", destination: "/legal/terms", permanent: false },
+    ];
+  },
 };
 export default nextConfig;
