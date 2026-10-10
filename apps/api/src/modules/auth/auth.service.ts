@@ -98,7 +98,7 @@ export class AuthService {
     const workspace = await this.prisma.workspace.create({ data: { organizationId: org.id, name: "Default Workspace" } });
     await this.audit.record({ actorId: user.id, organizationId: org.id, workspaceId: workspace.id, action: "REGISTER", resourceType: "User", resourceId: user.id, metadata: { termsVersion: data.termsVersion } });
     const session = await this.createSession(user.id as string, org.id as string, "AAL1");
-    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.isPlatformAdmin }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER", user.isPlatformAdmin, user.name), ...session };
+    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.isPlatformAdmin }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER", user.isPlatformAdmin, user.name, session.sessionId), ...session };
   }
 
   async login(raw: unknown, ip = "unknown") {
@@ -169,7 +169,7 @@ export class AuthService {
     }
     await this.audit.record({ actorId: user.id as string, organizationId, action: "LOGIN", resourceType: "User", resourceId: user.id as string });
     const session = await this.createSession(user.id as string, organizationId, assurance);
-    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin }, ...this.issueToken(user.id as string, user.email as string, organizationId, membership.role as string, isPlatformAdmin, user.name as string), ...session };
+    return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin }, ...this.issueToken(user.id as string, user.email as string, organizationId, membership.role as string, isPlatformAdmin, user.name as string, session.sessionId), ...session };
   }
 
   private async createSession(userId: string, organizationId: string, assurance: string) {
@@ -242,7 +242,16 @@ export class AuthService {
     });
   }
 
-  private issueToken(sub: string, email: string, organizationId: string, role: string, isPlatformAdmin = false, name?: string) {
-    return { accessToken: this.jwt.sign({ sub, email, name, organizationId, role, isPlatformAdmin }) };
+  private issueToken(sub: string, email: string, organizationId: string, role: string, isPlatformAdmin = false, name?: string, sessionId?: string) {
+    return { accessToken: this.issueAccessToken({ sub, email, name, organizationId, role, isPlatformAdmin, sessionId }) };
+  }
+
+  /** Launch Safety A7: mint an access JWT bound to a server-side session.
+   *  The `sid` claim names the UserSession the token was issued for; the
+   *  JWT guard re-validates that session on every request, and the
+   *  refresh flow re-mints through here after rotating the session
+   *  credential. A token without a live session behind it is worthless. */
+  issueAccessToken(input: { sub: string; email: string; name?: string; organizationId: string; role: string; isPlatformAdmin?: boolean; sessionId?: string }): string {
+    return this.jwt.sign({ sub: input.sub, email: input.email, name: input.name, organizationId: input.organizationId, role: input.role, isPlatformAdmin: input.isPlatformAdmin === true, sid: input.sessionId });
   }
 }

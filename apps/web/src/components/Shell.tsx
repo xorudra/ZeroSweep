@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type SVGProps } from "react";
 import { useAuth } from "@/lib/auth";
-import { apiFetch, getToken } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 
 /**
  * Console shell — sidebar built to the owner-selected design #3 from
@@ -245,7 +245,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, authenticated } = useAuth();
   const [me, setMe] = useState<MeInfo | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
@@ -253,7 +253,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (pathname === "/login" || !getToken()) return;
+    if (pathname === "/login" || !authenticated) return;
     let cancelled = false;
     (async () => {
       // Retry a couple of times: while the API is waking up, a failed
@@ -270,7 +270,7 @@ export function Shell({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [pathname]);
+  }, [pathname, authenticated]);
 
   useEffect(() => {
     const group = GROUPS.find((g) => g.items.some((i) => isActive(pathname, i.href)));

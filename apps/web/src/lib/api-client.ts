@@ -1,42 +1,86 @@
 /**
  * API client architecture: the web app only ever talks to the versioned API
- * (/api/v1). Auth token is kept in localStorage (foundation phase) and sent
- * as a Bearer header; every request carries an x-request-id for tracing.
+ * (/api/v1). Launch Safety A7: the access token is kept ONLY in memory
+ * (module state) and sent as a Bearer header; nothing auth-related is
+ * persisted in the browser. The long-lived session credential rides in an
+ * HttpOnly cookie (set by the API at login); when a request meets a 401,
+ * the client attempts ONE silent refresh against POST /auth/refresh —
+ * which rotates the cookie credential — and retries once. Every request
+ * carries an x-request-id for tracing.
  */
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
-const TOKEN_KEY = "dsrclone.accessToken";
+
+let memoryToken: string | null = null;
 
 export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  return memoryToken;
 }
 export function setToken(token: string): void {
-  window.localStorage.setItem(TOKEN_KEY, token);
+  memoryToken = token;
 }
 export function clearToken(): void {
-  window.localStorage.removeItem(TOKEN_KEY);
+  memoryToken = null;
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+/** Exchange the HttpOnly session cookie for a fresh access token.
+ *  Concurrent callers share a single in-flight refresh: the credential
+ *  rotates on every refresh, so parallel refreshes would invalidate each
+ *  other. Resolves true when a new access token is in memory. */
+export function refreshAccessToken(): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  refreshInFlight ??= (async () => {
+    try {
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "x-request-id": crypto.randomUUID() },
+      });
+      if (!res.ok) return false;
+      const body = (await res.json()) as { accessToken?: string };
+      if (!body.accessToken) return false;
+      memoryToken = body.accessToken;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
 }
 
+/** Paths whose 401s are answers, not session expiry (bad credentials,
+ *  failed refresh) — never trigger a refresh attempt for them. */
+const NO_REFRESH_PATHS = ["/auth/login", "/auth/register", "/auth/refresh"];
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
+  const attempt = () => fetch(`${BASE}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "content-type": "application/json",
       "x-request-id": crypto.randomUUID(),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(memoryToken ? { authorization: `Bearer ${memoryToken}` } : {}),
       ...(init.headers ?? {}),
     },
   });
-  if (res.status === 401 && token && typeof window !== "undefined" && window.location.pathname !== "/login") {
-    // The session expired (tokens live 1h). Clear it and return to the
-    // sign-in page instead of leaving every screen failing quietly —
-    // gated pages like the admin plane otherwise look "gone" until a
-    // manual logout/login cycle.
+  let res = await attempt();
+  if (res.status === 401 && typeof window !== "undefined" && !NO_REFRESH_PATHS.some((p) => path.startsWith(p))) {
+    // The access token expired (tokens live 1h) or the session moved on:
+    // try the cookie once and retry once before giving up on the session.
+    if (await refreshAccessToken()) res = await attempt();
+  }
+  if (res.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+    // The session is over (revoked, expired, or logged out elsewhere).
+    // Return to the sign-in page instead of leaving every screen failing
+    // quietly — gated pages like the admin plane otherwise look "gone"
+    // until a manual logout/login cycle.
     clearToken();
     window.location.assign("/login");
     throw new ApiError(401, "Session expired — please sign in again.");

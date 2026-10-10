@@ -277,7 +277,7 @@ export class SsoService {
     await this.audit.record({ actorId: user.id as string, organizationId, action: "SSO_LOGIN_SUCCEEDED", resourceType: "EnterpriseSsoProvider", resourceId: provider.id as string });
     return {
       user: { id: user.id, email: user.email, name: user.name },
-      accessToken: this.jwt.sign({ sub: user.id, email: user.email, organizationId, role: membership.role }),
+      accessToken: this.jwt.sign({ sub: user.id, email: user.email, organizationId, role: membership.role, sid: session.sessionId }),
       sessionToken: session.sessionToken, sessionId: session.sessionId,
     };
   }

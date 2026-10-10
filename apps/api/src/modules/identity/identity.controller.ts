@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { CurrentUser, Public, type RequestUser } from "../../common/decorators/auth.decorators";
+import { applySessionCookie, clearSessionCookie, readSessionCookie, setSessionCookie } from "../../common/session-cookie";
 import { requireIdentityPermission } from "./permissions";
 import { AuthFlowService } from "./auth-flow.service";
 import { MfaService } from "./mfa/mfa.service";
@@ -49,8 +51,10 @@ export class IdentityAuthController {
 
   @Public()
   @Post("mfa/verify")
-  async verifyMfa(@Body() body: { challengeToken: string; code?: string; recoveryCode?: string }) {
-    return this.flow.verifyMfaChallenge(body.challengeToken, body);
+  async verifyMfa(@Body() body: { challengeToken: string; code?: string; recoveryCode?: string }, @Res({ passthrough: true }) res: Response) {
+    const result = await this.flow.verifyMfaChallenge(body.challengeToken, body);
+    applySessionCookie(res, result);
+    return result;
   }
 
   @Post("mfa/enroll")
@@ -99,13 +103,15 @@ export class IdentityAuthController {
 
   @Public()
   @Post("passkeys/authenticate")
-  async passkeyAuthenticate(@Body() body: { email: string; challenge: string; credentialId: string; authenticatorData: string; clientDataJSON: string; signature: string }) {
+  async passkeyAuthenticate(@Body() body: { email: string; challenge: string; credentialId: string; authenticatorData: string; clientDataJSON: string; signature: string }, @Res({ passthrough: true }) res: Response) {
     const user = await this.prisma.user.findUnique({ where: { email: body.email }, include: { memberships: { where: { status: "ACTIVE" }, take: 1 } } });
     if (!user || !user.memberships[0]) return { authenticated: false };
     const ok = await this.webauthn.authenticate(user.id as string, user.memberships[0].organizationId as string, body);
     if (!ok) return { authenticated: false };
     const login = await this.auth.completeLogin(user, user.memberships[0], "unknown", false, "PHISHING_RESISTANT");
-    return { authenticated: true, ...login };
+    const result = { authenticated: true, ...login };
+    applySessionCookie(res, result);
+    return result;
   }
 
   @Get("sessions")
@@ -123,11 +129,40 @@ export class IdentityAuthController {
     return this.sessions.revokeAllSessions({ id: user.id, email: user.email, organizationId: user.organizationId, role: user.role }, user.id);
   }
 
+  /** Launch Safety A7 — refresh: exchange the HttpOnly session cookie
+   *  for a fresh access JWT. The presented credential is validated under
+   *  the standard session rules, then ROTATED: the old cookie token dies
+   *  and only the token in the response's Set-Cookie can refresh again.
+   *  The new JWT keeps the same `sid` — the session itself lives on. */
+  @Public()
+  @Post("refresh")
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const presented = readSessionCookie(req);
+    if (!presented) throw new UnauthorizedException("No session cookie");
+    const ctx = await this.sessions.validateSessionToken(presented);
+    const rotated = await this.sessions.rotateSessionCredential(ctx.sessionId);
+    const user = await this.prisma.user.findUnique({ where: { id: ctx.user.id } });
+    const accessToken = this.auth.issueAccessToken({
+      sub: ctx.user.id, email: ctx.user.email, name: (user?.name as string | undefined) ?? undefined,
+      organizationId: ctx.user.organizationId, role: ctx.user.role,
+      isPlatformAdmin: user?.isPlatformAdmin === true, sessionId: ctx.sessionId,
+    });
+    setSessionCookie(res, rotated.sessionToken);
+    return { accessToken, sessionId: ctx.sessionId };
+  }
+
   @Post("logout")
-  async logout(@CurrentUser() user: RequestUser, @Body() body: { sessionId?: string }) {
-    if (body.sessionId) {
-      await this.sessions.revokeSession({ id: user.id, email: user.email, organizationId: user.organizationId, role: user.role }, body.sessionId);
+  async logout(@CurrentUser() user: RequestUser, @Body() body: { sessionId?: string }, @Res({ passthrough: true }) res: Response) {
+    // A7: logout revokes the caller's own session — the one their JWT
+    // names — by default (an explicit body.sessionId keeps the previous
+    // behaviour). With the guard's session check, revoking it kills the
+    // presented JWT and every other JWT minted for the session at once,
+    // and the cleared cookie can no longer refresh.
+    const sessionId = body?.sessionId ?? user.sessionId;
+    if (sessionId) {
+      await this.sessions.revokeSession({ id: user.id, email: user.email, organizationId: user.organizationId, role: user.role }, sessionId);
     }
+    clearSessionCookie(res);
     return { loggedOut: true };
   }
 
@@ -357,8 +392,10 @@ export class SsoController {
 
   @Public()
   @Post("oidc/:organizationId/:providerId/callback")
-  async oidcCallback(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { code: string; state: string; redirectUri: string }) {
-    return this.sso.oidcCallback(org, provider, body);
+  async oidcCallback(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { code: string; state: string; redirectUri: string }, @Res({ passthrough: true }) res: Response) {
+    const result = await this.sso.oidcCallback(org, provider, body);
+    applySessionCookie(res, result);
+    return result;
   }
 
   @Public()
@@ -369,8 +406,10 @@ export class SsoController {
 
   @Public()
   @Post("saml/:organizationId/:providerId/acs")
-  async samlAcs(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { samlResponse: string; relayState?: string; acsUrl: string }) {
-    return this.sso.samlAcs(org, provider, body);
+  async samlAcs(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { samlResponse: string; relayState?: string; acsUrl: string }, @Res({ passthrough: true }) res: Response) {
+    const result = await this.sso.samlAcs(org, provider, body);
+    applySessionCookie(res, result);
+    return result;
   }
 }
 

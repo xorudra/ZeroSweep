@@ -16,6 +16,11 @@ export interface RequestUser {
    *  the token from the user row, which login reconciles against the
    *  trusted deployment allowlist — never from request input. */
   isPlatformAdmin?: boolean;
+  /** Launch Safety A7: id of the server-side UserSession this request's
+   *  JWT was minted for (the token's `sid` claim). The JWT guard verifies
+   *  the session is still live on every request, so this always names a
+   *  real, unrevoked session for authenticated requests. */
+  sessionId?: string;
 }
 
 export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext): RequestUser => {

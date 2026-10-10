@@ -73,6 +73,21 @@ export class SessionsService {
     };
   }
 
+  /** Launch Safety A7 — refresh rotation: replace the session's
+   *  credential in place. The session row (and its id, hence the `sid`
+   *  claim of JWTs minted for it) survives; the previously presented
+   *  token dies immediately because only the new token's hash is stored.
+   *  Callers must validate the presented token first (validateSessionToken)
+   *  — rotation itself trusts the session id it is handed. */
+  async rotateSessionCredential(sessionId: string) {
+    const token = randomToken(32);
+    await this.prisma.userSession.update({
+      where: { id: sessionId },
+      data: { tokenHash: sha256Hex(token), lastSeenAt: new Date() },
+    });
+    return { sessionToken: token };
+  }
+
   async listSessions(userId: string, currentSessionId?: string) {
     const rows = await this.prisma.userSession.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 50 });
     return rows.map((s) => ({
