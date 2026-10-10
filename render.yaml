@@ -47,6 +47,12 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      # Launch Safety B20: optional migration-only connection (privileged
+      # role). When set, `prisma migrate deploy` in api-start.sh runs with
+      # this URL while the API process keeps using DATABASE_URL. Unset =
+      # migrations fall back to DATABASE_URL (previous behaviour).
+      - key: MIGRATION_DATABASE_URL
+        sync: false
       - key: REDIS_URL
         fromService:
           type: keyvalue

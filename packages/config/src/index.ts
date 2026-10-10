@@ -10,6 +10,11 @@ export const envSchema = z.object({
   // Environment modes (Prompt 25 §32): development | test | staging | production.
   NODE_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
   DATABASE_URL: z.string().min(1).default("postgresql://dsrclone:change-me-local-only@localhost:5432/dsrclone?schema=public"),
+  // Launch Safety B20: optional migration-only connection string. When a
+  // deployment sets it, boot-time migrations run with this (privileged)
+  // URL while services keep using DATABASE_URL. Absent = migrations fall
+  // back to DATABASE_URL. Never required, never defaulted.
+  MIGRATION_DATABASE_URL: z.string().min(1).optional(),
   // Bounded per-instance connection pool (Prompt 25 §35) and DB TLS policy (§34).
   DATABASE_CONNECTION_LIMIT: z.coerce.number().int().min(1).max(100).default(10),
   DATABASE_REQUIRE_TLS: booleanFromEnv.default(false),
