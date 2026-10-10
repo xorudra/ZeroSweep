@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createScopeSchema, createTargetSchema, paginationSchema } from "./index";
+import { CURRENT_TERMS_VERSION, createScopeSchema, createTargetSchema, deleteAccountSchema, paginationSchema, registerSchema } from "./index";
 
 describe("target validation", () => {
   it("accepts a matching domain target", () => {
@@ -43,5 +43,33 @@ describe("pagination", () => {
   it("applies defaults and clamps pageSize", () => {
     expect(paginationSchema.parse({}).pageSize).toBe(20);
     expect(paginationSchema.safeParse({ pageSize: 500 }).success).toBe(false);
+  });
+});
+
+describe("registration consent record (Launch Safety F26)", () => {
+  const base = {
+    email: "new@example.com",
+    password: "a-strong-password",
+    name: "New User",
+    organizationName: "New Org",
+  };
+  it("accepts registration with explicit acceptance of the current terms version", () => {
+    const parsed = registerSchema.safeParse({ ...base, termsAccepted: true, termsVersion: CURRENT_TERMS_VERSION });
+    expect(parsed.success).toBe(true);
+  });
+  it("rejects registration with no acceptance, a false acceptance, or no version", () => {
+    expect(registerSchema.safeParse({ ...base, termsVersion: CURRENT_TERMS_VERSION }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...base, termsAccepted: false, termsVersion: CURRENT_TERMS_VERSION }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...base, termsAccepted: true }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...base, termsAccepted: true, termsVersion: "" }).success).toBe(false);
+  });
+});
+
+describe("account deletion confirmation (Launch Safety F28)", () => {
+  it("accepts a password-only confirmation", () => {
+    expect(deleteAccountSchema.safeParse({ password: "whatever" }).success).toBe(true);
+  });
+  it("rejects a smuggled target id — the route is caller-scoped only", () => {
+    expect(deleteAccountSchema.safeParse({ password: "whatever", userId: "someone-else" }).success).toBe(false);
   });
 });

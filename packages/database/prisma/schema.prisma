@@ -792,6 +792,11 @@ enum AuditAction {
   PASSWORD_CHANGED
   PASSWORD_RESET_REQUESTED
   PASSWORD_RESET_COMPLETED
+  // Launch Safety F28/F29: self-service account rights (DPDP) — the
+  // data subject's own deletion and personal-data export are audited
+  // like every other consequential action.
+  USER_ACCOUNT_DELETED
+  USER_DATA_EXPORTED
   SSO_PROVIDER_CREATED
   SSO_PROVIDER_UPDATED
   SSO_PROVIDER_DISABLED
@@ -1077,6 +1082,11 @@ model User {
   // Prompt 40 §60: SaaS signup email verification (hashed, single-use,
   // expiring tokens — EmailVerificationToken).
   emailVerifiedAt DateTime?
+  // Launch Safety F26 (DPDP consent record): the Terms/Privacy version
+  // accepted at registration and when. Null for accounts created before
+  // consent capture existed — never backfilled with a guess.
+  termsAcceptedAt DateTime?
+  termsVersion    String?
   status          UserAccountStatus @default(ACTIVE)
   lastLoginAt     DateTime?
   memberships     Membership[]

@@ -18,6 +18,13 @@ async function bootstrap(): Promise<void> {
   // Prompt 25 §30/§33: fail fast on placeholder secrets / unsafe production config.
   assertProductionConfig(env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  // Launch Safety A10: the hosted deployment sits behind exactly one
+  // platform proxy hop (Render's edge). Trusting that single hop makes
+  // Express's req.ip the LAST X-Forwarded-For entry — the address the
+  // edge actually observed — instead of the shared edge socket address,
+  // so IP-keyed rate limiting is per real client and unspoofable (the
+  // limiters themselves key via clientIp() in request-id.middleware).
+  (app.getHttpAdapter().getInstance() as { set: (name: string, value: unknown) => void }).set("trust proxy", 1);
   // The root info route (GET /) lives outside the prefix; everything else
   // stays under /api/v1 as before.
   app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: "", method: RequestMethod.GET }] });

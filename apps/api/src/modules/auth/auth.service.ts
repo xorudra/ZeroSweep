@@ -85,11 +85,18 @@ export class AuthService {
     // Prompt 40 §96: platform-admin bootstrap comes only from trusted
     // deployment configuration — never from the request payload.
     const isPlatformAdmin = isPlatformAdminEmail(data.email, loadEnv());
-    const user = await this.prisma.user.create({ data: { email: data.email, normalizedEmail, name: data.name, passwordHash, isPlatformAdmin } });
+    // F26: the consent record — which Terms/Privacy version was accepted
+    // and when — is stored on the user row at the moment of registration.
+    const user = await this.prisma.user.create({
+      data: {
+        email: data.email, normalizedEmail, name: data.name, passwordHash, isPlatformAdmin,
+        termsAcceptedAt: new Date(), termsVersion: data.termsVersion,
+      },
+    });
     const org = await this.prisma.organization.create({ data: { name: data.organizationName, slug } });
     await this.prisma.membership.create({ data: { userId: user.id, organizationId: org.id, role: "OWNER", joinedAt: new Date() } });
     const workspace = await this.prisma.workspace.create({ data: { organizationId: org.id, name: "Default Workspace" } });
-    await this.audit.record({ actorId: user.id, organizationId: org.id, workspaceId: workspace.id, action: "REGISTER", resourceType: "User", resourceId: user.id });
+    await this.audit.record({ actorId: user.id, organizationId: org.id, workspaceId: workspace.id, action: "REGISTER", resourceType: "User", resourceId: user.id, metadata: { termsVersion: data.termsVersion } });
     const session = await this.createSession(user.id as string, org.id as string, "AAL1");
     return { user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.isPlatformAdmin }, organization: org, workspace, ...this.issueToken(user.id, user.email, org.id, "OWNER", user.isPlatformAdmin, user.name), ...session };
   }

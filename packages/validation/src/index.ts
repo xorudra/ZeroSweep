@@ -90,12 +90,32 @@ export const paginationSchema = z.object({
 });
 export type PaginationInput = z.infer<typeof paginationSchema>;
 
+/** Launch Safety F26 (DPDP consent record): the current Terms/Privacy
+ *  version. Registration requires explicit acceptance of exactly this
+ *  version, and the acceptance (version + timestamp) is persisted on
+ *  the user row — a bare "by signing up you agree" line stores nothing
+ *  and proves nothing. Bump this when the legal documents change. */
+export const CURRENT_TERMS_VERSION = "2026-10-10";
+
 export const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(200),
   name: z.string().min(1).max(200),
   organizationName: z.string().min(1).max(200),
+  termsAccepted: z.boolean().refine((v) => v === true, {
+    message: "Terms of Service and Privacy Policy acceptance is required",
+  }),
+  termsVersion: z.string().min(1).max(50),
 });
+
+/** Self-service account deletion (Launch Safety F28): password-confirmed
+ *  only; the route is caller-scoped, so no target id is ever accepted —
+ *  STRICT rejects any attempt to smuggle one in. */
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1).max(200),
+}).strict();
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(200),

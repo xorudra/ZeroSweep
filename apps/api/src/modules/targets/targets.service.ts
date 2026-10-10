@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { promises as dns } from "node:dns";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { createTargetSchema, paginationSchema } from "@dsrclone/validation";
+import { blockedTargetReason, cloudEndpointVerdict } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
 import { assertTargetInOrg, resolveWorkspace } from "../../common/tenant";
@@ -83,12 +84,31 @@ export class TargetsService {
     } else if (verification.method === "MANUAL_APPROVAL") {
       verified = user.role === "OWNER" || user.role === "ADMIN";
     } else {
-      // HTTP_FILE check fetches the well-known file over HTTPS (plain ownership
-      // proof, not a security scan).
-      try {
-        const res = await fetch(`https://${target.value}/.well-known/dsrclone-verification.txt`, { signal: AbortSignal.timeout(5000) });
-        verified = res.ok && (await res.text()).includes(verification.challenge);
-      } catch { verified = false; }
+      // HTTP_FILE check fetches the well-known file over HTTPS (plain
+      // ownership proof, not a security scan). Launch Safety A5: the URL
+      // is built from a user-registered hostname, so before fetching it
+      // passes the same endpoint verdict the cloud connectors use
+      // (cloudsec §101 — HTTPS only, no embedded credentials, host not in
+      // a blocked loopback/private/link-local/metadata range) AND every
+      // address the host resolves to must clear blockedTargetReason —
+      // a public name resolving into private space is refused too.
+      // Redirects are never followed (redirect: "manual"): a redirect
+      // is simply a failed check, never a fetch of the redirect target.
+      const url = `https://${target.value}/.well-known/dsrclone-verification.txt`;
+      const verdict = cloudEndpointVerdict(url);
+      if (!verdict.allowed) {
+        verified = false;
+      } else {
+        try {
+          const addresses = await dns.lookup(target.value, { all: true });
+          if (addresses.length === 0 || addresses.some((a) => blockedTargetReason(a.address))) {
+            verified = false;
+          } else {
+            const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
+            verified = res.ok && (await res.text()).includes(verification.challenge);
+          }
+        } catch { verified = false; }
+      }
     }
     if (verified) {
       await this.prisma.targetVerification.update({ where: { id: verification.id }, data: { status: "VERIFIED", verifiedAt: new Date() } });

@@ -7,3 +7,13 @@ body {
   color: #e2e8f0;
 }
 
+/* Launch Safety D22: keyboard focus must be VISIBLE. On this dark UI
+   the browser-default outline is effectively invisible against slate
+   backgrounds, so keyboard users could not tell where focus was.
+   A high-contrast sky outline on :focus-visible only (mouse/touch
+   interaction is unaffected). */
+:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+

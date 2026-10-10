@@ -58,7 +58,12 @@ export const api = {
   login: (email: string, password: string) =>
     apiFetch<{ accessToken: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (name: string, email: string, password: string, organizationName: string) =>
-    apiFetch<{ accessToken: string }>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password, organizationName }) }),
+    // F26 consent record: submitting the sign-up form is the acceptance
+    // (the form states "By signing up you agree to the Terms of Service
+    // and Privacy Policy"); the version accepted is sent explicitly so
+    // the API can persist exactly what was agreed to. Keep in sync with
+    // CURRENT_TERMS_VERSION in @dsrclone/validation.
+    apiFetch<{ accessToken: string }>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password, organizationName, termsAccepted: true, termsVersion: "2026-10-10" }) }),
   targets: () => apiFetch("/targets"),
   assessments: () => apiFetch("/assessments"),
   scans: () => apiFetch("/scans"),
