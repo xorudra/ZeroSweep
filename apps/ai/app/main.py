@@ -8,8 +8,11 @@ commands or run scanners (§7/§120). A live LLM is connected when the
 deployment configures one (AI_LLM_* env); the status endpoints report
 the real state — NOT_CONFIGURED when none is, never a fake success.
 """
-from fastapi import FastAPI
-from pydantic import BaseModel
+import secrets
+import time
+
+from fastapi import FastAPI, Header, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from .config import settings
 from .copilot import build_prompt, copilot_status, get_provider, llm_connected, redact_for_ai
@@ -46,14 +49,51 @@ async def health() -> dict:
 
 
 class GenerateRequest(BaseModel):
-    task: str
-    context: str = ""
-    evidence: str = ""
-    question: str = ""
+    # Field caps: an unbounded context is unbounded provider spend.
+    task: str = Field(max_length=2_000)
+    context: str = Field(default="", max_length=20_000)
+    evidence: str = Field(default="", max_length=20_000)
+    question: str = Field(default="", max_length=2_000)
+
+
+# Per-IP sliding-window cap for the generation endpoint. The endpoint
+# spends live provider quota, so a hard cap — not a budget alert that
+# only notifies — is the control.
+_GEN_WINDOW_S = 60.0
+_GEN_LIMIT = 30
+_gen_hits: dict[str, list[float]] = {}
+
+
+def _client_ip(request: Request) -> str:
+    # Behind a proxy the LAST X-Forwarded-For entry is the hop the edge
+    # actually observed; the first is client-supplied and spoofable.
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(ip: str) -> bool:
+    now = time.monotonic()
+    hits = [t for t in _gen_hits.get(ip, []) if now - t < _GEN_WINDOW_S]
+    if len(hits) >= _GEN_LIMIT:
+        _gen_hits[ip] = hits
+        return True
+    hits.append(now)
+    _gen_hits[ip] = hits
+    return False
 
 
 @app.post("/copilot/generate")
-async def generate(req: GenerateRequest) -> dict:
+async def generate(req: GenerateRequest, request: Request, x_service_key: str | None = Header(default=None)) -> dict:
+    # The endpoint is reachable on the public internet wherever the
+    # service is hosted, and it spends live provider quota: when a
+    # service key is configured it is required, no exceptions.
+    if settings.service_key:
+        if not x_service_key or not secrets.compare_digest(x_service_key, settings.service_key):
+            raise HTTPException(status_code=401, detail="service key required")
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="generation rate limit exceeded")
     """Run the copilot pipeline: redact secrets from the context and
     evidence, assemble the separated prompt, and answer via the live
     provider when one is connected (the deterministic MOCK provider

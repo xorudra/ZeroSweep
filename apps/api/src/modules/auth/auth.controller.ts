@@ -9,7 +9,7 @@ export class AuthController {
 
   @Public()
   @Post("register")
-  async register(@Body() body: unknown) { return this.auth.register(body); }
+  async register(@Body() body: unknown, @Req() req: { ip?: string }) { return this.auth.register(body, req?.ip ?? "unknown"); }
 
   @Public()
   @Post("login")

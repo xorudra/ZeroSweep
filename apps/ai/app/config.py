@@ -19,6 +19,10 @@ class Settings:
     llm_api_key: str = os.environ.get("AI_LLM_API_KEY", "")
     llm_model: str = os.environ.get("AI_LLM_MODEL", "gemini-2.5-flash")
     llm_timeout_s: float = float(os.environ.get("AI_LLM_TIMEOUT_S", "30"))
+    # Shared secret for the generation endpoint, which spends live
+    # provider quota. When set, callers must present it in the
+    # x-service-key header. Unset = local development only.
+    service_key: str = os.environ.get("AI_SERVICE_KEY", "")
 
 
 settings = Settings()

@@ -50,3 +50,30 @@ def test_mock_provider_grounds_and_refuses_unknown_cve():
     probe = build_prompt("FINDING_EXPLANATION", TRUSTED, "", question="Tell me about CVE-2099-00001")
     refused = provider.generate(probe)
     assert refused.text.startswith("INSUFFICIENT_EVIDENCE")
+
+
+def test_generate_rejects_oversized_context():
+    r = client.post("/copilot/generate", json={"task": "EXPLAIN", "context": "x" * 20_001})
+    assert r.status_code == 422
+
+
+def test_generate_requires_service_key_when_configured():
+    import app.main as main
+    object.__setattr__(main.settings, "service_key", "test-service-key")
+    try:
+        body = {"task": "EXPLAIN", "context": TRUSTED}
+        assert client.post("/copilot/generate", json=body).status_code == 401
+        assert client.post("/copilot/generate", json=body, headers={"x-service-key": "wrong"}).status_code == 401
+        ok = client.post("/copilot/generate", json=body, headers={"x-service-key": "test-service-key"})
+        assert ok.status_code == 200
+    finally:
+        object.__setattr__(main.settings, "service_key", "")
+
+
+def test_generate_rate_limit_is_a_hard_cap():
+    body = {"task": "EXPLAIN", "context": TRUSTED}
+    headers = {"x-forwarded-for": "203.0.113.99"}
+    last = None
+    for _ in range(31):
+        last = client.post("/copilot/generate", json=body, headers=headers)
+    assert last is not None and last.status_code == 429

@@ -65,6 +65,8 @@ services:
         value: SELF_HOSTED
       - key: PRODUCT_PLATFORM_ADMIN_EMAILS
         value: forapikeyonly2008@gmail.com
+      - key: METRICS_TOKEN
+        sync: false
 
   - type: web
     name: dsrclone-worker
@@ -97,6 +99,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: AI_SERVICE_KEY
+        sync: false
 
   - type: web
     name: dsrclone-web

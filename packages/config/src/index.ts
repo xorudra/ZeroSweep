@@ -32,6 +32,10 @@ export const envSchema = z.object({
   // Standalone scheduler process (Prompt 25 §52; lease pattern from Prompt 22).
   SCHEDULER_TICK_MS: z.coerce.number().int().min(1000).max(300000).default(15000),
   SCHEDULER_OWNER_ID: z.string().max(120).optional(),
+  // Bearer token for the Prometheus /metrics endpoint. Unset = the
+  // endpoint answers 404: scrape surfaces are never left open on a
+  // public deployment by default.
+  METRICS_TOKEN: z.string().min(16).optional(),
   // Release identity stamped into logs and release manifests (§144–146).
   // Prompt 39 §302/§303: the RC version was the build identity through RC1;
   // Prompt 40 promotes the default to the v1.0 release identity.

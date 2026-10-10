@@ -197,7 +197,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
               const groupActive = group.items.some((i) => isActive(pathname, i.href));
               return (
                 <div key={group.label}>
-                  <button type="button" onClick={() => setOpen((o) => ({ ...o, [group.label]: !o[group.label] }))}
+                  <button type="button" aria-expanded={expanded} onClick={() => setOpen((o) => ({ ...o, [group.label]: !o[group.label] }))}
                     className={`${rowCls(groupActive)} w-full`}>
                     <GroupIcon className="shrink-0" />
                     <span className="flex-1 text-left">{group.label}</span>
@@ -278,6 +278,12 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };

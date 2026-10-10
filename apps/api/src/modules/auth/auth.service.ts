@@ -74,8 +74,9 @@ export class AuthService {
 
   /** Registration creates the user + their first organization, OWNER membership
    *  and a default workspace — the multi-tenant root. Passwords are bcrypt-hashed. */
-  async register(raw: unknown) {
+  async register(raw: unknown, ip = "unknown") {
     const data = parseOrThrow(registerSchema, raw);
+    this.checkRegisterRateLimit(ip);
     const normalizedEmail = normalizeEmail(data.email);
     const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new ConflictException("An account with this email already exists");
@@ -209,11 +210,23 @@ export class AuthService {
     }
   }
 
-  private recordAttempt(key: string) {
+  private recordAttempt(key: string, windowMs = 15 * 60_000) {
     const now = Date.now();
-    const bucket = this.attempts.find((b) => b.key === key && now - b.windowStartMs < 15 * 60_000);
+    const bucket = this.attempts.find((b) => b.key === key && now - b.windowStartMs < windowMs);
     if (bucket) bucket.count += 1;
     else this.attempts.push({ key, count: 1, windowStartMs: now });
+  }
+
+  /** Registration is a write-heavy unauthenticated endpoint (bcrypt +
+   *  user + organization + workspace rows per call): cap it per IP —
+   *  10 per hour — with the same bucket machinery as login (§22). */
+  private checkRegisterRateLimit(ip: string) {
+    const key = `register|${ip}`;
+    const decision = rateLimitDecision(this.attempts, key, Date.now(), 10, 60 * 60_000);
+    if (!decision.allowed) {
+      throw new HttpException("Too many registration attempts — please try again later.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    this.recordAttempt(key, 60 * 60_000);
   }
 
   private async event(userId: string | null, organizationId: string | null, eventType: string, ip: string) {
