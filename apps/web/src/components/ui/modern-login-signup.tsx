@@ -16,6 +16,7 @@
 //   form still works (init is guarded).
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import * as THREE from "three";
 import { api, ApiError, setToken } from "@/lib/api-client";
 
@@ -256,6 +257,13 @@ export default function Component() {
       Authorized VAPT platform — only assess targets you own
       <br />
       or have explicit permission to test.
+      <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.9rem", justifyContent: "center", flexWrap: "wrap" }}>
+        <Link href="/legal/terms" style={{ color: "#888", textDecoration: "underline" }}>Terms</Link>
+        <Link href="/legal/privacy" style={{ color: "#888", textDecoration: "underline" }}>Privacy</Link>
+        <Link href="/legal/acceptable-use" style={{ color: "#888", textDecoration: "underline" }}>Acceptable Use</Link>
+        <Link href="/legal/security" style={{ color: "#888", textDecoration: "underline" }}>Security</Link>
+        <Link href="/legal/subprocessors" style={{ color: "#888", textDecoration: "underline" }}>Subprocessors</Link>
+      </div>
     </div>
   );
 
@@ -367,6 +375,15 @@ export default function Component() {
             <button type="submit" style={primaryBtn} disabled={busy}>
               {isLogin ? (busy ? "Signing in…" : "Sign In") : busy ? "Creating account…" : "Sign Up"}
             </button>
+            {!isLogin ? (
+              <p style={{ margin: 0, fontSize: "0.75rem", color: "#888", textAlign: "center", lineHeight: 1.5 }}>
+                By signing up you agree to the{" "}
+                <Link href="/legal/terms" style={{ color: "#bbb", textDecoration: "underline" }}>Terms of Service</Link>
+                {" "}and{" "}
+                <Link href="/legal/privacy" style={{ color: "#bbb", textDecoration: "underline" }}>Privacy Policy</Link>
+                {" "}— and that you will only assess targets you own or are authorized to test.
+              </p>
+            ) : null}
           </form>
 
           <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
