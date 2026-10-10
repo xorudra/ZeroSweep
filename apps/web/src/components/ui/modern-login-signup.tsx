@@ -319,9 +319,25 @@ export default function Component() {
             {isLogin ? "Sign in to DSRclone" : "Sign up for DSRclone"}
           </h1>
           <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
-            {isLogin ? "Sign in to your account." : "Create a new account to get started."}
+            {isLogin ? "Sign in to your account." : "DSRclone is invite-only — it is not open for public sign-up."}
           </p>
 
+          {!isLogin ? (
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem", textAlign: "center" }}>
+              <div style={{ border: "1px solid #333", borderRadius: 8, background: "#0a0a0a", padding: "1rem", fontSize: "0.85rem", color: "#bbb", lineHeight: 1.6 }}>
+                New accounts are created <strong style={{ color: "#fff" }}>by invitation only</strong>. There is no public registration — if you have not been invited by an organization admin, you cannot create an account here.
+              </div>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#888", lineHeight: 1.6 }}>
+                Been invited? Activate your account with your invitation token:
+              </p>
+              <Link href="/invite" style={{ ...primaryBtn, display: "block", textDecoration: "none", boxSizing: "border-box" }}>
+                I have an invitation
+              </Link>
+              <p style={{ margin: 0, fontSize: "0.75rem", color: "#888", lineHeight: 1.5 }}>
+                No invite? Ask the person who runs this deployment — access is granted personally, never sold or opened to the public.
+              </p>
+            </div>
+          ) : (
           <form onSubmit={onSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
             {!isLogin && (
               <>
@@ -385,13 +401,14 @@ export default function Component() {
               </p>
             ) : null}
           </form>
+          )}
 
           <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
             {isLogin ? (
               <>
                 Don&rsquo;t have an account?{" "}
                 <button type="button" onClick={() => switchMode(false)} style={toggleBtn}>
-                  Sign Up
+                  It&rsquo;s invite-only
                 </button>
               </>
             ) : (

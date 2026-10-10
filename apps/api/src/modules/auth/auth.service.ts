@@ -5,7 +5,7 @@ import { loginSchema, registerSchema } from "@dsrclone/validation";
 import {
   GENERIC_AUTH_ERROR, isPrivilegedOrgRole, normalizeEmail, randomToken, rateLimitDecision, sha256Hex, type AttemptBucket,
 } from "@dsrclone/security-sdk";
-import { isPlatformAdminEmail, loadEnv } from "@dsrclone/config";
+import { isPlatformAdminEmail, loadEnv, registrationMode } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
@@ -76,6 +76,13 @@ export class AuthService {
    *  and a default workspace — the multi-tenant root. Passwords are bcrypt-hashed. */
   async register(raw: unknown, ip = "unknown") {
     const data = parseOrThrow(registerSchema, raw);
+    // Invite-only deployments (REGISTRATION_MODE=invite-only): public
+    // sign-up is closed. New accounts are created by accepting an
+    // organization invitation (§63) — this endpoint must not be a way
+    // around that, so the refusal happens before any other work.
+    if (registrationMode() === "invite-only") {
+      throw new ForbiddenException("This deployment is invite-only. Public sign-up is closed — ask an organization admin to invite you.");
+    }
     this.checkRegisterRateLimit(ip);
     const normalizedEmail = normalizeEmail(data.email);
     const existing = await this.prisma.user.findUnique({ where: { email: data.email } });

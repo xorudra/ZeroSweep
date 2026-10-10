@@ -77,7 +77,7 @@ export default function MembersPage() {
           <select className="rounded bg-slate-900 px-2 py-2 text-sm" value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>{ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select>
           <button className="rounded bg-sky-600 px-4 py-2 text-sm" onClick={() => void act(async () => { const res = await apiFetch<{ token: string }>(`/organizations/${orgId}/invitations`, { method: "POST", body: JSON.stringify(invite) }); setInviteToken(res.token); }, "Invitation created.")}>Create invitation</button>
         </div>
-        {inviteToken && <p className="mt-3 break-all rounded bg-slate-900 p-3 text-xs text-amber-300">Invitation token (shown once): {inviteToken}</p>}
+        {inviteToken && <p className="mt-3 break-all rounded bg-slate-900 p-3 text-xs text-amber-300">Invitation token (shown once): {inviteToken}<span className="mt-1 block text-slate-300">Send the invitee to this site&rsquo;s /invite page and give them this token — it creates their account. It expires in 7 days and works once.</span></p>}
       </Card>
     </div>
   );

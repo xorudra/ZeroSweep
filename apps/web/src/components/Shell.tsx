@@ -317,7 +317,7 @@ export function Shell({ children }: { children: ReactNode }) {
     return allItems.filter((i) => i.label.toLowerCase().includes(q)).slice(0, 12);
   }, [query, allItems]);
 
-  if (pathname === "/login") return <>{children}</>;
+  if (pathname === "/login" || pathname === "/invite") return <>{children}</>;
   if (pathname === "/legal" || pathname.startsWith("/legal/")) {
     // Public documents: no console chrome (the sidebar belongs to the
     // signed-in console, and a signed-out reader has no session behind

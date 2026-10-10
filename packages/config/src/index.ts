@@ -51,6 +51,12 @@ export const envSchema = z.object({
   // Product mode comes ONLY from trusted deployment configuration (§4): no
   // tenant-facing API can change it. One codebase serves every mode (§5).
   PRODUCT_MODE: z.enum(["COMMUNITY", "SELF_HOSTED", "SAAS", "ENTERPRISE"]).default("SELF_HOSTED"),
+  // Registration posture for THIS deployment: "open" lets anyone create
+  // an account + organization; "invite-only" closes public sign-up —
+  // new accounts then come only from organization invitations (§63),
+  // whose acceptance creates the user. Operator decision, deployment
+  // configuration only — never settable by a tenant.
+  REGISTRATION_MODE: z.enum(["open", "invite-only"]).default("open"),
   // Billing provider selection (§19–§21). Unset = billing NOT CONFIGURED:
   // the platform never simulates a successful real payment. "test" is a
   // development/test provider and is refused in production (§21).
@@ -86,6 +92,12 @@ export function isPlatformAdminEmail(email: string, env: AppEnv): boolean {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
   return list.includes(email.trim().toLowerCase());
+}
+
+/** Registration posture, read live from the process env (not the cached
+ *  parse) so tests and operators see the value actually in force. */
+export function registrationMode(source: NodeJS.ProcessEnv = process.env): "open" | "invite-only" {
+  return source.REGISTRATION_MODE === "invite-only" ? "invite-only" : "open";
 }
 
 let cached: AppEnv | undefined;

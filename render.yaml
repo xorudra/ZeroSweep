@@ -69,6 +69,12 @@ services:
         value: https://dsrclone-web.onrender.com
       - key: PRODUCT_MODE
         value: SELF_HOSTED
+      # Invite-only deployment (owner decision 2026-10-10): public
+      # sign-up is closed; new accounts come from organization
+      # invitations only. The dashboard env var is what the running
+      # service reads — keep the two in step.
+      - key: REGISTRATION_MODE
+        value: invite-only
       - key: PRODUCT_PLATFORM_ADMIN_EMAILS
         value: forapikeyonly2008@gmail.com
       - key: METRICS_TOKEN

@@ -8,8 +8,9 @@ interface AuthState { ready: boolean; authenticated: boolean; logout: () => void
 const AuthContext = createContext<AuthState>({ ready: false, authenticated: false, logout: () => undefined });
 export const useAuth = () => useContext(AuthContext);
 
-/** Auth boundary: dashboard routes require a session; /login and the
- *  legal pages (/legal/*) are public — anyone must be able to read the
+/** Auth boundary: dashboard routes require a session; /login, the
+ *  invitation-acceptance page (/invite) and the legal pages (/legal/*)
+ *  are public — anyone must be able to read the
  *  Terms, Privacy Policy and the other published documents without an
  *  account (they are linked from the sign-in card for exactly that
  *  reason). The backend re-checks the JWT (and its server-side session,
@@ -17,7 +18,7 @@ export const useAuth = () => useContext(AuthContext);
  *  control. Access tokens live in memory only, so on a fresh page load
  *  the session is restored with one silent cookie refresh before
  *  deciding. */
-const isPublicPath = (p: string) => p === "/login" || p === "/legal" || p.startsWith("/legal/");
+const isPublicPath = (p: string) => p === "/login" || p === "/invite" || p === "/legal" || p.startsWith("/legal/");
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ ready: boolean; authenticated: boolean }>({ ready: false, authenticated: false });
   const pathname = usePathname();

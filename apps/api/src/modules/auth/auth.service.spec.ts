@@ -1,4 +1,4 @@
-import { HttpException } from "@nestjs/common";
+import { ForbiddenException, HttpException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 
 const VALID = {
@@ -70,4 +70,23 @@ describe("AuthService registration rate limit keying (A10)", () => {
     // this call would have been refused too.
     await expect(svc.register({ ...VALID, email: "other@example.com" }, "203.0.113.9")).resolves.toBeDefined();
   }, 60_000);
+});
+
+describe("AuthService registration mode (invite-only)", () => {
+  afterEach(() => { delete process.env.REGISTRATION_MODE; });
+
+  it("refuses public sign-up with a clear invite-only message when REGISTRATION_MODE=invite-only, creating nothing", async () => {
+    process.env.REGISTRATION_MODE = "invite-only";
+    const { svc, created } = makeService();
+    await expect(svc.register(VALID, "203.0.113.9")).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(svc.register(VALID, "203.0.113.9")).rejects.toThrow(/invite-only/i);
+    expect(created.userData).toBeUndefined();
+  });
+
+  it("registers normally when the mode is open (the default)", async () => {
+    delete process.env.REGISTRATION_MODE;
+    const { svc, created } = makeService();
+    await expect(svc.register(VALID, "203.0.113.9")).resolves.toBeDefined();
+    expect(created.userData?.email).toBe(VALID.email);
+  });
 });
