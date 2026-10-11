@@ -29,6 +29,16 @@ async function bootstrap(): Promise<void> {
   // stays under /api/v1 as before.
   app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: "", method: RequestMethod.GET }] });
   app.use(helmet());
+  // Launch Safety G33: every API response is dynamic, per-user JSON, so
+  // the cache policy is stated explicitly — no-store — and no browser or
+  // intermediary can retain or re-serve an authenticated response (or a
+  // stale health/auth answer). Deliberate caching exists only inside the
+  // tenant-keyed application caches (security-analytics, entitlements),
+  // never in a shared HTTP cache.
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
   app.enableCors({ origin: env.API_CORS_ORIGIN.split(",").map((s) => s.trim()), credentials: true });
   app.use(requestIdMiddleware);
   app.use(rateLimitMiddleware(300, 60_000));
