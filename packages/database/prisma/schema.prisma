@@ -1216,6 +1216,7 @@ model Target {
 
   @@index([workspaceId])
   @@index([workspaceId, type])
+  @@index([workspaceId, createdAt])
 }
 
 model TargetVerification {
@@ -1293,6 +1294,7 @@ model Asset {
 
   @@index([workspaceId])
   @@index([targetId, host])
+  @@index([workspaceId, createdAt])
 }
 
 model Service {
@@ -1510,6 +1512,7 @@ model Assessment {
 
   @@index([workspaceId])
   @@index([targetId])
+  @@index([workspaceId, createdAt])
 }
 
 model Scan {
@@ -1539,6 +1542,7 @@ model Scan {
   @@index([workspaceId])
   @@index([assessmentId])
   @@index([status])
+  @@index([workspaceId, createdAt])
 }
 
 model ScanStage {
@@ -1892,6 +1896,7 @@ model Finding {
   @@index([workspaceId, category])
   @@index([workspaceId, environment])
   @@index([clusterId])
+  @@index([workspaceId, riskScore])
 }
 
 // Immutable finding lifecycle events (Prompt 7 §37): created, severity
@@ -1910,6 +1915,7 @@ model FindingHistory {
 
   @@index([findingId])
   @@index([workspaceId])
+  @@index([findingId, createdAt])
 }
 
 model FindingEvidence {
@@ -1934,6 +1940,7 @@ model FindingEvidence {
   createdAt        DateTime @default(now())
 
   @@index([findingId])
+  @@index([findingId, createdAt])
 }
 
 model FindingReference {
@@ -2483,6 +2490,7 @@ model FindingComment {
 
   @@index([findingId])
   @@index([workspaceId])
+  @@index([findingId, createdAt])
 }
 
 // Configurable SLA policy (§41) — rules map priority (or severity) to a
@@ -5446,6 +5454,7 @@ model WirelessStation {
   @@unique([environmentId, addressFingerprint])
   @@index([workspaceId])
   @@index([environmentId])
+  @@index([accessPointId])
 }
 
 // §10: one wireless observation — the multi-sensor evidence trail
@@ -9546,6 +9555,7 @@ model RemediationCase {
   @@index([workspaceId, findingId])
   @@index([workspaceId, dueAt])
   @@index([workspaceId, ownerId])
+  @@index([workspaceId, createdAt])
 }
 
 model RemediationStatusHistory {
