@@ -18,41 +18,39 @@ without verified scope and approval.
   296/296 checks across the committed smoke scripts.
 - **Release status** — `V1_READY` per the Phase 40 launch gates; release-candidate
   audit: 0 blocker / 0 critical open (report in `docs/release/`).
-- **Live demo** — deployed on Render, monitored by UptimeRobot (next section).
+- **Live demo** — live on Oracle Cloud as one merged deployment, monitored
+  by UptimeRobot (next section).
 - **Console** — searchable sidebar navigation, a platform **Admin Panel**
   (aggregate stats plus a live status list of every service), and a user
-  profile page. Opening the web console wakes the rest of the deployment
-  (API / AI / worker) in the background — one front door.
+  profile page. Web console, API, AI copilot and worker run together
+  behind one front door.
 
-## Live deployment (Render)
+## Live deployment
 
-Deployed from this repository via the `render.yaml` blueprint (free tier, Oregon):
+Since 2026-10-12 the whole platform runs as **one merged deployment** on an
+Oracle Cloud free-tier server (the four separate Render services were
+retired after Render's free instance hours ran out): web console, API, AI
+copilot service, worker and Redis live in a single container behind one
+address, and sign-up is invite-only.
 
 | Piece | URL |
 |---|---|
-| Web console | https://dsrclone-web.onrender.com |
-| API | https://dsrclone-api.onrender.com/api/v1/health |
-| AI copilot service | https://dsrclone-ai.onrender.com/health |
-| Worker | https://dsrclone-worker.onrender.com (background jobs; health via API) |
-| Database / cache | Render Postgres 16 + Key Value, wired by the blueprint |
+| Web console | https://dsrclone.130-210-56-74.sslip.io |
+| API health | https://dsrclone.130-210-56-74.sslip.io/api/v1/health/live |
+| AI copilot service health | https://dsrclone.130-210-56-74.sslip.io/ai/health |
+| Worker health | https://dsrclone.130-210-56-74.sslip.io/worker-health |
+| Database / storage | Neon Postgres 16 (free plan) + private Supabase Storage bucket |
 
-Verified live 2026-10-09: API health reports **all checks ok** (api / postgres /
-redis / object storage / ai), and the Admin Panel's system-status list —
-web console / API / AI copilot / worker / database / queue / object
-storage, each probed live over HTTP — reports the whole deployment **ok**. Object storage is a private Supabase Storage
-bucket (S3-compatible) wired in via the `MINIO_*` env vars on the API and
-worker services on 2026-10-09, which closed the last free-tier gap. Free-tier realities: services spin
-down after ~15 minutes idle (slow first wake). The database lives on Neon
-(free plan, no 30-day expiry) since 2026-10-09 — DATABASE_URL is a
-dashboard-managed env var on the API and worker services (`sync: false`
-in render.yaml), not a Render Postgres. For a real production topology
-(HA, DR, observability), see `deploy/`
-instead — the Render deployment is the public demo, not that path.
+Verified live 2026-10-12: API health reports **all checks ok** (api /
+postgres / redis / object storage / ai), the AI copilot is connected to
+the Nexus /v1 API, and invite-only registration refuses public sign-ups
+(403). The server runs 24×7 — no idle spin-down. For a real production
+topology (HA, DR, observability), see `deploy/` instead — this deployment
+is the public demo, not that path.
 
 Uptime is monitored by UptimeRobot (free): **DSRclone Web**, **DSRclone API**
-(`/api/v1/health/live`), **DSRclone AI** (`/health`) and **DSRclone Worker**,
-each checked every 5 minutes with downtime alerts by email. The 5-minute
-checks also keep the free services warm during the day.
+(`/api/v1/health/live`), **DSRclone AI** (`/ai/health`) and **DSRclone Worker**
+(`/worker-health`), each checked every 5 minutes with downtime alerts by email.
 
 ## What it does
 
@@ -243,9 +241,9 @@ verified before the next began:
 
 ## Deployment paths
 
-- **Demo (live now)** — the Render blueprint in `render.yaml`: web, api, worker
-  and ai services plus Postgres and Key Value, all free tier. See
-  [Live deployment](#live-deployment-render).
+- **Demo (live now)** — the merged single-container deployment on Oracle
+  Cloud (the `render.yaml` blueprint remains in the repo for a Render-based
+  redeploy). See [Live deployment](#live-deployment).
 - **Production** — `deploy/` carries the real topology: hardened multi-stage
   Dockerfiles, Compose profiles, Helm charts (with HPA / PDB / NetworkPolicy),
   backup & DR runbooks, and observability configs (Prometheus, Grafana,
@@ -256,8 +254,9 @@ verified before the next began:
 
 ## Known limitations (honest list)
 
-- **Object storage on the demo** — no S3 bucket is attached on Render's free
-  tier, so the API health check reports MinIO down (by design, never faked).
+- **Object storage on the demo** — a private Supabase Storage bucket
+  (S3-compatible) is wired in, so object storage reports ok in the live
+  health check.
 - **Live transports unwired** — cloud / directory / Kubernetes provider
   transports are deliberately not connected in this build; affected features
   report `NOT_CONFIGURED` / `UNAVAILABLE` honestly rather than fabricating data.
