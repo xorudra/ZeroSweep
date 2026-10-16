@@ -71,6 +71,29 @@ describe("protected destinations (§6)", () => {
     expect(evaluateDestination("203.0.113.9", {}).allowed).toBe(true);
   });
 
+  it("IPv4-mapped / compatible / NAT64 spellings classify as their embedded IPv4 (NV hardening)", () => {
+    expect(classifyDestination("::ffff:127.0.0.1")).toBe("PROTECTED");
+    expect(classifyDestination("::ffff:7f00:1")).toBe("PROTECTED"); // hex tail form
+    expect(classifyDestination("::ffff:169.254.169.254")).toBe("PROTECTED");
+    expect(classifyDestination("::ffff:10.0.0.1")).toBe("PRIVATE_INTERNAL");
+    expect(classifyDestination("::127.0.0.1")).toBe("PROTECTED"); // compatible
+    expect(classifyDestination("::10.0.0.1")).toBe("PRIVATE_INTERNAL");
+    expect(classifyDestination("64:ff9b::127.0.0.1")).toBe("PROTECTED"); // NAT64
+    expect(classifyDestination("64:ff9b:1::a00:1")).toBe("PRIVATE_INTERNAL"); // NAT64 local, hex tail
+    expect(classifyDestination("::ffff:203.0.113.9")).toBe("PUBLIC"); // mapped public stays public
+    expect(evaluateDestination("::ffff:127.0.0.1", { internalEngagementApproved: true }).allowed).toBe(false);
+    expect(ipInCidr("::ffff:127.0.0.1", "127.0.0.0/8")).toBe(true);
+    expect(ipInCidr("64:ff9b::10.0.0.1", "10.0.0.0/8")).toBe(true);
+  });
+
+  it("non-canonical IPv4 encodings are rejected and fail closed (NV hardening)", () => {
+    expect(parseIp("0177.0.0.1")).toBeNull(); // leading-zero (octal in other parsers)
+    expect(parseIp("010.0.0.1")).toBeNull();
+    expect(parseIp("0.0.0.0")).not.toBeNull(); // a bare "0" part is canonical
+    expect(classifyDestination("0177.0.0.1")).toBe("PROTECTED");
+    expect(evaluateDestination("0177.0.0.1", {}).allowed).toBe(false);
+  });
+
   it("platform-infrastructure CIDRs are protected by configuration", () => {
     const opts = { internalEngagementApproved: true, extraProtectedCidrs: ["198.51.100.0/24"] };
     expect(evaluateDestination("198.51.100.7", opts).allowed).toBe(false);

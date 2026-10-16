@@ -1,4 +1,4 @@
-import { Controller, Headers, Post, Req, Res } from "@nestjs/common";
+import { Controller, Headers, Param, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { Public } from "../../common/decorators/auth.decorators";
 import { WebhooksService } from "./webhooks/webhooks.service";
@@ -32,15 +32,38 @@ export class WebhooksController {
     return this.handle("BITBUCKET", req, headers, res);
   }
 
+  // Tenant-bound routes: the integration id in the path disambiguates
+  // attribution to a single integration BEFORE secret trial (audit:
+  // inbound-global-secret-match). The legacy provider-only routes
+  // stay for compatibility; the service rejects ambiguous matches.
+  @Public()
+  @Post("github/:integrationId")
+  async githubScoped(@Param("integrationId") integrationId: string, @Req() req: Request, @Headers() headers: Record<string, string | undefined>, @Res() res: Response) {
+    return this.handle("GITHUB", req, headers, res, integrationId);
+  }
+
+  @Public()
+  @Post("gitlab/:integrationId")
+  async gitlabScoped(@Param("integrationId") integrationId: string, @Req() req: Request, @Headers() headers: Record<string, string | undefined>, @Res() res: Response) {
+    return this.handle("GITLAB", req, headers, res, integrationId);
+  }
+
+  @Public()
+  @Post("bitbucket/:integrationId")
+  async bitbucketScoped(@Param("integrationId") integrationId: string, @Req() req: Request, @Headers() headers: Record<string, string | undefined>, @Res() res: Response) {
+    return this.handle("BITBUCKET", req, headers, res, integrationId);
+  }
+
   private async handle(
     provider: "GITHUB" | "GITLAB" | "BITBUCKET",
     req: Request,
     headers: Record<string, string | undefined>,
     res: Response,
+    integrationId?: string,
   ) {
     const rawBody = (req as Request & { rawBody?: string }).rawBody
       ?? (typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {}));
-    const receipt = await this.webhooks.receive(provider, headers, rawBody);
+    const receipt = await this.webhooks.receive(provider, headers, rawBody, integrationId);
     res.status(receipt.httpStatus).json({
       status: receipt.status,
       reasonCode: receipt.reasonCode ?? null,

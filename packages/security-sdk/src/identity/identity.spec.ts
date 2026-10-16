@@ -4,7 +4,7 @@ import {
   normalizeEmail, emailDomain, generateTotpSecret, totp, verifyTotp, base32Decode,
   generateRecoveryCodes, hashRecoveryCode, verifyRecoveryCode,
   generatePkcePair, verifyPkce, validateIdToken, validateDiscovery, mapOidcClaims,
-  buildSignedResponse, validateSamlResponse, mapSamlAttributes, parseXml,
+  buildSignedResponse, buildUnsignedResponse, signResponse, validateSamlResponse, mapSamlAttributes, parseXml,
   parseScimFilter, evaluateScimFilter, ScimFilterError,
   evaluatePermission, assuranceForMethods, stepUpFresh, clampSessionPolicy, sessionExpired,
   generateApiKey, verifyApiKey, validateApiScopes, scopeAllows, apiKeyUsable,
@@ -164,6 +164,26 @@ describe("SAML (§54/55, §127/128)", () => {
     expect(() => validateSamlResponse({ ...validation, responseXml: expired })).toThrow(/expired|not yet/);
     expect(() => validateSamlResponse({ ...validation, spEntityId: "https://other.example.com/sp", responseXml: buildSignedResponse(fixture) })).toThrow(/audience/);
     expect(() => validateSamlResponse({ ...validation, acsUrl: "https://app.example.com/other", responseXml: buildSignedResponse(fixture) })).toThrow(/recipient/);
+  });
+  it("rejects a wrong or missing Response Destination, and a bearer assertion without SubjectConfirmationData, when an ACS expectation exists", () => {
+    const signed = buildSignedResponse(fixture);
+    // Happy path still validates (correct Destination + SubjectConfirmationData Recipient).
+    expect(validateSamlResponse({ ...validation, responseXml: signed }).nameId).toBe("rudra@example.com");
+    // Destination is on the (unsigned) Response element, so tampering it post-signing must be caught by the explicit check.
+    const wrongDestination = signed.replace(`Destination="${fixture.acsUrl}"`, `Destination="https://attacker.example.com/acs"`);
+    expect(wrongDestination).not.toBe(signed);
+    expect(() => validateSamlResponse({ ...validation, responseXml: wrongDestination })).toThrow(/Destination/);
+    const missingDestination = signed.replace(` Destination="${fixture.acsUrl}"`, "");
+    expect(missingDestination).not.toBe(signed);
+    expect(() => validateSamlResponse({ ...validation, responseXml: missingDestination })).toThrow(/Destination/);
+    // SubjectConfirmationData lives inside the signed Assertion, so build + sign a response without it.
+    const noConfirmation = signResponse(buildUnsignedResponse(fixture).replace(/<saml:SubjectConfirmation[\s\S]*?<\/saml:SubjectConfirmation>/, ""), fixture.privateKeyPem);
+    expect(() => validateSamlResponse({ ...validation, responseXml: noConfirmation })).toThrow(/SubjectConfirmationData/);
+    // SubjectConfirmationData present but Recipient missing must also be rejected when an ACS expectation exists.
+    const noRecipient = signResponse(buildUnsignedResponse(fixture).replace(` Recipient="${fixture.acsUrl}"`, ""), fixture.privateKeyPem);
+    expect(() => validateSamlResponse({ ...validation, responseXml: noRecipient })).toThrow(/recipient/);
+    // With no expectation supplied at all, the pre-existing behaviour is unchanged: the no-confirmation response is not rejected for that reason.
+    expect(validateSamlResponse({ ...validation, acsUrl: "", responseXml: noConfirmation }).nameId).toBe("rudra@example.com");
   });
 });
 

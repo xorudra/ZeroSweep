@@ -18,6 +18,7 @@ import {
   type SanitizedFindingView,
   type SecurityEventEnvelope,
 } from "@dsrclone/security-sdk";
+import { request as httpsRequest } from "node:https";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { IntegrationSecretResolver, IntegrationTransportFactory } from "../core/transport";
@@ -29,6 +30,11 @@ export interface OutboundHttpRequest {
   url: string;
   headers: Record<string, string>;
   body: string;
+  /** Addresses returned by SSRF validation for THIS hop. The
+   *  transport must connect only to one of these (connection
+   *  pinning) — re-resolving the hostname at connect time reopens
+   *  the DNS-rebinding TOCTOU the validation just closed. */
+  pinnedIps?: string[];
 }
 export interface OutboundHttpResponse {
   status: number;
@@ -44,6 +50,14 @@ export const OUTBOUND_HTTP = "INTEGRATIONS_OUTBOUND_HTTP";
 
 export class FetchOutboundHttp {
   async send(req: OutboundHttpRequest): Promise<OutboundHttpResponse> {
+    // Pinned path (the only path the outbox processor uses): connect
+    // to a validation-approved address with node:https directly —
+    // no DNS lookup happens at connect time, while Host and TLS
+    // servername (SNI + certificate verification) keep the ORIGINAL
+    // hostname, so a rebound name can never steer the connection.
+    // ponytail: tries pinned addresses in order; no Happy-Eyeballs
+    // racing — validation already screened every address in the set.
+    if (req.pinnedIps && req.pinnedIps.length > 0) return this.sendPinned(req, req.pinnedIps);
     const res = await fetch(req.url, {
       method: "POST",
       headers: req.headers,
@@ -53,6 +67,57 @@ export class FetchOutboundHttp {
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
     return { status: res.status, headers, location: res.headers.get("location") ?? undefined };
+  }
+
+  private async sendPinned(req: OutboundHttpRequest, pinnedIps: string[]): Promise<OutboundHttpResponse> {
+    const url = new URL(req.url);
+    if (url.protocol !== "https:") throw new Error("pinned outbound transport requires an https: URL");
+    let lastError: unknown;
+    for (const rawIp of pinnedIps) {
+      try {
+        return await this.sendPinnedOnce(req, url, rawIp.replace(/^\[|\]$/g, ""));
+      } catch (err) { lastError = err; }
+    }
+    throw lastError instanceof Error ? lastError : new Error("pinned connection failed");
+  }
+
+  private sendPinnedOnce(req: OutboundHttpRequest, url: URL, ip: string): Promise<OutboundHttpResponse> {
+    return new Promise((resolve, reject) => {
+      const isIpLiteral = /^[0-9.]+$/.test(url.hostname) || url.hostname.includes(":");
+      const headers: Record<string, string> = {
+        ...req.headers,
+        host: url.host,
+        "content-length": String(Buffer.byteLength(req.body)),
+      };
+      const res = httpsRequest({
+        protocol: "https:",
+        hostname: ip,
+        port: url.port ? Number(url.port) : 443,
+        path: `${url.pathname}${url.search}`,
+        method: "POST",
+        headers,
+        // TLS identity stays the original hostname (skipped when the
+        // host already IS an IP literal — it then equals the address).
+        ...(isIpLiteral ? {} : { servername: url.hostname }),
+        rejectUnauthorized: true,
+        timeout: 10_000,
+      }, (incoming) => {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(incoming.headers)) {
+          if (typeof v === "string") out[k.toLowerCase()] = v;
+        }
+        incoming.resume(); // body is never used — drain so the socket completes
+        incoming.on("end", () => resolve({
+          status: incoming.statusCode ?? 0,
+          headers: out,
+          location: out["location"],
+        }));
+        incoming.on("error", reject);
+      });
+      res.on("timeout", () => res.destroy(new Error("pinned outbound request timed out")));
+      res.on("error", reject);
+      res.end(req.body);
+    });
   }
 }
 
@@ -92,9 +157,13 @@ export class OutboxProcessorService {
     return b;
   }
 
-  async processDue(now = new Date()): Promise<{ processed: number; delivered: number; failed: number; deadLettered: number; skipped: number }> {
+  async processDue(now = new Date(), workspaceId?: string): Promise<{ processed: number; delivered: number; failed: number; deadLettered: number; skipped: number }> {
+    // User-triggered runs are scoped to the caller's workspace (the
+    // controller always passes one). A run WITHOUT a workspaceId is
+    // global and reserved for trusted internal scheduler contexts —
+    // never reachable from a tenant request.
     const pending = await this.prisma.integrationDelivery.findMany({
-      where: { status: "PENDING" },
+      where: { status: "PENDING", ...(workspaceId ? { workspaceId } : {}) },
       orderBy: { createdAt: "asc" },
       take: 100,
     });
@@ -162,7 +231,7 @@ export class OutboxProcessorService {
         // Policy refusals are permanent — never retried (§128/§129).
         return this.finish(delivery, "DEAD_LETTER", { category: "SSRF_BLOCKED", reasonCode: verdict.reasonCode, hop }, now);
       }
-      const res = await this.http({ url, headers, body });
+      const res = await this.http({ url, headers, body, pinnedIps: verdict.resolvedIps });
       if (res.status >= 300 && res.status < 400) {
         if (!res.location) return this.retryOrDeadLetter(delivery, { category: "REDIRECT_WITHOUT_LOCATION", httpStatus: res.status }, now);
         if (hop === MAX_REDIRECTS) return this.finish(delivery, "DEAD_LETTER", { category: "TOO_MANY_REDIRECTS" }, now);

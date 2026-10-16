@@ -17,6 +17,7 @@ import { OutboxProcessorService } from "./events/outbox-processor.service";
 import { TicketsService } from "./tickets/tickets.service";
 import { SiemService } from "./siem/siem.service";
 import { MessagingService } from "./messaging/messaging.service";
+import { requireIntegrationPermission } from "./permissions";
 
 /**
  * Enterprise integrations API (Prompt 24 §107). The pre-Prompt-24
@@ -74,8 +75,12 @@ export class IntegrationsController {
 
   @Post("outbox/process")
   async processOutbox(@CurrentUser() user: RequestUser) {
-    await resolveWorkspace(this.prisma, user);
-    return this.processor.processDue();
+    const ws = await resolveWorkspace(this.prisma, user);
+    // Triggering delivery is a privileged, workspace-scoped action:
+    // a tenant run can only ever fire its OWN workspace's pending
+    // deliveries (global runs are internal-scheduler-only).
+    requireIntegrationPermission(user, "MANAGE_SIEM_INTEGRATIONS");
+    return this.processor.processDue(new Date(), ws.id);
   }
 
   @Get("webhook-subscriptions")

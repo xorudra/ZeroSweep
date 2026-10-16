@@ -10,6 +10,7 @@ import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireIntegrationPermission } from "../permissions";
 import type { CreateIntegrationBody, RotateCredentialBody, UpdateIntegrationBody } from "../dto/schemas";
 import { IntegrationTransportFactory } from "./transport";
+import { assertConfigurationSecretReferences, assertSecretReferenceAllowed } from "./reference-guard";
 
 type Row = Record<string, unknown>;
 
@@ -78,8 +79,28 @@ export class IntegrationsService {
     return this.present(await this.own(user, workspaceId, id));
   }
 
+  /** Inbound attribution safety (audit: inbound-global-secret-match):
+   *  a secret reference already used by ANOTHER enabled integration of
+   *  the same provider would make signed deliveries attributable to
+   *  the wrong tenant — each integration needs a unique reference. */
+  private async assertSecretReferenceUnique(type: string, secretReference: string | null | undefined, excludeId?: string): Promise<void> {
+    if (!secretReference) return;
+    const clash = await this.prisma.integration.findFirst({
+      where: {
+        type: type as never, enabled: true, secretReference,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    });
+    if (clash) {
+      throw new BadRequestException("secret reference already in use by another integration — each integration requires a unique secret reference");
+    }
+  }
+
   async create(user: RequestUser, workspaceId: string, body: CreateIntegrationBody) {
     requireIntegrationPermission(user, "CREATE_INTEGRATION");
+    assertSecretReferenceAllowed(body.secretReference);
+    assertConfigurationSecretReferences(body.configuration ?? body.config);
+    await this.assertSecretReferenceUnique(body.type as string, body.secretReference);
     const config = (body.configuration ?? body.config ?? {}) as Record<string, unknown>;
     const connector = (ENTERPRISE_INTEGRATION_TYPES as readonly string[]).includes(body.type as string)
       ? createConnector(body.type as EnterpriseIntegrationType, config)
@@ -115,6 +136,7 @@ export class IntegrationsService {
 
   async update(user: RequestUser, workspaceId: string, id: string, body: UpdateIntegrationBody) {
     requireIntegrationPermission(user, "EDIT_INTEGRATION");
+    assertConfigurationSecretReferences(body.configuration ?? body.config);
     const row = await this.own(user, workspaceId, id);
     const data: Row = {};
     if (body.name !== undefined) data.name = body.name;
@@ -150,7 +172,9 @@ export class IntegrationsService {
    *  receives or stores the new value. */
   async rotateCredential(user: RequestUser, workspaceId: string, id: string, body: RotateCredentialBody) {
     requireIntegrationPermission(user, "MANAGE_INTEGRATION_SECRETS");
+    assertSecretReferenceAllowed(body.secretReference);
     const row = await this.own(user, workspaceId, id);
+    await this.assertSecretReferenceUnique(row.type as string, body.secretReference, id);
     const connector = this.connectorFor(row);
     connector?.rotateCredentialReference(body.secretReference as string);
     const updated = await this.prisma.integration.update({

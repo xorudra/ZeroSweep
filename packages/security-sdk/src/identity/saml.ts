@@ -278,6 +278,14 @@ export function validateSamlResponse(input: SamlValidationInput): SamlIdentity {
 
   const issuer = findChild(assertion, "Issuer")?.text.trim();
   if (issuer !== input.idpEntityId) throw new SamlRejected("Assertion issuer mismatch");
+  // Response Destination must match the configured ACS URL when one is
+  // expected — the Response element is not covered by the assertion
+  // signature, so a missing/mismatched Destination would otherwise pass.
+  if (input.acsUrl) {
+    const destination = root.attrs.get("Destination");
+    if (!destination) throw new SamlRejected("Response Destination missing (recipient/destination required)");
+    if (destination !== input.acsUrl) throw new SamlRejected("Response Destination mismatch (recipient/destination mismatch)");
+  }
   const skewMs = (input.clockSkewSeconds ?? 120) * 1000;
   const conditions = findChild(assertion, "Conditions");
   if (!conditions) throw new SamlRejected("Assertion has no Conditions");
@@ -292,8 +300,16 @@ export function validateSamlResponse(input: SamlValidationInput): SamlIdentity {
   const nameId = findChild(subject ?? assertion, "NameID")?.text.trim();
   if (!nameId) throw new SamlRejected("Assertion has no NameID");
   const confirmationData = subject ? findDescendant(subject, "SubjectConfirmationData") : undefined;
+  // When an ACS/recipient (or InResponseTo) expectation exists, a bearer
+  // assertion must carry SubjectConfirmationData with a matching Recipient;
+  // without it there is nothing binding the assertion to this SP/ACS.
+  const hasConfirmationExpectation = Boolean(input.acsUrl) || Boolean(input.expectedInResponseTo);
+  if (!confirmationData && hasConfirmationExpectation) {
+    throw new SamlRejected("SubjectConfirmationData missing (recipient/destination confirmation required)");
+  }
   if (confirmationData) {
     const recipient = confirmationData.attrs.get("Recipient");
+    if (input.acsUrl && !recipient) throw new SamlRejected("Assertion recipient/destination mismatch");
     if (recipient && recipient !== input.acsUrl) throw new SamlRejected("Assertion recipient/destination mismatch");
     if (input.expectedInResponseTo && confirmationData.attrs.get("InResponseTo") !== input.expectedInResponseTo) {
       throw new SamlRejected("Assertion InResponseTo mismatch");

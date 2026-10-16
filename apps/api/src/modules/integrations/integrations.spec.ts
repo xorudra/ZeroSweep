@@ -152,6 +152,8 @@ const GL_SECRET = "p24-fixture-gitlab-secret";
 
 process.env.P24_GH_SECRET = GH_SECRET;
 process.env.P24_GL_SECRET = GL_SECRET;
+process.env.TENANT_SECRET_GH = GH_SECRET;
+process.env.TENANT_SECRET_GL = GL_SECRET;
 
 class FixtureTransportFactory extends IntegrationTransportFactory {
   fixtures = new Map<string, IntegrationTransport>();
@@ -243,9 +245,9 @@ async function seedRepoScenario(stack: Stack, overrides: Record<string, unknown>
       status: "PENDING", enabled: true, capabilities: [],
       configuration: {
         authMode: "GITHUB_APP", appId: "123", installationId: "777",
-        privateKeySecretReference: "env:P24_GH_KEY", webhookSecretReference: "env:P24_GH_SECRET",
+        privateKeySecretReference: "env:TENANT_SECRET_GH_KEY", webhookSecretReference: "env:TENANT_SECRET_GH",
       },
-      secretReference: "env:P24_GH_SECRET", credentialType: "GITHUB_APP", createdBy: ADMIN.id,
+      secretReference: "env:TENANT_SECRET_GH", credentialType: "GITHUB_APP", createdBy: ADMIN.id,
       ...(overrides.integration as Record<string, unknown> ?? {}),
     } as never,
   });
@@ -285,15 +287,15 @@ describe("integration registry (§3–§9, §103)", () => {
     await seedBase(stack);
     const created = await stack.integrations.create(ADMIN, WS, {
       type: "GITHUB", name: "GitHub",
-      configuration: { authMode: "GITHUB_APP", appId: "1", installationId: "2", privateKeySecretReference: "env:GH_KEY" },
-      secretReference: "env:GH_WEBHOOK", credentialType: "GITHUB_APP",
+      configuration: { authMode: "GITHUB_APP", appId: "1", installationId: "2", privateKeySecretReference: "env:TENANT_SECRET_GH_KEY" },
+      secretReference: "env:TENANT_SECRET_GH_WEBHOOK", credentialType: "GITHUB_APP",
     });
     expect(created.secretConfigured).toBe(true);
-    expect(created.secretReference).toBe("env:GH_WEBHOOK");
+    expect(created.secretReference).toBe("env:TENANT_SECRET_GH_WEBHOOK");
     expect(created.status).toBe("PENDING");
-    // The configuration carries the reference NAME (env:GH_KEY) — a
+    // The configuration carries the reference NAME (env:TENANT_SECRET_GH_KEY) — a
     // pointer into the secret store, never key material (§7/§8).
-    expect((created.configuration as Record<string, unknown>).privateKeySecretReference).toBe("env:GH_KEY");
+    expect((created.configuration as Record<string, unknown>).privateKeySecretReference).toBe("env:TENANT_SECRET_GH_KEY");
     expect(JSON.stringify(created)).not.toContain("BEGIN PRIVATE KEY");
     const audits = await stack.prisma.auditLog.findMany({ where: { action: "INTEGRATION_CREATED" } });
     expect(audits).toHaveLength(1);
@@ -330,8 +332,8 @@ describe("integration registry (§3–§9, §103)", () => {
   it("rotation swaps only the reference and stamps the rotation time (§8/§102)", async () => {
     const stack = makeStack();
     await seedRepoScenario(stack);
-    const rotated = await stack.integrations.rotateCredential(ADMIN, WS, "gh-1", { secretReference: "env:P24_GH_SECRET_V2" });
-    expect(rotated.secretReference).toBe("env:P24_GH_SECRET_V2");
+    const rotated = await stack.integrations.rotateCredential(ADMIN, WS, "gh-1", { secretReference: "env:TENANT_SECRET_GH_V2" });
+    expect(rotated.secretReference).toBe("env:TENANT_SECRET_GH_V2");
     expect(rotated.secretRotatedAt).toBeTruthy();
   });
 
@@ -459,8 +461,8 @@ describe("inbound webhooks (§15–§17, §81, §111–§116)", () => {
       data: {
         id: "gl-1", workspaceId: WS, organizationId: "org-1", type: "GITLAB", name: "GitLab",
         status: "PENDING", enabled: true, capabilities: [],
-        configuration: { baseUrl: "https://gitlab.example.com", tokenSecretReference: "env:P24_GL_SECRET", webhookSecretReference: "env:P24_GL_SECRET" },
-        secretReference: "env:P24_GL_SECRET", createdBy: ADMIN.id,
+        configuration: { baseUrl: "https://gitlab.example.com", tokenSecretReference: "env:TENANT_SECRET_GL", webhookSecretReference: "env:TENANT_SECRET_GL" },
+        secretReference: "env:TENANT_SECRET_GL", createdBy: ADMIN.id,
       } as never,
     });
     await stack.prisma.repositoryIntegrationLink.create({
@@ -489,8 +491,8 @@ describe("inbound webhooks (§15–§17, §81, §111–§116)", () => {
       data: {
         id: "gh-b", workspaceId: WS2, organizationId: "org-2", type: "GITHUB", name: "GitHub B",
         status: "PENDING", enabled: true, capabilities: [],
-        configuration: { webhookSecretReference: "env:P24_GH_SECRET" },
-        secretReference: "env:P24_GH_SECRET", createdBy: OTHER_ADMIN.id,
+        configuration: { webhookSecretReference: "env:TENANT_SECRET_GH" },
+        secretReference: "env:TENANT_SECRET_GH", createdBy: OTHER_ADMIN.id,
       } as never,
     });
     const body = JSON.stringify(githubPushPayload);
@@ -702,7 +704,7 @@ describe("event bus + outbox delivery (§75–§80, §128–§132)", () => {
     await stack.prisma.webhookSubscription.create({
       data: {
         id: "sub-1", workspaceId: WS, endpoint, events: ["finding.created"],
-        secretReference: "env:P24_GH_SECRET", enabled: true, createdBy: ADMIN.id,
+        secretReference: "env:TENANT_SECRET_GH", enabled: true, createdBy: ADMIN.id,
       } as never,
     });
   }
@@ -808,7 +810,7 @@ describe("event bus + outbox delivery (§75–§80, §128–§132)", () => {
       endpoint: "http://hooks.example.com/hook", events: ["finding.created"],
     })).rejects.toThrow(/refused/);
     const ok = await stack.subscriptions.create(ADMIN, WS, {
-      endpoint: "https://hooks.example.com/hook", events: ["finding.created"], secretReference: "env:P24_GH_SECRET",
+      endpoint: "https://hooks.example.com/hook", events: ["finding.created"], secretReference: "env:TENANT_SECRET_GH",
     });
     expect(ok.secretConfigured).toBe(true);
   });

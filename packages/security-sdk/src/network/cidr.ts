@@ -21,11 +21,37 @@ export function parseIpv4(ip: string): bigint | null {
   let value = 0n;
   for (const part of parts) {
     if (!/^\d{1,3}$/.test(part)) return null;
+    // Non-canonical encodings are rejected, never reinterpreted: a
+    // leading zero makes other parsers (inet_aton-style) read the part
+    // as OCTAL — "0177.0.0.1" is 127.0.0.1 there but decimal 119 here —
+    // so the only safe reading is "not an IPv4 literal" (audit NV
+    // hardening: ssrf.noncanonical-ip-guard-bypass).
+    if (part.length > 1 && part.startsWith("0")) return null;
     const n = Number(part);
     if (n > 255) return null;
     value = (value << 8n) | BigInt(n);
   }
   return value;
+}
+
+/**
+ * IPv6 forms that EMBED an IPv4 address (audit NV hardening): IPv4-mapped
+ * ::ffff:0:0/96, IPv4-compatible ::/96 (covers :: and ::1), and NAT64
+ * 64:ff9b::/96 + 64:ff9b:1::/48. Returns the embedded IPv4 value, or null
+ * when the address is a native IPv6 address. Classification MUST screen
+ * the embedded IPv4 — a mapped/compatible/translated spelling of a
+ * loopback, metadata, or private address is that address.
+ */
+export function embeddedIpv4Value(ip: string): bigint | null {
+  const parsed = parseIp(ip);
+  if (!parsed || parsed.family !== 6) return null;
+  const v = parsed.value;
+  const high96 = v >> 32n;
+  if (high96 === 0xffffn) return v & 0xffffffffn; // ::ffff:a.b.c.d (mapped)
+  if (high96 === 0n) return v & 0xffffffffn; // ::a.b.c.d (compatible)
+  if (high96 === 0x0064ff9b0000000000000000n) return v & 0xffffffffn; // 64:ff9b::/96 (NAT64)
+  if (v >> 80n === 0x0064ff9b0001n) return v & 0xffffffffn; // 64:ff9b:1::/48 (NAT64 local)
+  return null;
 }
 
 export function formatIpv4(value: bigint): string {
@@ -179,7 +205,18 @@ export function canonicalizeCidr(raw: string): string | null {
 export function ipInCidr(ip: string, cidr: string): boolean {
   const parsedIp = parseIp(ip);
   const info = parseCidr(cidr);
-  if (!parsedIp || !info || parsedIp.family !== info.family) return false;
+  if (!parsedIp || !info) return false;
+  // Family mismatch: an IPv6 address embedding an IPv4 address is
+  // screened against IPv4 CIDRs through the embedded value, so a
+  // mapped/compatible/NAT64 spelling can never slip past an IPv4 range.
+  if (parsedIp.family !== info.family) {
+    if (parsedIp.family === 6 && info.family === 4) {
+      const embedded = embeddedIpv4Value(ip);
+      if (embedded === null) return false;
+      return ipInCidr(formatIpv4(embedded), cidr);
+    }
+    return false;
+  }
   const bits = info.family === 4 ? 32 : 128;
   const hostBits = BigInt(bits - info.prefixLength);
   const network = parseIp(info.networkAddress);
@@ -218,12 +255,16 @@ const PRIVATE_CIDRS = [
 export const PROTECTED_HOSTNAMES = ["localhost", "metadata.google.internal"] as const;
 
 export function classifyDestination(ip: string): DestinationClass {
+  // Fail closed: an unparseable address (including non-canonical
+  // encodings the parser rejected) is never classified PUBLIC.
+  if (!parseIp(ip)) return "PROTECTED";
   for (const p of PROTECTED_CIDRS) if (ipInCidr(ip, p.cidr)) return "PROTECTED";
   for (const c of PRIVATE_CIDRS) if (ipInCidr(ip, c)) return "PRIVATE_INTERNAL";
   return "PUBLIC";
 }
 
 export function protectedDestinationReason(ip: string): string | null {
+  if (!parseIp(ip)) return "unparseable / non-canonical destination address is blocked";
   for (const p of PROTECTED_CIDRS) if (ipInCidr(ip, p.cidr)) return p.reason;
   return null;
 }

@@ -70,8 +70,12 @@ export function cidrContains(cidr: string, ip: string): boolean {
   if (!base || bitsRaw === undefined) return false;
   const bits = Number(bitsRaw);
   const toLong = (s: string): number | null => {
-    const parts = s.split(".").map(Number);
-    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return null;
+    const rawParts = s.split(".");
+    // Strict canonical dotted-quad only: decimal digits, no empty
+    // parts, no leading zeros (other parsers read those as octal).
+    if (rawParts.length !== 4 || rawParts.some((p) => !/^\d{1,3}$/.test(p) || (p.length > 1 && p.startsWith("0")))) return null;
+    const parts = rawParts.map(Number);
+    if (parts.some((n) => n < 0 || n > 255)) return null;
     return ((parts[0]! << 24) >>> 0) + (parts[1]! << 16) + (parts[2]! << 8) + parts[3]!;
   };
   const b = toLong(base); const i = toLong(ip);
@@ -97,8 +101,56 @@ const BLOCKED_PATTERNS: Array<{ test: (host: string) => boolean; reason: string 
   { test: (h) => cidrContains("100.64.0.0/10", h), reason: "shared address space requires an approved internal engagement" },
 ];
 
+/**
+ * Extract the IPv4 address embedded in an IPv6 spelling (audit:
+ * ssrf-validator.ipv6-mapped-translated-bypass): IPv4-mapped
+ * ::ffff:0:0/96, IPv4-compatible ::/96, NAT64 64:ff9b::/96 and
+ * 64:ff9b:1::/48 — in dotted-quad tail form (::ffff:127.0.0.1), hex
+ * group tail form (::ffff:7f00:1, which is what URL parsers normalize
+ * mapped addresses to), and fully expanded form (0:0:0:0:0:ffff:…).
+ * Returns null for native IPv6 / non-IPv6 input.
+ */
+export function embeddedIpv4(host: string): string | null {
+  let h = host.toLowerCase();
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  const m = h.match(/^::ffff:(.+)$/)
+    ?? h.match(/^0:0:0:0:0:ffff:(.+)$/)
+    ?? h.match(/^64:ff9b:(?::|1::)(.+)$/)
+    ?? h.match(/^::(.+)$/)
+    ?? h.match(/^0:0:0:0:0:0:(.+)$/);
+  if (!m) return null;
+  const tail = m[1]!;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(tail)) return tail;
+  const parts = tail.split(":");
+  if (parts.length === 2 && parts.every((p) => /^[0-9a-f]{1,4}$/.test(p))) {
+    const a = parseInt(parts[0]!, 16);
+    const b = parseInt(parts[1]!, 16);
+    return `${a >> 8}.${a & 255}.${b >> 8}.${b & 255}`;
+  }
+  return null;
+}
+
 export function blockedTargetReason(host: string): string | null {
-  const h = host.toLowerCase();
+  let h = host.toLowerCase();
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  // Non-canonical IPv4 encodings (leading-zero / octal-style parts)
+  // are refused outright: downstream parsers may read them as a
+  // different address than the dotted-decimal screen does.
+  if (/^[0-9.]+$/.test(h) && h.split(".").some((p) => p.length > 1 && p.startsWith("0"))) {
+    return "non-canonical IPv4 encoding is blocked";
+  }
   for (const p of BLOCKED_PATTERNS) if (p.test(h)) return p.reason;
+  if (h === "::") return "IPv6 unspecified address is blocked";
+  // IPv6 spellings embedding an IPv4 address are screened as that
+  // IPv4 address; mapped / NAT64 forms are refused outright even for
+  // a public embedded address — they are never legitimate targets.
+  const emb = embeddedIpv4(h);
+  if (emb) {
+    const r = blockedTargetReason(emb);
+    if (r) return r;
+    if (h.startsWith("::ffff:") || h.startsWith("64:ff9b:") || h.startsWith("0:0:0:0:0:ffff:")) {
+      return "embedded IPv4 destination is blocked";
+    }
+  }
   return null;
 }

@@ -65,6 +65,7 @@ export class WebhooksService {
     provider: "GITHUB" | "GITLAB" | "BITBUCKET",
     headers: Record<string, string | undefined>,
     rawBody: string,
+    integrationId?: string,
   ): Promise<WebhookReceipt> {
     const headerNames = PROVIDER_EVENT_HEADERS[provider]!;
     const eventType = headers[headerNames.event] ?? "unknown";
@@ -76,12 +77,22 @@ export class WebhooksService {
       return { status: "REJECTED", reasonCode: sizeProblem.reasonCode, detail: sizeProblem.detail, httpStatus: 413 };
     }
 
-    // Find the integration whose configured secret VERIFIES this
-    // delivery. Verification precedes all payload trust (§15).
-    const candidates = await this.prisma.integration.findMany({
-      where: { type: provider, enabled: true },
-    }) as Row[];
-    let verified: Row | null = null;
+    // Attribution is bound to ONE tenant before/regardless of secret
+    // trial (audit: inbound-global-secret-match). When the route
+    // names an integration, the candidate set is exactly that row.
+    // Otherwise every verifying candidate is collected: a delivery
+    // that verifies against MORE THAN ONE integration (e.g. two
+    // tenants sharing one env: secret) is ambiguous and rejected —
+    // never attributed to whichever row the database returned first.
+    // Verification precedes all payload trust (§15).
+    const candidates = integrationId
+      ? await this.prisma.integration.findMany({
+          where: { id: integrationId, type: provider, enabled: true },
+        }) as Row[]
+      : await this.prisma.integration.findMany({
+          where: { type: provider, enabled: true },
+        }) as Row[];
+    const verifiedCandidates: Row[] = [];
     let sawResolvableSecret = false;
     for (const candidate of candidates) {
       const config = (candidate.configuration ?? candidate.config ?? {}) as Row;
@@ -94,8 +105,17 @@ export class WebhooksService {
         : provider === "GITLAB"
           ? verifyGitLabToken({ tokenHeader: headers["x-gitlab-token"], secret })
           : verifyBitbucketSignature({ rawBody, signatureHeader: headers["x-hub-signature"], secret });
-      if (verdict.ok) { verified = candidate; break; }
+      if (verdict.ok) verifiedCandidates.push(candidate);
     }
+    if (verifiedCandidates.length > 1) {
+      await this.record(null, null, provider, deliveryId, eventType, "INVALID", "REJECTED", "AMBIGUOUS_INTEGRATION");
+      return {
+        status: "REJECTED", reasonCode: "AMBIGUOUS_INTEGRATION",
+        detail: "webhook signature verifies against multiple integrations — delivery rejected instead of being attributed to the first match",
+        httpStatus: 401,
+      };
+    }
+    const verified: Row | null = verifiedCandidates[0] ?? null;
     if (!verified) {
       await this.record(null, null, provider, deliveryId, eventType, candidates.length === 0 ? "MISSING" : "INVALID", "REJECTED",
         candidates.length === 0 ? "NO_INTEGRATION_CONFIGURED" : sawResolvableSecret ? "SIGNATURE_INVALID" : "WEBHOOK_SECRET_UNRESOLVED");
@@ -114,16 +134,16 @@ export class WebhooksService {
     }
 
     const workspaceId = verified.workspaceId as string;
-    const integrationId = verified.id as string;
+    const verifiedIntegrationId = verified.id as string;
 
     // §16: replay protection — the same delivery id is processed once.
     const prior = await this.prisma.inboundIntegrationEvent.findFirst({
-      where: { integrationId, deliveryId },
+      where: { integrationId: verifiedIntegrationId, deliveryId },
     });
     if (prior) {
       return { status: "IGNORED_DUPLICATE", detail: "duplicate delivery id — idempotently ignored (§16)", httpStatus: 200 };
     }
-    const recordRow = await this.record(workspaceId, integrationId, provider, deliveryId, eventType, "VALID", "RECEIVED", null);
+    const recordRow = await this.record(workspaceId, verifiedIntegrationId, provider, deliveryId, eventType, "VALID", "RECEIVED", null);
 
     let payload: unknown;
     try {
@@ -135,7 +155,7 @@ export class WebhooksService {
 
     await this.audit.record({
       actorId: verified.createdBy as string, organizationId: verified.organizationId as string, workspaceId,
-      action: "SOURCE_WEBHOOK_RECEIVED", resourceType: "Integration", resourceId: integrationId,
+      action: "SOURCE_WEBHOOK_RECEIVED", resourceType: "Integration", resourceId: verifiedIntegrationId,
       metadata: { provider, eventType, deliveryId },
     }).catch(() => undefined);
 
@@ -149,7 +169,7 @@ export class WebhooksService {
       return { status: "IGNORED", detail: "event type not actionable or payload malformed — recorded and ignored", httpStatus: 200 };
     }
 
-    const link = await this.repositories.linkForExternal(workspaceId, integrationId, event.externalRepoId);
+    const link = await this.repositories.linkForExternal(workspaceId, verifiedIntegrationId, event.externalRepoId);
     if (!link) {
       // §86/§116: the repository allowlist is the link table. An
       // unlinked repository can never trigger work.
@@ -196,7 +216,7 @@ export class WebhooksService {
       if (!assessment) {
         assessment = await this.prisma.pullRequestSecurityAssessment.create({
           data: {
-            workspaceId, integrationId, repositoryId: repository.id as string,
+            workspaceId, integrationId: verifiedIntegrationId, repositoryId: repository.id as string,
             provider, prNumber: pr.number,
             title: sanitizeUntrustedText(pr.title),
             baseBranch: pr.baseBranch ?? null, headBranch: pr.headBranch ?? null,

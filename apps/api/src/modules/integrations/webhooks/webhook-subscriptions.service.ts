@@ -8,6 +8,7 @@ import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireIntegrationPermission } from "../permissions";
+import { assertSecretReferenceAllowed } from "../core/reference-guard";
 import { dnsResolver } from "../../continuous-security/notifications/notification-router.service";
 import type { CreateWebhookSubscriptionBody } from "../dto/schemas";
 
@@ -33,6 +34,7 @@ export class WebhookSubscriptionsService {
 
   async create(user: RequestUser, workspaceId: string, body: CreateWebhookSubscriptionBody) {
     requireIntegrationPermission(user, "CREATE_INTEGRATION");
+    assertSecretReferenceAllowed(body.secretReference);
     const events = (body.events as string[]) ?? [];
     const unknown = events.filter((e) => !(WEBHOOK_EVENT_TYPES as readonly string[]).includes(e));
     if (unknown.length > 0) {
