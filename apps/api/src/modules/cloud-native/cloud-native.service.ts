@@ -10,7 +10,7 @@ import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
-import { OrchestrationService, hostOf } from "../orchestration/orchestration.service";
+import { OrchestrationService } from "../orchestration/orchestration.service";
 import { requireCloudPermission } from "./permissions";
 
 type Row = Record<string, unknown> & { id: string };
@@ -402,27 +402,20 @@ export class CloudNativeService {
     resourceId: string,
     auditAction: string,
   ) {
-    let scope = await this.prisma.scope.findFirst({ where: { targetId: target.id } });
+    const scope = await this.prisma.scope.findFirst({ where: { targetId: target.id } });
     if (!scope) {
-      scope = await this.prisma.scope.create({
-        data: {
-          workspaceId, targetId: target.id, name: `${scopeHost} cloud-native scope`,
-          rules: { includeHosts: [hostOf(target.value)], excludeHosts: [], includeCidrs: [], allowedPorts: [], allowedPaths: [], excludedPaths: [] } as never,
-        },
-      });
+      throw new BadRequestException("No pre-existing scope covers this target — create a scope via the scopes flow and request assessment approval via the assessments flow before starting a scan");
     }
-    let assessment = await this.prisma.assessment.findFirst({
-      where: { targetId: target.id, profile: profile as never, status: "APPROVED" },
+    const assessment = await this.prisma.assessment.findFirst({
+      where: { targetId: target.id, profile: profile as never, status: "APPROVED", scopeId: (scope as Row).id },
       orderBy: { createdAt: "desc" },
     });
     if (!assessment) {
-      assessment = await this.prisma.assessment.create({
-        data: {
-          workspaceId, targetId: target.id, scopeId: (scope as Row).id,
-          name: `${scopeHost} — ${profile}`, profile: profile as never,
-          status: "APPROVED", createdBy: user.id, approvedBy: user.id,
-        },
-      });
+      throw new BadRequestException("No pre-existing APPROVED assessment covers this target and profile — request approval via the assessments flow before starting a scan");
+    }
+    const assessmentRow = assessment as unknown as Row;
+    if (!assessmentRow.approvedBy || assessmentRow.approvedBy === assessmentRow.createdBy || assessmentRow.approvedBy === user.id) {
+      throw new BadRequestException("Assessment approval is not independent — the approver must be neither the assessment creator nor the scan starter; request approval via the assessments flow");
     }
     await this.audit.record({
       actorId: user.id, organizationId: user.organizationId, workspaceId,

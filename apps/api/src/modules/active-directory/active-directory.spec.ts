@@ -248,14 +248,29 @@ describe("Prompt 15 API — domains", () => {
   it("scan start is gated on a VERIFIED target and audited (§3/§117)", async () => {
     const state = freshState();
     const svc = makeService(state);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-ad", name: "directory scope", rules: {} });
+    state.engagements.push({
+      id: "eng-1", workspaceId: "ws-1", targetId: "t-ad", scopeId: "scp-1", profile: "AD_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const started = await svc.startDomainScan(owner, "dom-1", { profile: "AD_BASELINE" });
     expect(started.scanId).toBe("scan-1");
+    expect(state.scopes).toHaveLength(1);
+    expect(state.engagements).toHaveLength(1);
     expect(state.audits.some((a) => a.action === "AD_SCAN_STARTED")).toBe(true);
 
     const state2 = freshState();
     state2.targets[0]!.verified = false;
     const svc2 = makeService(state2);
     await expect(svc2.startDomainScan(owner, "dom-1", { profile: "AD_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("scan start refuses when no pre-approved assessment exists — and mints neither scope nor assessment", async () => {
+    const state = freshState();
+    const svc = makeService(state);
+    await expect(svc.startDomainScan(owner, "dom-1", { profile: "AD_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.scopes).toHaveLength(0);
+    expect(state.engagements).toHaveLength(0);
   });
 
   it("an offensive tool request is refused AND audited (§112/§117/§120)", async () => {

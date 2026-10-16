@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
 import { createAssessmentSchema, paginationSchema } from "@dsrclone/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
@@ -30,6 +30,15 @@ export class AssessmentsController {
   async create(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(createAssessmentSchema, body);
     const target = await assertTargetInOrg(this.prisma, user, data.targetId);
+    // Tenant-bind a client-supplied scopeId: the scope must belong to
+    // this target in this workspace, otherwise a foreign scope's rules
+    // would be disclosed via GET and used as scan authorization.
+    if (data.scopeId) {
+      const scope = await this.prisma.scope.findFirst({
+        where: { id: data.scopeId, workspaceId: target.workspaceId, targetId: target.id },
+      });
+      if (!scope) throw new BadRequestException("scopeId does not belong to the target in this workspace");
+    }
     const assessment = await this.prisma.assessment.create({
       data: {
         workspaceId: target.workspaceId, targetId: target.id, scopeId: data.scopeId,

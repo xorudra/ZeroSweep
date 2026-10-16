@@ -228,11 +228,28 @@ describe("Prompt 18 API — scans, diffs (§53–§55/§92)", () => {
   it("starts a scan only for a VERIFIED target through the gated path", async () => {
     const state = freshState();
     const svc = makeService(state);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-bin", name: "binary scope", rules: {} });
+    state.assessments.push({
+      id: "eng-1", workspaceId: "ws-1", targetId: "t-bin", scopeId: "scp-1", profile: "BINARY_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const res = await svc.startScan(owner, "bin-1", { profile: "BINARY_BASELINE" });
     expect(res.scanId).toBe("scan-1");
+    expect(state.scopes).toHaveLength(1);
+    expect(state.assessments).toHaveLength(1);
     expect(state.audits.some((a) => a.action === "BINARY_STATIC_SCAN_STARTED")).toBe(true);
     state.targets[0]!.verified = false;
     await expect(svc.startScan(owner, "bin-1", { profile: "BINARY_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("scan start refuses when no pre-approved assessment exists — and mints neither scope nor assessment", async () => {
+    const state = freshState();
+    const svc = makeService(state);
+    await expect(svc.startScan(owner, "bin-1", { profile: "BINARY_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-bin", name: "binary scope", rules: {} });
+    await expect(svc.startScan(owner, "bin-1", { profile: "BINARY_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.scopes).toHaveLength(1);
+    expect(state.assessments).toHaveLength(0);
   });
 
   it("viewer cannot upload or scan (§94)", async () => {

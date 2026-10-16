@@ -36,15 +36,17 @@ describe("TargetsService tenant isolation", () => {
 });
 
 /**
- * Launch Safety A5: the HTTP_FILE ownership check fetches a URL built
- * from a user-registered hostname. It must pass the endpoint verdict
- * (no loopback/private/link-local/metadata hosts — by literal OR by
- * resolution) and must never follow a redirect.
+ * Launch Safety A5 + DNS-rebinding hardening: the HTTP_FILE ownership
+ * check fetches a URL built from a user-registered hostname. It must
+ * pass the endpoint verdict (no loopback/private/link-local/metadata
+ * hosts — by literal OR by resolution), must never follow a redirect,
+ * and the fetch must be PINNED to the address that was validated —
+ * the hostname is resolved exactly once, so a rebinding second
+ * resolution can never steer the fetch into private space.
  */
 describe("TargetsService HTTP_FILE verification fetch guard (A5)", () => {
   const challenge = "dsrclone-verify=abc123";
-  const fetchMock = jest.fn();
-  let originalFetch: typeof globalThis.fetch;
+  const pinnedFetchMock = jest.fn();
 
   function makeSvc(targetValue: string) {
     const updates: Array<{ model: string; data: Record<string, unknown> }> = [];
@@ -62,22 +64,20 @@ describe("TargetsService HTTP_FILE verification fetch guard (A5)", () => {
       },
     };
     const svc = new TargetsService(prismaMock as never, { record: async () => undefined } as never);
+    svc.pinnedFetch = pinnedFetchMock as never;
     return { svc, updates };
   }
 
   beforeEach(() => {
-    originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock as never;
-    fetchMock.mockReset();
+    pinnedFetchMock.mockReset();
     (dns.lookup as unknown as jest.Mock).mockReset();
   });
-  afterEach(() => { globalThis.fetch = originalFetch; });
 
   it("never fetches a loopback literal target", async () => {
     const { svc } = makeSvc("127.0.0.1");
     const res = await svc.checkVerification(user, "t1", "v1");
     expect(res.status).toBe("PENDING");
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(pinnedFetchMock).not.toHaveBeenCalled();
   });
 
   it("never fetches a public name that resolves into private space", async () => {
@@ -85,22 +85,34 @@ describe("TargetsService HTTP_FILE verification fetch guard (A5)", () => {
     const { svc } = makeSvc("sneaky.example.com");
     const res = await svc.checkVerification(user, "t1", "v1");
     expect(res.status).toBe("PENDING");
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(pinnedFetchMock).not.toHaveBeenCalled();
   });
 
   it("treats a redirect as a failed check and does not follow it", async () => {
     (dns.lookup as unknown as jest.Mock).mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
-    fetchMock.mockResolvedValue({ ok: false, status: 302, text: async () => "" });
+    pinnedFetchMock.mockResolvedValue({ ok: false, status: 302, text: "" });
     const { svc } = makeSvc("example.com");
     const res = await svc.checkVerification(user, "t1", "v1");
     expect(res.status).toBe("PENDING");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" });
+    expect(pinnedFetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("pins the fetch to the single validated resolution (no re-resolution / rebinding window)", async () => {
+    const lookupMock = dns.lookup as unknown as jest.Mock;
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    pinnedFetchMock.mockResolvedValue({ ok: true, status: 200, text: `token: ${challenge}` });
+    const { svc } = makeSvc("example.com");
+    const res = await svc.checkVerification(user, "t1", "v1");
+    expect(res.status).toBe("VERIFIED");
+    expect(lookupMock).toHaveBeenCalledTimes(1);
+    expect(pinnedFetchMock).toHaveBeenCalledWith(
+      "https://example.com/.well-known/dsrclone-verification.txt", "93.184.216.34", 4,
+    );
   });
 
   it("verifies when the public host serves the challenge file", async () => {
     (dns.lookup as unknown as jest.Mock).mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
-    fetchMock.mockResolvedValue({ ok: true, status: 200, text: async () => `token: ${challenge}` });
+    pinnedFetchMock.mockResolvedValue({ ok: true, status: 200, text: `token: ${challenge}` });
     const { svc, updates } = makeSvc("example.com");
     const res = await svc.checkVerification(user, "t1", "v1");
     expect(res.status).toBe("VERIFIED");

@@ -104,10 +104,13 @@ function fakePrisma(state: State) {
         Object.assign(row, args.data); return row;
       },
     },
-    targetVerification: { create: async (args: { data: Record<string, unknown> }) => { state.verifications.push(args.data); return args.data; } },
+    targetVerification: {
+      create: async (args: { data: Record<string, unknown> }) => { state.verifications.push(args.data); return args.data; },
+      findFirst: byId(state.verifications),
+    },
     scope: { findFirst: byId(state.scopes), create: async (args: { data: Record<string, unknown> }) => { const row = { id: "scope-1", ...args.data }; state.scopes.push(row); return row; } },
     assessment: {
-      findFirst: async () => state.assessments[0] ?? null,
+      findFirst: byId(state.assessments),
       create: async (args: { data: Record<string, unknown> }) => { const row = { id: "as-1", ...args.data }; state.assessments.push(row); return row; },
     },
     sourceSnapshot: { findFirst: byId(state.snapshots), findMany: async () => state.snapshots },
@@ -180,16 +183,80 @@ describe("RepositoriesService (Prompt 12 §97–§109)", () => {
     })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("scan start is refused until the target is VERIFIED (§4), then flows through orchestration", async () => {
+  it("scan start is refused until the target is VERIFIED (§4), then consumes a pre-existing independently-approved assessment", async () => {
     const state = freshState();
     const { service, started } = makeService(state);
     await expect(service.startScan(owner, "repo-1", { profile: "SOURCE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
     await service.verifyRepository(owner, "repo-1");
+    // Governance records must pre-exist: a scope plus an APPROVED
+    // assessment approved by someone other than its creator and the
+    // scan starter — startScan must never mint either one.
+    state.scopes.push({ id: "scope-1", workspaceId: "ws-1", targetId: "t-1", name: "repo scope", rules: {} });
+    state.assessments.push({
+      id: "as-1", workspaceId: "ws-1", targetId: "t-1", scopeId: "scope-1", profile: "SOURCE_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const result = await service.startScan(owner, "repo-1", { profile: "SOURCE_BASELINE" });
     expect(result.scanId).toBe("scan-9");
     expect(started).toEqual(["as-1"]);
     expect(state.audits.some((a) => a.action === "SOURCE_SCAN_REQUESTED")).toBe(true);
-    expect(state.assessments[0]?.status).toBe("APPROVED");
+    expect(state.scopes).toHaveLength(1);
+    expect(state.assessments).toHaveLength(1);
+  });
+
+  it("scan start refuses when no pre-existing scope or APPROVED assessment exists — and mints neither", async () => {
+    const state = freshState();
+    const { service, started } = makeService(state);
+    await service.verifyRepository(owner, "repo-1");
+    await expect(service.startScan(owner, "repo-1", { profile: "SOURCE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    state.scopes.push({ id: "scope-1", workspaceId: "ws-1", targetId: "t-1", name: "repo scope", rules: {} });
+    await expect(service.startScan(owner, "repo-1", { profile: "SOURCE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(started).toEqual([]);
+    expect(state.assessments).toHaveLength(0);
+  });
+
+  it("scan start refuses a self-approved assessment (approver == creator or == starter)", async () => {
+    const state = freshState();
+    const { service, started } = makeService(state);
+    await service.verifyRepository(owner, "repo-1");
+    state.scopes.push({ id: "scope-1", workspaceId: "ws-1", targetId: "t-1", name: "repo scope", rules: {} });
+    state.assessments.push({
+      id: "as-self", workspaceId: "ws-1", targetId: "t-1", scopeId: "scope-1", profile: "SOURCE_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-creator",
+    });
+    await expect(service.startScan(owner, "repo-1", { profile: "SOURCE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    state.assessments[0] = { ...state.assessments[0], createdBy: "u-creator", approvedBy: owner.id };
+    await expect(service.startScan(owner, "repo-1", { profile: "SOURCE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(started).toEqual([]);
+  });
+
+  it("verify refuses registrant self-verification; an independent OWNER approves, or a completed DNS challenge proves ownership", async () => {
+    const engineer = { id: "u-se", email: "se@example.com", organizationId: "org-1", role: "SECURITY_ENGINEER" as const };
+    const state = freshState();
+    (state.repos[0] as Record<string, unknown>).createdBy = "u-se";
+    (state.targets[0] as Record<string, unknown>).createdBy = "u-se";
+    const { service } = makeService(state);
+    // The registrant (even with MANAGE permission) cannot self-verify.
+    await expect(service.verifyRepository(engineer, "repo-1")).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.verifications).toHaveLength(0);
+    expect(state.targets[0]?.verified).toBe(false);
+    // A completed DNS_TXT challenge is real proof — no manual row minted.
+    state.verifications.push({ targetId: "t-1", method: "DNS_TXT", challenge: "dsrclone-verify=x", status: "VERIFIED" });
+    const out = await service.verifyRepository(engineer, "repo-1");
+    expect(out.verified).toBe(true);
+    expect(state.verifications).toHaveLength(1);
+  });
+
+  it("verify via manual approval requires OWNER/ADMIN other than the registrant", async () => {
+    const engineer = { id: "u-se", email: "se@example.com", organizationId: "org-1", role: "SECURITY_ENGINEER" as const };
+    const state = freshState();
+    (state.repos[0] as Record<string, unknown>).createdBy = "u-se";
+    (state.targets[0] as Record<string, unknown>).createdBy = "u-se";
+    const { service } = makeService(state);
+    await expect(service.verifyRepository(engineer, "repo-1")).rejects.toBeInstanceOf(BadRequestException);
+    const out = await service.verifyRepository(owner, "repo-1");
+    expect(out.verified).toBe(true);
+    expect(state.verifications.some((v) => v.method === "MANUAL_APPROVAL" && v.status === "VERIFIED")).toBe(true);
   });
 
   it("secret surfaces return metadata only — no value-shaped field exists (§40/§101)", async () => {

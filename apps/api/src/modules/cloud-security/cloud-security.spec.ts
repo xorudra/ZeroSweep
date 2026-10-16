@@ -207,12 +207,27 @@ describe("Prompt 14 API — accounts", () => {
   it("scan start is gated on a VERIFIED account target (§4)", async () => {
     const state = freshState();
     const svc = makeService(state);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-aws", name: "cloud scope", rules: {} });
+    state.engagements.push({
+      id: "asm-1", workspaceId: "ws-1", targetId: "t-aws", scopeId: "scp-1", profile: "CLOUD_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const out = await svc.startAccountScan(owner, "acct-1", {});
     expect(out.scanId).toBe("scan-1");
+    expect(state.scopes).toHaveLength(1);
+    expect(state.engagements).toHaveLength(1);
     expect(state.audits.some((a) => a.action === "CLOUD_SCAN_STARTED")).toBe(true);
     (state.targets[0] as Record<string, unknown>).verified = false;
     await expect(svc.startAccountScan(owner, "acct-1", {})).rejects.toBeInstanceOf(BadRequestException);
     await expect(svc.startAccountScan(viewer, "acct-1", {})).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("scan start refuses when no pre-approved assessment exists — and mints neither scope nor assessment", async () => {
+    const state = freshState();
+    const svc = makeService(state);
+    await expect(svc.startAccountScan(owner, "acct-1", {})).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.scopes).toHaveLength(0);
+    expect(state.engagements).toHaveLength(0);
   });
 
   it("account views expose the reference NAME only — never a credential value (§78)", async () => {

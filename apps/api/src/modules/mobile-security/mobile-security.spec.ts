@@ -238,9 +238,26 @@ describe("Prompt 17 API — scans, findings, endpoints (§100)", () => {
   it("starts a gated scan for a verified target and audits it", async () => {
     const state = freshState();
     const svc = makeService(state);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-mob", name: "mobile scope", rules: {} });
+    state.assessments.push({
+      id: "eng-1", workspaceId: "ws-1", targetId: "t-mob", scopeId: "scp-1", profile: "MOBILE_STATIC_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const res = await svc.startScan(owner, "app-1", { profile: "MOBILE_STATIC_BASELINE" });
     expect(res.scanId).toBe("scan-1");
+    expect(state.scopes).toHaveLength(1);
+    expect(state.assessments).toHaveLength(1);
     expect(state.audits.some((a) => a.action === "MOBILE_STATIC_SCAN_STARTED")).toBe(true);
+  });
+
+  it("scan start refuses when no pre-approved assessment exists — and mints neither scope nor assessment", async () => {
+    const state = freshState();
+    const svc = makeService(state);
+    await expect(svc.startScan(owner, "app-1", { profile: "MOBILE_STATIC_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-mob", name: "mobile scope", rules: {} });
+    await expect(svc.startScan(owner, "app-1", { profile: "MOBILE_STATIC_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.scopes).toHaveLength(1);
+    expect(state.assessments).toHaveLength(0);
   });
 
   it("refuses scans for unverified targets and dynamic scans for analysts", async () => {

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { promises as dns } from "node:dns";
+import { request as httpsRequest } from "node:https";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { createTargetSchema, paginationSchema } from "@dsrclone/validation";
 import { blockedTargetReason, cloudEndpointVerdict } from "@dsrclone/security-sdk";
@@ -9,8 +10,44 @@ import { assertTargetInOrg, resolveWorkspace } from "../../common/tenant";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";
 
+/** Pinned HTTPS fetch seam: connects to the already-validated
+ *  `address` while TLS SNI + certificate validation keep the original
+ *  hostname, so the name is never re-resolved at fetch time (DNS
+ *  rebinding TOCTOU). Redirects are never followed — a 3xx resolves
+ *  with ok=false. Overridable in tests (same pattern as the
+ *  notification router's resolver seam). */
+export type PinnedFetch = (
+  url: string, address: string, family: number,
+) => Promise<{ ok: boolean; status: number; text: string }>;
+
+export const pinnedHttpsFetch: PinnedFetch = (url, address, family) => new Promise((resolve, reject) => {
+  const u = new URL(url);
+  const req = httpsRequest(
+    {
+      hostname: u.hostname, servername: u.hostname, port: 443,
+      path: `${u.pathname}${u.search}`, method: "GET",
+      lookup: (_hostname, _options, callback) => callback(null, address, family),
+      timeout: 5000,
+    },
+    (res) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= 65536) chunks.push(chunk); });
+      res.on("end", () => resolve({
+        ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+        status: res.statusCode ?? 0,
+        text: Buffer.concat(chunks).toString("utf8"),
+      }));
+    },
+  );
+  req.on("timeout", () => req.destroy(new Error("pinned fetch timed out")));
+  req.on("error", reject);
+  req.end();
+});
+
 @Injectable()
 export class TargetsService {
+  pinnedFetch: PinnedFetch = pinnedHttpsFetch;
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClientLike,
     private readonly audit: AuditService,
@@ -92,8 +129,10 @@ export class TargetsService {
       // a blocked loopback/private/link-local/metadata range) AND every
       // address the host resolves to must clear blockedTargetReason —
       // a public name resolving into private space is refused too.
-      // Redirects are never followed (redirect: "manual"): a redirect
-      // is simply a failed check, never a fetch of the redirect target.
+      // The fetch itself is PINNED to the first validated address
+      // (pinnedHttpsFetch): the hostname is never re-resolved at fetch
+      // time, closing the DNS-rebinding TOCTOU between check and fetch.
+      // Redirects are never followed: a redirect is a failed check.
       const url = `https://${target.value}/.well-known/dsrclone-verification.txt`;
       const verdict = cloudEndpointVerdict(url);
       if (!verdict.allowed) {
@@ -104,8 +143,9 @@ export class TargetsService {
           if (addresses.length === 0 || addresses.some((a) => blockedTargetReason(a.address))) {
             verified = false;
           } else {
-            const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(5000) });
-            verified = res.ok && (await res.text()).includes(verification.challenge);
+            const pinned = addresses[0]!;
+            const res = await this.pinnedFetch(url, pinned.address, pinned.family);
+            verified = res.ok && res.text.includes(verification.challenge);
           }
         } catch { verified = false; }
       }

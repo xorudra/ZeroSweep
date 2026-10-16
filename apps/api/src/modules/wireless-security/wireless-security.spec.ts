@@ -166,10 +166,24 @@ describe("Prompt 19 API — environments & gated scans (§77/§94/§95)", () => 
     const state = freshState();
     const svc = makeService(state);
     await expect(svc.startScan(owner, "env-2", { profile: "WIRELESS_PASSIVE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    state.planScopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-wl", name: "wireless scope", rules: {} });
+    state.assessments.push({
+      id: "eng-1", workspaceId: "ws-1", targetId: "t-wl", scopeId: "scp-1", profile: "WIRELESS_PASSIVE_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const started = await svc.startScan(owner, "env-1", { profile: "WIRELESS_PASSIVE_BASELINE" });
     expect((started as { scanId?: string }).scanId).toBe("scan-1");
     expect(state.sessions.some((s) => s.environmentId === "env-1")).toBe(true);
     expect(state.audits.some((a) => a.action === "WIRELESS_SCAN_STARTED")).toBe(true);
+  });
+
+  it("scan start refuses when no pre-approved assessment exists — and mints neither scope nor assessment", async () => {
+    const state = freshState();
+    const svc = makeService(state);
+    await expect(svc.startScan(owner, "env-1", { profile: "WIRELESS_PASSIVE_BASELINE" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.planScopes).toHaveLength(0);
+    expect(state.assessments).toHaveLength(0);
+    expect(state.sessions).toHaveLength(0);
   });
 
   it("tenant isolation: org B cannot read org A's environment (§95)", async () => {

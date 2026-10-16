@@ -139,6 +139,11 @@ describe("Prompt 13 API — container images", () => {
     const svc = makeService(state);
     await expect(svc.startImageScan(owner, "img-1", {})).rejects.toBeInstanceOf(BadRequestException);
     (state.targets[0] as Record<string, unknown>).verified = true;
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-img", name: "image scope", rules: {} });
+    state.engagements.push({
+      id: "asm-1", workspaceId: "ws-1", targetId: "t-img", scopeId: "scp-1", profile: "CONTAINER_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const out = await svc.startImageScan(owner, "img-1", { profile: "CONTAINER_BASELINE" });
     expect(out.scanId).toBe("scan-1");
     expect(state.audits.some((a) => a.action === "CONTAINER_SCAN_STARTED")).toBe(true);
@@ -189,9 +194,26 @@ describe("Prompt 13 API — registries & clusters", () => {
   it("cluster scan runs on the verified fixture cluster (§91)", async () => {
     const state = freshState();
     const svc = makeService(state);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-clu", name: "cluster scope", rules: {} });
+    state.engagements.push({
+      id: "asm-1", workspaceId: "ws-1", targetId: "t-clu", scopeId: "scp-1", profile: "KUBERNETES_BASELINE",
+      status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver",
+    });
     const out = await svc.startClusterScan(owner, "clu-1", {});
     expect(out.scanId).toBe("scan-1");
     expect(state.audits.some((a) => a.action === "KUBERNETES_SCAN_STARTED")).toBe(true);
+  });
+});
+
+describe("Prompt 13 API — scan-start governance (no auto-approval)", () => {
+  it("scan start refuses when no pre-approved assessment exists — and mints neither scope nor assessment", async () => {
+    const state = freshState();
+    const svc = makeService(state);
+    await expect(svc.startClusterScan(owner, "clu-1", {})).rejects.toBeInstanceOf(BadRequestException);
+    state.scopes.push({ id: "scp-1", workspaceId: "ws-1", targetId: "t-clu", name: "cluster scope", rules: {} });
+    await expect(svc.startClusterScan(owner, "clu-1", {})).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.scopes).toHaveLength(1);
+    expect(state.engagements).toHaveLength(0);
   });
 });
 
