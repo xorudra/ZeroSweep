@@ -298,6 +298,7 @@ export class FakeStore implements ScanRunStore {
       auth: TEST_AUTH, targetHost: this.networkTarget?.targetHost ?? "example.com", scopeRules: this.networkTarget?.scope ?? TEST_SCOPE, targetExists: true,
       targetWorkspaceId: "ws-1", workspaceId: "ws-1",
       targetVerified: this.verified, assessmentApproved: true, scopeValid: true,
+      assessmentCreatedBy: "u-creator", assessmentApprovedBy: "u-approver",
     };
   }
 
@@ -331,6 +332,7 @@ export class FakeStore implements ScanRunStore {
       targetType: this.targetType, targetValue: this.networkTarget?.targetValue ?? "example.com", targetHost: this.networkTarget?.targetHost ?? "example.com", scopeRules: this.networkTarget?.scope ?? TEST_SCOPE,
       auth: TEST_AUTH, targetExists: true, targetWorkspaceId: "ws-1",
       targetVerified: this.verified, assessmentApproved: true, scopeValid: true,
+      assessmentCreatedBy: "u-creator", assessmentApprovedBy: "u-approver",
       networkCapable: planned.networkCapable,
       profile: this.plan.profile,
       assessmentId: "a-1",

@@ -34,6 +34,7 @@ export function hostOf(value: string): string {
 interface LoadedAssessment {
   assessment: {
     id: string; workspaceId: string; profile: string; status: string; scopeId: string | null;
+    createdBy: string; approvedBy: string | null;
     target: { id: string; type: string; value: string; verified: boolean };
     scope: { rules: unknown } | null;
   };
@@ -287,6 +288,8 @@ export class OrchestrationService {
       workspaceId: loaded.workspaceId,
       targetVerified: target.verified,
       assessmentApproved: assessment.status === "APPROVED",
+      assessmentCreatedBy: assessment.createdBy,
+      assessmentApprovedBy: assessment.approvedBy ?? null,
       scopeValid: loaded.scopeValid,
     });
     if (!gate.allowed) {
@@ -411,6 +414,8 @@ export class OrchestrationService {
       targetExists: true, targetWorkspaceId: workspace.id, workspaceId: workspace.id,
       targetVerified: scan.assessment.target.verified,
       assessmentApproved: scan.assessment.status === "APPROVED",
+      assessmentCreatedBy: scan.assessment.createdBy,
+      assessmentApprovedBy: scan.assessment.approvedBy ?? null,
       scopeValid: scopeParse.success,
     });
     if (!gate.allowed) throw new BadRequestException(`Resume refused: ${gate.message} (${gate.reasonCode})`);

@@ -88,7 +88,7 @@ export class TargetsService {
     const challenge = `dsrclone-verify=${randomBytes(16).toString("hex")}`;
     const verification = await this.prisma.targetVerification.create({
       data: {
-        targetId: target.id, method,
+        targetId: target.id, method, requestedBy: user.id,
         challenge: method === "HTTP_FILE" ? `${challenge}` : challenge,
         expiresAt: new Date(Date.now() + 72 * 3600 * 1000),
       },
@@ -119,7 +119,13 @@ export class TargetsService {
         verified = records.flat().some((r) => r.includes(verification.challenge));
       } catch { verified = false; }
     } else if (verification.method === "MANUAL_APPROVAL") {
-      verified = user.role === "OWNER" || user.role === "ADMIN";
+      // Independence (security audit 2026-10-16 run-2): manual approval is
+      // a second-person control — the approver must be an OWNER/ADMIN who
+      // is neither the target's creator nor the person who opened this
+      // verification. Role alone never verifies a target.
+      verified = (user.role === "OWNER" || user.role === "ADMIN")
+        && user.id !== target.createdBy
+        && (verification.requestedBy == null || user.id !== verification.requestedBy);
     } else {
       // HTTP_FILE check fetches the well-known file over HTTPS (plain
       // ownership proof, not a security scan). Launch Safety A5: the URL

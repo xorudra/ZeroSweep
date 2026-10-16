@@ -62,6 +62,8 @@ describe("authorization + scope gate (§11–§12)", () => {
     auth, targetHost: "example.com", scopeRules: scope,
     targetExists: true, targetWorkspaceId: "w-1", workspaceId: "w-1",
     targetVerified: true, assessmentApproved: true, scopeValid: true,
+    // Independent approval: creator u-2, approver u-3, requester u-1.
+    assessmentCreatedBy: "u-2", assessmentApprovedBy: "u-3",
   };
 
   it("allows a verified, approved, in-scope target", () => {
@@ -72,6 +74,11 @@ describe("authorization + scope gate (§11–§12)", () => {
     expect(evaluateAuthorizationGate({ ...gate, assessmentApproved: false }).reasonCode).toBe("ASSESSMENT_NOT_APPROVED");
     expect(evaluateAuthorizationGate({ ...gate, targetWorkspaceId: "other" }).reasonCode).toBe("WORKSPACE_MISMATCH");
     expect(evaluateAuthorizationGate({ ...gate, auth: { ...auth, verificationStatus: "PENDING" as const } }).reasonCode).toBe("TARGET_NOT_VERIFIED");
+  });
+  it("denies self-approved and requester-approved assessments (run-2 independence)", () => {
+    expect(evaluateAuthorizationGate({ ...gate, assessmentApprovedBy: "u-2" }).reasonCode).toBe("ASSESSMENT_NOT_APPROVED"); // approver == creator
+    expect(evaluateAuthorizationGate({ ...gate, assessmentApprovedBy: "u-1" }).reasonCode).toBe("ASSESSMENT_NOT_APPROVED"); // approver == requester
+    expect(evaluateAuthorizationGate({ ...gate, assessmentApprovedBy: null }).reasonCode).toBe("ASSESSMENT_NOT_APPROVED"); // no recorded approver
   });
   it("denies a target host outside the approved scope — discovered assets never expand it", () => {
     expect(evaluateAuthorizationGate({ ...gate, targetHost: "third-party-cdn.example.net" }).reasonCode).toBe("TARGET_OUT_OF_SCOPE");

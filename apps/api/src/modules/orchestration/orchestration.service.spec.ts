@@ -23,6 +23,9 @@ function makePrisma(overrides: { verified?: boolean; status?: string; targetValu
   const assessment = {
     id: "a-1", workspaceId: "ws-org-1", profile: "PASSIVE_RECON",
     status: overrides.status ?? "APPROVED", scopeId: "s-1",
+    // Independent approval (run-2 gate): creator u-2, approver u-3; the
+    // acting user is u-1.
+    createdBy: "u-2", approvedBy: "u-3",
     target: { id: "t-1", type: "DOMAIN", value: overrides.targetValue ?? "example.com", verified: overrides.verified ?? true },
     scope: { rules: SCOPE },
   };

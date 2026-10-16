@@ -20,6 +20,13 @@ export interface GateInput {
   workspaceId: string;
   targetVerified: boolean;
   assessmentApproved: boolean;
+  /** Approval independence (security audit 2026-10-16 run-2): the gate
+   *  refuses an APPROVED assessment whose approval was not independent —
+   *  approvedBy must be recorded and differ from both the assessment's
+   *  creator and the scan requester. Closes the generic scan-start path
+   *  that consumed only the APPROVED boolean. */
+  assessmentCreatedBy: string;
+  assessmentApprovedBy: string | null;
   scopeValid: boolean;
 }
 
@@ -39,6 +46,12 @@ export function evaluateAuthorizationGate(input: GateInput): GateResult {
   }
   if (!input.assessmentApproved || (input.auth.approvalStatus !== "APPROVED" && input.auth.approvalStatus !== "NOT_REQUIRED")) {
     return { allowed: false, reasonCode: "ASSESSMENT_NOT_APPROVED", message: "Assessment is not approved" };
+  }
+  if (input.auth.approvalStatus === "APPROVED") {
+    const approver = input.assessmentApprovedBy;
+    if (!approver || approver === input.assessmentCreatedBy || approver === input.auth.requestedBy) {
+      return { allowed: false, reasonCode: "ASSESSMENT_NOT_APPROVED", message: "Assessment approval must be independent: recorded, and granted by someone other than its creator or the scan requester" };
+    }
   }
   if (!input.scopeValid) return { allowed: false, reasonCode: "SCOPE_INVALID", message: "Scope rules are invalid" };
   const matcher = new ScopeMatcher(input.scopeRules);

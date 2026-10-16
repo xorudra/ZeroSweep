@@ -1224,6 +1224,10 @@ model TargetVerification {
   targetId   String
   method     VerificationMethod
   challenge  String // e.g. the DNS TXT value the owner must publish
+  // Who opened this verification (security audit 2026-10-16 run-2): a
+  // MANUAL_APPROVAL check must be independent of both the target's
+  // creator and this requester. Null on rows predating the column.
+  requestedBy String?
   status     VerificationStatus @default(PENDING)
   verifiedAt DateTime?
   expiresAt  DateTime?

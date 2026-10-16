@@ -156,7 +156,9 @@ export class WebVaptService {
     const verification = await this.prisma.targetVerification.findFirst({ where: { targetId: target.targetId }, orderBy: { createdAt: "desc" } });
     return {
       targetVerified: parent?.verified === true,
-      activeAuthorization: assessment?.status === "APPROVED",
+      // Approval independence (security audit 2026-10-16 run-2): APPROVED
+      // counts only when a recorded approver other than the creator granted it.
+      activeAuthorization: assessment?.status === "APPROVED" && !!assessment.approvedBy && assessment.approvedBy !== assessment.createdBy,
       ...(verification?.expiresAt ? { expiresAt: verification.expiresAt as Date } : {}),
     };
   }

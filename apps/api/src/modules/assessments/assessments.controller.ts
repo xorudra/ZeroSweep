@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
 import { createAssessmentSchema, paginationSchema } from "@dsrclone/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
@@ -63,6 +63,10 @@ export class AssessmentsController {
     const workspace = await resolveWorkspace(this.prisma, user);
     const assessment = await this.prisma.assessment.findFirst({ where: { id, workspaceId: workspace.id } });
     if (!assessment) throw new NotFoundException("Assessment not found");
+    // Approval independence (security audit 2026-10-16 run-2): the
+    // creator can never approve their own assessment — approval is the
+    // second-person control the whole scan gate rests on.
+    if (assessment.createdBy === user.id) throw new ForbiddenException("You cannot approve your own assessment — approval must come from another owner or admin");
     const updated = await this.prisma.assessment.update({ where: { id }, data: { status: "APPROVED", approvedBy: user.id } });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: workspace.id, action: "ASSESSMENT_APPROVED", resourceType: "Assessment", resourceId: id });
     return updated;

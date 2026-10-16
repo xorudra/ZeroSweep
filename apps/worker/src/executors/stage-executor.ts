@@ -65,6 +65,8 @@ export interface ExecutionContextRecord {
   targetWorkspaceId: string;
   targetVerified: boolean;
   assessmentApproved: boolean;
+  assessmentCreatedBy: string;
+  assessmentApprovedBy: string | null;
   scopeValid: boolean;
   networkCapable: boolean;
   /** Discovery inputs produced by earlier stages (Prompt 5 §26): in-scope
@@ -277,6 +279,7 @@ export class StageExecutor {
         auth: ctx.auth, targetHost: ctx.targetHost, scopeRules: ctx.scopeRules,
         targetExists: ctx.targetExists, targetWorkspaceId: ctx.targetWorkspaceId, workspaceId: ctx.workspaceId,
         targetVerified: ctx.targetVerified, assessmentApproved: ctx.assessmentApproved, scopeValid: ctx.scopeValid,
+        assessmentCreatedBy: ctx.assessmentCreatedBy, assessmentApprovedBy: ctx.assessmentApprovedBy,
       });
       if (!gate.allowed) {
         await emit(gate.reasonCode === "TARGET_OUT_OF_SCOPE" ? "scope.violation" : "policy.denied", { stageId: ctx.stageId, reasonCode: gate.reasonCode });

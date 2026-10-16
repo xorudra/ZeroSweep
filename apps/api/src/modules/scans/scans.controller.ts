@@ -46,6 +46,11 @@ export class ScansController {
     });
     if (!assessment) throw new NotFoundException("Assessment not found");
     if (assessment.status !== "APPROVED") throw new BadRequestException("Assessment must be APPROVED before a scan can be requested");
+    // Approval independence (security audit 2026-10-16 run-2), mirroring
+    // the orchestration gate: a self-approved assessment authorizes nothing.
+    if (!assessment.approvedBy || assessment.approvedBy === assessment.createdBy || assessment.approvedBy === user.id) {
+      throw new BadRequestException("Assessment approval must be independent: recorded, and granted by someone other than its creator or the scan requester");
+    }
     if (!assessment.target.verified) throw new BadRequestException("Target ownership must be verified before a scan can be requested");
     const scan = await this.prisma.scan.create({
       data: { workspaceId: workspace.id, assessmentId: assessment.id, status: "QUEUED", requestedBy: user.id },

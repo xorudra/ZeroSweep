@@ -94,6 +94,11 @@ export class NetworkVaptService {
       : await this.prisma.assessment.findFirst({ where: { workspaceId: workspace.id, targetId: parent.id, status: "APPROVED" } });
     if (!assessment) throw new BadRequestException("An APPROVED assessment (the authorization record) is required before a network target can be created (§7)");
     if (assessment.status !== "APPROVED") throw new BadRequestException(`Assessment is ${assessment.status}, not APPROVED — no authorization exists for active network operations (§7)`);
+    // Approval independence (security audit 2026-10-16 run-2): a
+    // self-approved assessment is not an authorization record.
+    if (!assessment.approvedBy || assessment.approvedBy === assessment.createdBy) {
+      throw new BadRequestException("Assessment approval must be independent: recorded, and granted by someone other than its creator (§7)");
+    }
 
     const requestedType = String(body.targetType ?? "");
     if (requestedType && !TARGET_TYPES.includes(requestedType)) throw new BadRequestException(`targetType must be one of ${TARGET_TYPES.join(", ")} (§4)`);

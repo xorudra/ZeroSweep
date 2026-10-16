@@ -65,7 +65,7 @@ function makeService() {
       { id: "target-2", workspaceId: "ws-1", verified: false, assetId: "asset-1", host: "unverified.example.com" },
     ]),
     targetVerification: makeTable([]),
-    assessment: makeTable([{ id: "assess-1", workspaceId: "ws-1", targetId: "target-1", status: "APPROVED" }]),
+    assessment: makeTable([{ id: "assess-1", workspaceId: "ws-1", targetId: "target-1", status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver" }]),
     credential: makeTable([{ id: "cred-1", workspaceId: "ws-1", name: "nessus-creds" }]),
     networkVaptTarget: makeTable([
       { id: "nvt-other", workspaceId: "ws-other", assetId: "asset-1", targetId: "target-1", authorizationId: "assess-1", targetType: "IP", targetValue: "203.0.113.5", scanProfileId: "NETWORK_SAFE" },

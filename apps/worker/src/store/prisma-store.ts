@@ -93,6 +93,8 @@ export class PrismaWorkerStore implements ScanRunStore {
       targetWorkspaceId: graph.workspaceId,
       targetVerified: target.verified,
       assessmentApproved: graph.assessment.status === "APPROVED",
+      assessmentCreatedBy: graph.assessment.createdBy,
+      assessmentApprovedBy: graph.assessment.approvedBy ?? null,
       scopeValid: scopeParse.success,
       // Prompt 12 (§12): source context resolved from repository +
       // snapshot rows — workspace paths never come from client input.
@@ -4074,6 +4076,8 @@ export class PrismaWorkerStore implements ScanRunStore {
         workspaceId: graph.workspaceId,
         targetVerified: target.verified,
         assessmentApproved: graph.assessment.status === "APPROVED",
+        assessmentCreatedBy: graph.assessment.createdBy,
+        assessmentApprovedBy: graph.assessment.approvedBy ?? null,
         scopeValid: scopeParse.success,
       },
     };

@@ -61,7 +61,7 @@ function makeService() {
       { id: "target-3", workspaceId: "ws-1", verified: true },
     ]),
     targetVerification: makeTable([]),
-    assessment: makeTable([{ id: "assess-1", workspaceId: "ws-1", targetId: "target-1", status: "APPROVED" }]),
+    assessment: makeTable([{ id: "assess-1", workspaceId: "ws-1", targetId: "target-1", status: "APPROVED", createdBy: "u-creator", approvedBy: "u-approver" }]),
     authenticationProfile: makeTable([]),
     webVaptTarget: makeTable([
       { id: "wvt-other", workspaceId: "ws-other", assetId: "asset-1", targetId: "target-1", authorizationId: "assess-1", normalizedOrigin: "https://staging.example.com", environment: "STAGING", scanProfileKey: "WEB_SAFE" },
