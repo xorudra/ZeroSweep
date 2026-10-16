@@ -252,9 +252,26 @@ export class GrcAuditService {
 
   async grantAuditorAccess(user: RequestUser, workspaceId: string, input: GrantAuditorAccessInput) {
     requireGrcPermission(user, "MANAGE_AUDITS");
+    // Time-limited means bounded (§74/§75): expiry must be in the future
+    // and within 90 days — enforced here as well as in the DTO schema so
+    // no caller can mint a de-facto permanent grant.
+    const expiresMs = new Date(input.expiresAt).getTime();
+    const nowMs = Date.now();
+    if (!Number.isFinite(expiresMs) || expiresMs <= nowMs || expiresMs > nowMs + 90 * 86400000) {
+      throw new BadRequestException('expiresAt must be in the future and within 90 days');
+    }
+    // Explicit-share (§74/§75): the grantee must be a real member of this
+    // workspace, and every shared evidence id must exist in it — mirroring
+    // the assessmentIds validation below.
+    const member = await this.prisma.workspaceMembership.findFirst({ where: { workspaceId, userId: input.userId } });
+    if (!member) throw new BadRequestException('Grantee is not a member of this workspace');
     for (const assessmentId of input.assessmentIds) {
       const a = await this.prisma.complianceAssessment.findFirst({ where: { id: assessmentId, workspaceId } });
       if (!a) throw new BadRequestException(`Assessment ${assessmentId} does not exist in this workspace`);
+    }
+    for (const evidenceId of input.evidenceIds ?? []) {
+      const ev = await this.prisma.complianceEvidence.findFirst({ where: { id: evidenceId, workspaceId } });
+      if (!ev) throw new BadRequestException('Evidence ' + evidenceId + ' does not exist in this workspace');
     }
     const row = await this.prisma.auditorAccessGrant.create({
       data: {

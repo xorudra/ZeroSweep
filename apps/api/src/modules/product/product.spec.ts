@@ -102,6 +102,19 @@ describe("signup & provisioning (§58–§64, §82–§84, §231, §290)", () =>
     expect(await s.db.organization.count({})).toBe(1);
   });
 
+  it("invite-only deployments refuse product signup exactly like auth registration, creating nothing", async () => {
+    const s = makeStack();
+    await seedPlan(s.db, "TRIAL", "SAAS", []);
+    process.env.REGISTRATION_MODE = "invite-only";
+    try {
+      await expect(s.provisioning.signup({ name: "A", email: "a@example.com", password: "long-password-1", organizationName: "One", slug: "one-org" })).rejects.toThrow(/invite-only/i);
+      expect(await s.db.organization.count({})).toBe(0);
+      expect(await s.db.user.count({})).toBe(0);
+    } finally {
+      delete process.env.REGISTRATION_MODE;
+    }
+  });
+
   it("email verification is single-use and expiring (§60)", async () => {
     const s = makeStack();
     await seedPlan(s.db, "TRIAL", "SAAS", []);
@@ -174,6 +187,17 @@ describe("usage metering (§38–§44, §214, §218)", () => {
     expect(await s.db.usageEvent.count({})).toBe(1);
     const usage = await s.usage.getUsage("org-1", new Date(Date.now() - 86400_000), new Date(Date.now() + 86400_000));
     expect(usage.find((u) => u.metric === "SCAN_JOBS")?.quantity).toBe(1);
+  });
+
+  it("stored idempotency keys are HMAC-namespaced, quantities must be integral, workspace must belong to the org", async () => {
+    const s = makeStack();
+    const first = await s.usage.record("org-1", { metric: "SCAN_JOBS", quantity: 2, source: "orchestration", idempotencyKey: "scan:9:SCAN_JOBS" });
+    expect(first.event.idempotencyKey).not.toBe("scan:9:SCAN_JOBS");
+    expect(first.event.idempotencyKey).toMatch(/^[a-f0-9]{64}$/);
+    await expect(s.usage.record("org-1", { metric: "SCAN_JOBS", quantity: 0.5, source: "orchestration", idempotencyKey: "frac:1" })).rejects.toThrow(/positive integer/);
+    await expect(s.usage.record("org-1", { metric: "STORAGE_BYTES", quantity: 100, source: "storage", workspaceId: "ws-of-org-2", idempotencyKey: "ws:1" })).rejects.toThrow(/does not belong/);
+    await s.db.workspace.create({ data: { id: "ws-own", organizationId: "org-1", name: "W" } });
+    await expect(s.usage.record("org-1", { metric: "STORAGE_BYTES", quantity: 100, source: "storage", workspaceId: "ws-own", idempotencyKey: "ws:2" })).resolves.toBeTruthy();
   });
 
   it("usage IDOR: org A cannot read or claim org B usage (§214)", async () => {

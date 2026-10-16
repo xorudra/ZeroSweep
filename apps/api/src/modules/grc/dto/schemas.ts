@@ -217,7 +217,7 @@ export const grantAuditorAccessSchema = z.object({
   userId: str(64),
   assessmentIds: z.array(z.string().max(64)).max(100),
   evidenceIds: z.array(z.string().max(64)).max(500).optional(),
-  expiresAt: z.string().datetime(),
+  expiresAt: z.string().datetime().refine((v) => { const t = new Date(v).getTime(); const now = Date.now(); return t > now && t <= now + 90 * 86400000; }, { message: 'expiresAt must be in the future and within 90 days' }),
 });
 export type GrantAuditorAccessInput = z.infer<typeof grantAuditorAccessSchema>;
 
@@ -271,6 +271,21 @@ export const createScheduleSchema = z.object({
   cron: str(120),
 });
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
+
+/** Backup restore bundle (§141): validated like every neighbouring
+ *  handler. `mac` is the keyed integrity proof issued at export time —
+ *  a bundle without a server-issued MAC is not restorable. State is a
+ *  map of table name → row objects; per-row field whitelisting and
+ *  reference validation happen in GrcBackupService. */
+export const restoreBundleSchema = z.object({
+  workspaceId: z.string().max(64).optional(),
+  hash: z.string().max(128).optional(),
+  mac: z.string().min(32).max(128),
+  exportedAt: z.string().datetime(),
+  confirm: z.boolean().optional(),
+  state: z.record(z.array(z.record(z.unknown()))),
+});
+export type RestoreBundleInput = z.infer<typeof restoreBundleSchema>;
 
 export const retentionSchema = z.object({
   assessmentRetentionDays: z.number().int().min(30).max(36500).optional(),

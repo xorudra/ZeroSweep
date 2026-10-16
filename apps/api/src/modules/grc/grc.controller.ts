@@ -8,7 +8,7 @@ import {
   aiAskSchema, assessVendorSchema, collectEvidenceSchema, createAssessmentSchema, createAuditFindingSchema,
   createAuditSchema, createControlSchema, createEvidenceRequestSchema, createMappingSchema, createPolicySchema,
   createReportSchema, createReviewSchema, createRiskSchema, createScheduleSchema, createTreatmentSchema,
-  createVendorSchema, decideAcceptanceSchema, grantAuditorAccessSchema, importFrameworkSchema,
+  createVendorSchema, decideAcceptanceSchema, grantAuditorAccessSchema, importFrameworkSchema, restoreBundleSchema,
   overrideFindingLinkSchema, recordSignalSchema, requestAcceptanceSchema, retentionSchema,
   reviewEvidenceSchema, reviewRequirementSchema, submitEvidenceRequestSchema, transitionPolicySchema,
   updateControlSchema, updateMatrixSchema, updateRiskSchema, uploadEvidenceSchema,
@@ -524,6 +524,6 @@ export class GrcController {
   @Post("backup/restore")
   async restoreBackup(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const ws = await this.ws(user);
-    return this.backup.restoreState(user, ws.id, body as never);
+    return this.backup.restoreState(user, ws.id, parseOrThrow(restoreBundleSchema, body ?? {}));
   }
 }

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { FRAMEWORK_CATALOG, GRC_DISCLAIMER } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
@@ -42,9 +42,20 @@ export class FrameworkService {
     return { ...framework, requirements, disclaimer: GRC_DISCLAIMER };
   }
 
+  /** The framework catalog is GLOBAL (no workspaceId) and consumed by
+   *  every tenant: writes are platform-operator operations. A tenant
+   *  OWNER/ADMIN role never suffices — the deployment platform-admin
+   *  flag is required, exactly like the platform-ops plane (§98). */
+  private requirePlatformAdmin(user: RequestUser) {
+    if (user.isPlatformAdmin !== true) {
+      throw new ForbiddenException("Shared framework catalog writes require a platform administrator; organization roles do not grant catalog access.");
+    }
+  }
+
   /** Import a versioned framework (catalog key or synthetic fixture, §121). */
   async importFramework(user: RequestUser, workspaceId: string, input: ImportFrameworkInput) {
     requireGrcPermission(user, "MANAGE_FRAMEWORKS");
+    this.requirePlatformAdmin(user);
     const existing = await this.prisma.complianceFramework.findFirst({
       where: { key: input.key, version: input.version },
     });
@@ -99,6 +110,7 @@ export class FrameworkService {
 
   async setFrameworkStatus(user: RequestUser, workspaceId: string, id: string, status: string) {
     requireGrcPermission(user, "MANAGE_FRAMEWORKS");
+    this.requirePlatformAdmin(user);
     if (!["DRAFT", "ACTIVE", "DEPRECATED", "RETIRED"].includes(status)) {
       throw new BadRequestException(`Unknown framework status ${status} (§5)`);
     }

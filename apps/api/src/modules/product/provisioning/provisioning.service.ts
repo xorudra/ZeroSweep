@@ -1,7 +1,8 @@
-import { BadRequestException, ConflictException, Inject, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
-import { isReservedSlug, isValidSlug } from "@dsrclone/security-sdk";
+import { isReservedSlug, isValidSlug, rateLimitDecision, type AttemptBucket } from "@dsrclone/security-sdk";
+import { registrationMode } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { ProductConfigService } from "../product-config.service";
@@ -45,6 +46,8 @@ export interface SignupResult {
  */
 @Injectable()
 export class CustomerProvisioningService {
+  private readonly attempts: AttemptBucket[] = [];
+
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClientLike,
     private readonly audit: AuditService,
@@ -57,7 +60,16 @@ export class CustomerProvisioningService {
     return createHash("sha256").update(raw).digest("hex");
   }
 
-  async signup(input: SignupInput): Promise<SignupResult> {
+  async signup(input: SignupInput, ip = "unknown"): Promise<SignupResult> {
+    // Invite-only deployments (REGISTRATION_MODE=invite-only): public
+    // sign-up is closed on EVERY registration surface — this parallel
+    // provisioning path must refuse exactly like AuthService.register,
+    // before any lookup or write. New accounts come only from
+    // organization invitation acceptance.
+    if (registrationMode() === "invite-only") {
+      throw new ForbiddenException("This deployment is invite-only. Public sign-up is closed — ask an organization admin to invite you.");
+    }
+    this.checkRegisterRateLimit(ip);
     const email = input.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException("A valid email address is required.");
     if (!input.password || input.password.length < 10) throw new BadRequestException("Password must be at least 10 characters.");
@@ -145,6 +157,20 @@ export class CustomerProvisioningService {
       emailVerificationToken: this.config.nodeEnv() === "production" ? null : rawToken,
       nextStep: "VERIFY_EMAIL",
     };
+  }
+
+  /** Per-IP signup rate limit with parity to AuthService.register:
+   *  10 per hour, same bucket machinery (§22). */
+  private checkRegisterRateLimit(ip: string) {
+    const key = `register|${ip}`;
+    const decision = rateLimitDecision(this.attempts, key, Date.now(), 10, 60 * 60_000);
+    if (!decision.allowed) {
+      throw new HttpException("Too many registration attempts — please try again later.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const now = Date.now();
+    const bucket = this.attempts.find((b) => b.key === key && now - b.windowStartMs < 60 * 60_000);
+    if (bucket) bucket.count += 1;
+    else this.attempts.push({ key, count: 1, windowStartMs: now });
   }
 
   /** §60: single-use, expiring, hashed-at-rest email verification. */

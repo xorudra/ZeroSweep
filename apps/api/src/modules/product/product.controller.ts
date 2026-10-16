@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { CurrentUser, Public, type RequestUser } from "../../common/decorators/auth.decorators";
+import { clientIp } from "../../common/middleware/request-id.middleware";
 import { parseOrThrow } from "../../common/parse";
 import { PlansService } from "./plans/plans.service";
 import { ProductConfigService } from "./product-config.service";
@@ -19,7 +21,7 @@ import { SupportDiagnosticsService } from "./diagnostics/diagnostics.service";
 import { UpgradePreflightService } from "./upgrade/upgrade-preflight.service";
 import {
   cancelSubscriptionSchema, changePlanSchema, completeStepSchema, deletionRequestSchema,
-  installLicenseSchema, recordUsageSchema, signupSchema, verifyEmailSchema,
+  installLicenseSchema, signupSchema, verifyEmailSchema,
 } from "./dto/product.dto";
 import { QUOTA_DIMENSIONS } from "@dsrclone/security-sdk";
 
@@ -54,8 +56,8 @@ export class ProductController {
 
   @Public()
   @Post("signup")
-  signup(@Body() body: unknown) {
-    return this.provisioning.signup(parseOrThrow(signupSchema, body));
+  signup(@Body() body: unknown, @Req() req: Request) {
+    return this.provisioning.signup(parseOrThrow(signupSchema, body), clientIp(req));
   }
 
   @Public()
@@ -219,13 +221,12 @@ export class ProductController {
     return { status: this.billing.status(), events, invoices };
   }
 
-  // ---- Metering (§38) — internal callers with org context; idempotent ---------------
-
-  @Post("usage/record")
-  recordUsage(@CurrentUser() user: RequestUser, @Body() body: unknown) {
-    const data = parseOrThrow(recordUsageSchema, body);
-    return this.usage.record(user.organizationId, data);
-  }
+  // ---- Metering (§38) ------------------------------------------------------------
+  // There is deliberately NO tenant route for recording usage: the
+  // UsageEvent ledger is authoritative for quota/billing, so writes are
+  // service-only (internal callers such as ProductGateService.recordScanUsage
+  // invoke UsageMeteringService directly). Tenants may only READ their own
+  // usage via GET /product/usage (VIEW_USAGE).
 
   // ---- Organization lifecycle (§86–§93) ----------------------------------------------
 
@@ -263,7 +264,11 @@ export class ProductController {
   }
 
   @Get("upgrade/preflight")
-  preflight(@Query("target") target?: string) {
+  preflight(@CurrentUser() user: RequestUser, @Query("target") target?: string) {
+    // Operator planning data (backup posture, worker compatibility) —
+    // gated exactly like the diagnostics sibling: MANAGE_LICENSE
+    // (OWNER/ADMIN), never any authenticated tenant user.
+    this.permissions.requireBillingPermission(user, "MANAGE_LICENSE");
     return this.upgradePreflight.preflight(target ?? "1.0.0");
   }
 }

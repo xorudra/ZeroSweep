@@ -122,7 +122,7 @@ const TABLES = [
   "riskMatrix", "riskRecord", "riskLink", "riskTreatmentPlan", "riskTreatmentAction",
   "riskAcceptance", "riskReview", "governancePolicy", "policyAcknowledgement",
   "auditEngagement", "auditEvidenceRequest", "auditFinding", "auditEvidencePackage",
-  "auditorAccessGrant", "findingControlLink", "thirdPartyVendor", "vendorRiskAssessment",
+  "auditorAccessGrant", "findingControlLink", "thirdPartyVendor", "vendorRiskAssessment", "workspaceMembership",
   "grcReportSnapshot", "grcRetentionPolicy", "riskException", "organizationSecurityPolicy",
   "passwordPolicy", "enterpriseSsoProvider", "accessReview", "webAuthnCredential",
   "securityPostureSnapshot", "finding", "scan", "softwareBillOfMaterials", "controlAssessment",
@@ -137,7 +137,7 @@ function makeFake() {
 
 /* ------------------------------------------------------------------ */
 
-const ADMIN: RequestUser = { id: "u-admin", email: "rudra@example.com", organizationId: "org-1", role: "OWNER" };
+const ADMIN: RequestUser = { id: "u-admin", email: "rudra@example.com", organizationId: "org-1", role: "OWNER", isPlatformAdmin: true };
 const ADMIN2: RequestUser = { id: "u-admin2", email: "second@example.com", organizationId: "org-1", role: "ADMIN" };
 const ANALYST: RequestUser = { id: "u-analyst", email: "analyst@example.com", organizationId: "org-1", role: "ANALYST" };
 const WS = "ws-1";
@@ -189,6 +189,20 @@ describe("framework import & versioning (§121/§122)", () => {
     const child = fw.requirements.find((r) => r.requirementId === "1.1")!;
     expect(child.parentRequirementId).toBe("1");
     expect(child.level).toBe(2);
+  });
+
+  it("shared catalog writes require a platform admin — tenant OWNER is not enough", async () => {
+    const s = makeStack();
+    const tenantOwner: RequestUser = { id: "u-tenant", email: "t@example.com", organizationId: "org-9", role: "OWNER" };
+    await expect(s.frameworks.importFramework(tenantOwner, WS, {
+      key: "POISON", name: "Poison", version: "1.0",
+      requirements: [{ requirementId: "1", title: "Root", level: 1 }],
+    })).rejects.toThrow(/platform administrator/);
+    await expect(s.frameworks.importCatalogFramework(tenantOwner, WS, "PCI_DSS")).rejects.toThrow(/platform administrator/);
+    await importCatalogs(s, ["PCI_DSS"]);
+    const fw = (await s.frameworks.listFrameworks(ADMIN)).items[0]!;
+    await expect(s.frameworks.setFrameworkStatus(tenantOwner, WS, fw.id, "RETIRED")).rejects.toThrow(/platform administrator/);
+    expect(await s.prisma.complianceFramework.count({})).toBe(1);
   });
 
   it("refuses re-import of a published version (immutable, §4)", async () => {
@@ -535,6 +549,9 @@ describe("audit packages (§132/§133) and auditor access (§134/§135)", () => 
   it("auditor grants are explicit-share only and expire (§134/§135)", async () => {
     const { s, assessment } = await packagedStack();
     const auditor: RequestUser = { id: "u-auditor", email: "auditor@external.example", organizationId: "org-1", role: "VIEWER" };
+    await s.prisma.workspaceMembership.create({
+      data: { id: "wm-auditor", workspaceId: WS, userId: auditor.id, organizationId: "org-1", role: "VIEWER", status: "ACTIVE" } as never,
+    });
     expect(await s.evidence.auditorCanAccess(auditor, WS, "assessment", assessment.id)).toBe(false);
     const grant = await s.audits.grantAuditorAccess(ADMIN, WS, {
       userId: auditor.id, assessmentIds: [assessment.id],
@@ -544,6 +561,30 @@ describe("audit packages (§132/§133) and auditor access (§134/§135)", () => 
     expect(await s.evidence.auditorCanAccess(auditor, WS, "assessment", "some-other-assessment")).toBe(false);
     await s.prisma.auditorAccessGrant.update({ where: { id: grant.id }, data: { expiresAt: new Date(Date.now() - 1000) } as never });
     expect(await s.evidence.auditorCanAccess(auditor, WS, "assessment", assessment.id)).toBe(false);
+  });
+
+  it("auditor grants reject non-members, unknown evidence and unbounded expiry", async () => {
+    const { s, assessment } = await packagedStack();
+    const member: RequestUser = { id: "u-member", email: "m@example.com", organizationId: "org-1", role: "VIEWER" };
+    await s.prisma.workspaceMembership.create({
+      data: { id: "wm-member", workspaceId: WS, userId: member.id, organizationId: "org-1", role: "VIEWER", status: "ACTIVE" } as never,
+    });
+    const soon = new Date(Date.now() + 3_600_000).toISOString();
+    await expect(s.audits.grantAuditorAccess(ADMIN, WS, {
+      userId: "u-stranger", assessmentIds: [assessment.id], expiresAt: soon,
+    })).rejects.toThrow(/not a member/);
+    await expect(s.audits.grantAuditorAccess(ADMIN, WS, {
+      userId: member.id, assessmentIds: [assessment.id], evidenceIds: ["no-such-evidence"], expiresAt: soon,
+    })).rejects.toThrow(/Evidence no-such-evidence does not exist/);
+    await expect(s.audits.grantAuditorAccess(ADMIN, WS, {
+      userId: member.id, assessmentIds: [assessment.id],
+      expiresAt: new Date("9999-01-01T00:00:00.000Z").toISOString(),
+    })).rejects.toThrow(/within 90 days/);
+    await expect(s.audits.grantAuditorAccess(ADMIN, WS, {
+      userId: member.id, assessmentIds: [assessment.id],
+      expiresAt: new Date(Date.now() - 3_600_000).toISOString(),
+    })).rejects.toThrow(/within 90 days/);
+    expect(await s.prisma.auditorAccessGrant.count({})).toBe(0);
   });
 
   it("audit findings stay separate from technical findings (§69/§70)", async () => {
@@ -633,6 +674,44 @@ describe("backup / restore (§141)", () => {
     expect(restoredEvidence!.hash).toBe(ev.hash);
     const tampered = { ...bundle, hash: "deadbeef" };
     await expect(s.backup.restoreState(ADMIN, WS2, tampered as never)).rejects.toThrow(/integrity check failed/);
+  });
+
+  it("a fully client-forged bundle (valid unkeyed hash, no server MAC) is refused; workflow fields are reset on restore", async () => {
+    const s = makeStack();
+    const control = await mfaControl(s);
+    const ev = await s.evidence.collect(ADMIN, WS, {
+      controlId: control.id, sourceType: "MFA_CONFIGURATION", sourceId: "org-policy",
+      snapshot: { mfaRequirement: "REQUIRED_FOR_ALL" },
+    });
+    // Forge approval on the source row: a restore must never carry it over.
+    await s.prisma.complianceEvidence.update({ where: { id: ev.id }, data: { reviewStatus: "APPROVED", reviewedBy: "u-forger" } as never });
+    const bundle = await s.backup.exportState(ADMIN, WS);
+    const forged = { ...bundle, mac: undefined } as unknown as typeof bundle;
+    await expect(s.backup.restoreState(ADMIN, WS2, forged as never)).rejects.toThrow(/integrity check failed/);
+    const badMac = { ...bundle, mac: "0".repeat(64) };
+    await expect(s.backup.restoreState(ADMIN, WS2, badMac as never)).rejects.toThrow(/integrity check failed/);
+    const restored = await s.backup.restoreState(ADMIN, WS2, bundle as never);
+    expect(restored.notRestored).toEqual([]);
+    const restoredEvidence = await s.prisma.complianceEvidence.findFirst({ where: { workspaceId: WS2 } });
+    expect(restoredEvidence!.reviewStatus).toBe("NOT_REQUIRED");
+    expect((restoredEvidence as { reviewedBy?: unknown }).reviewedBy).toBeUndefined();
+    expect(restoredEvidence!.createdBy).toBe(ADMIN.id);
+  });
+
+  it("restore refuses rows referencing controls/frameworks that do not exist in the target", async () => {
+    const s = makeStack();
+    const control = await mfaControl(s);
+    await s.evidence.collect(ADMIN, WS, {
+      controlId: control.id, sourceType: "MFA_CONFIGURATION", sourceId: "org-policy",
+      snapshot: { mfaRequirement: "REQUIRED_FOR_ALL" },
+    });
+    const bundle = await s.backup.exportState(ADMIN, WS);
+    // Re-seal a state whose evidence points at a nonexistent control:
+    // even a server-MAC-shaped bundle cannot smuggle dangling refs —
+    // here the MAC check itself must refuse the altered state.
+    const poisoned = structuredClone(bundle) as typeof bundle;
+    (poisoned.state.evidence[0] as Record<string, unknown>).controlId = "no-such-control";
+    await expect(s.backup.restoreState(ADMIN, WS2, poisoned as never)).rejects.toThrow(/integrity check failed/);
   });
 });
 

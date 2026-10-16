@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import { createHmac } from "node:crypto";
 import {
   USAGE_METRIC_DEFINITIONS, isUsageMetric, periodStart, type UsageMetric,
 } from "@dsrclone/security-sdk";
@@ -28,12 +29,33 @@ export interface RecordUsageInput {
 export class UsageMeteringService {
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
+  /** Stored idempotency keys are HMAC-namespaced with the deployment
+   *  secret: internal callers use predictable keys (scan:<id>:<metric>),
+   *  but the stored value is unguessable, so no outside party can
+   *  pre-claim a key to suppress or deflate real metering. */
+  private storedIdempotencyKey(raw: string): string {
+    const secret = process.env.JWT_SECRET ?? "change-me-local-dev-secret-at-least-32-chars";
+    return createHmac("sha256", secret).update(`usage:${raw}`).digest("hex");
+  }
+
   async record(organizationId: string, input: RecordUsageInput): Promise<{ event: any; duplicate: boolean }> {
     if (!isUsageMetric(input.metric)) {
       throw new BadRequestException(`Unknown usage metric '${input.metric}'. Canonical metrics: ${Object.keys(USAGE_METRIC_DEFINITIONS).join(", ")} (§41).`);
     }
     if (!input.idempotencyKey) throw new BadRequestException("Usage events require an idempotencyKey (§42).");
-    const existing = await (this.prisma as any).usageEvent.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    // Canonical metrics are counts (jobs, requests, tokens, bytes):
+    // fractional or non-finite quantities are never legitimate metering.
+    const quantity = input.quantity ?? 1;
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
+      throw new BadRequestException("Usage quantity must be a positive integer for count metrics (§41).");
+    }
+    // A caller-supplied workspaceId must belong to the metering organization.
+    if (input.workspaceId) {
+      const ws = await (this.prisma as any).workspace.findFirst({ where: { id: input.workspaceId, organizationId } });
+      if (!ws) throw new BadRequestException("workspaceId does not belong to this organization.");
+    }
+    const idempotencyKey = this.storedIdempotencyKey(input.idempotencyKey);
+    const existing = await (this.prisma as any).usageEvent.findUnique({ where: { idempotencyKey } });
     if (existing) {
       if (existing.organizationId !== organizationId) {
         throw new BadRequestException("Idempotency key already used by another organization.");
@@ -46,11 +68,11 @@ export class UsageMeteringService {
         organizationId,
         workspaceId: input.workspaceId ?? null,
         metric: input.metric,
-        quantity: input.quantity ?? 1,
+        quantity,
         source: input.source,
         reference: input.reference ?? null,
         occurredAt,
-        idempotencyKey: input.idempotencyKey,
+        idempotencyKey,
       },
     });
     await this.bumpAggregate(organizationId, input.metric as UsageMetric, input.quantity ?? 1, occurredAt, "DAILY");
