@@ -100,6 +100,52 @@ export function registrationMode(source: NodeJS.ProcessEnv = process.env): "open
   return source.REGISTRATION_MODE === "invite-only" ? "invite-only" : "open";
 }
 
+/**
+ * Tenant-controlled secret references (security audit 2026-10-16, critical
+ * `env-secret-reference-arbitrary-oidc-exfiltration`): a reference stored by
+ * a tenant (SSO client secret, webhook signing secret, connector credential)
+ * must NEVER be able to name a platform variable. The only resolvable
+ * `env:` names are operator-provisioned tenant slots, which the deployment
+ * names `TENANT_SECRET_<SLOT>`. Anything else resolves to null and the
+ * dependent feature honestly reports NOT_CONFIGURED.
+ */
+export const TENANT_SECRET_SLOT_PATTERN = /^TENANT_SECRET_[A-Z0-9_]{1,120}$/;
+
+export function isTenantSecretSlotReference(reference: string | null | undefined): boolean {
+  if (!reference || !reference.startsWith("env:")) return false;
+  return TENANT_SECRET_SLOT_PATTERN.test(reference.slice(4));
+}
+
+/** Resolve a tenant-controlled `env:` reference. Returns the value only for
+ *  operator-provisioned tenant slots; platform variables (JWT/session/DB/
+ *  provider secrets) are unreachable through this path by construction. */
+export function resolveTenantEnvSecret(
+  reference: string | null | undefined,
+  source: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (!isTenantSecretSlotReference(reference)) return null;
+  return source[(reference as string).slice(4)] ?? null;
+}
+
+/** Platform-critical variable names that NO reference resolver may ever
+ *  return, even on operator-side paths (scanner connector credentials):
+ *  a connector credential is never the platform's own signing/DB secret. */
+const PLATFORM_SECRET_NAMES: ReadonlySet<string> = new Set([
+  "JWT_SECRET",
+  "SESSION_SECRET",
+  "REFRESH_TOKEN_SECRET",
+  "DATABASE_URL",
+  "DIRECT_URL",
+  "REDIS_URL",
+  "AI_SERVICE_KEY",
+  "PLATFORM_ENCRYPTION_KEY",
+  "TOTP_ENCRYPTION_KEY",
+]);
+
+export function isPlatformSecretName(name: string): boolean {
+  return PLATFORM_SECRET_NAMES.has(name);
+}
+
 let cached: AppEnv | undefined;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   if (!cached) cached = envSchema.parse(source);

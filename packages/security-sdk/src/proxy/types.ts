@@ -236,11 +236,29 @@ export class InMemoryScannerInstanceProvider implements ScannerInstanceProvider 
   snapshot(): ScannerInstanceRecord[] { return [...this.instances]; }
 }
 
+/** Platform-critical variable names no reference resolver may ever return
+ *  (mirror of PLATFORM_SECRET_NAMES in @dsrclone/config — kept inline so
+ *  this package stays dependency-light; security audit 2026-10-16). */
+const PLATFORM_SECRET_NAMES: ReadonlySet<string> = new Set([
+  "JWT_SECRET",
+  "SESSION_SECRET",
+  "REFRESH_TOKEN_SECRET",
+  "DATABASE_URL",
+  "DIRECT_URL",
+  "REDIS_URL",
+  "AI_SERVICE_KEY",
+  "PLATFORM_ENCRYPTION_KEY",
+  "TOTP_ENCRYPTION_KEY",
+]);
+
 /** Env-backed secret resolver: reference name → process env value. The
- *  reference IS the env var name (a name, never a value). */
+ *  reference IS the env var name (a name, never a value). Platform-critical
+ *  names are hard-denied: a stored credential reference can never resolve
+ *  the platform's own signing/DB/service secrets. */
 export class EnvSecretResolver implements SecretResolver {
   async resolve(reference: string): Promise<string | undefined> {
     if (!/^[A-Z][A-Z0-9_]{2,127}$/.test(reference)) return undefined;
+    if (PLATFORM_SECRET_NAMES.has(reference)) return undefined;
     const v = process.env[reference];
     return v && v.length > 0 ? v : undefined;
   }

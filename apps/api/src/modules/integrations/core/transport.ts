@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { resolveTenantEnvSecret } from "@dsrclone/config";
 import { UnconfiguredIntegrationTransport, type IntegrationTransport } from "@dsrclone/security-sdk";
 
 /**
@@ -23,14 +24,16 @@ export class IntegrationTransportFactory {
  *  environment, which the deployment's secret manager populates. Any
  *  other reference is unresolvable in this layer and dependent
  *  features honestly report NOT_CONFIGURED. Secret VALUES are never
- *  stored, logged, or returned by any API. */
+ *  stored, logged, or returned by any API.
+ *
+ *  Tenant-controlled references resolve ONLY operator-provisioned tenant
+ *  slots (`env:TENANT_SECRET_<SLOT>`) — a tenant-named reference can never
+ *  resolve a platform variable, so a webhook secret reference cannot
+ *  become an HMAC oracle over a platform secret (security audit
+ *  2026-10-16). */
 @Injectable()
 export class IntegrationSecretResolver {
   resolve(reference: string | null | undefined): string | null {
-    if (!reference) return null;
-    if (reference.startsWith("env:")) {
-      return process.env[reference.slice(4)] ?? null;
-    }
-    return null;
+    return resolveTenantEnvSecret(reference);
   }
 }
