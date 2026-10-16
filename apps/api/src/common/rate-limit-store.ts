@@ -39,6 +39,26 @@ function redis(): Redis | null {
 const memory: AttemptBucket[] = [];
 const MAX_MEMORY_BUCKETS = 100_000;
 
+/** Atomic read-modify-write for the Redis bucket (security audit
+ *  2026-10-16 run-3): a GET→SET pair from concurrent requests loses
+ *  increments, so the whole window check + increment + TTL runs as one
+ *  Lua script on the server. Returns the post-increment count. */
+const RECORD_LUA = `
+local raw = redis.call('GET', KEYS[1])
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+if raw then
+  local b = cjson.decode(raw)
+  if now - b.windowStartMs < window then
+    local ttl = window - (now - b.windowStartMs)
+    redis.call('SET', KEYS[1], cjson.encode({count = b.count + 1, windowStartMs = b.windowStartMs}), 'PX', ttl)
+    return b.count + 1
+  end
+end
+redis.call('SET', KEYS[1], cjson.encode({count = 1, windowStartMs = now}), 'PX', window)
+return 1
+`;
+
 function memoryRecord(key: string, windowMs: number): void {
   const now = Date.now();
   const bucket = memory.find((b) => b.key === key && now - b.windowStartMs < windowMs);
@@ -80,23 +100,36 @@ export async function rateLimitRecord(key: string, windowMs: number): Promise<vo
   const r = redis();
   if (r && r.status === "ready") {
     try {
-      const redisKey = `ratelimit:${key}`;
-      const raw = await r.get(redisKey);
-      const now = Date.now();
-      if (raw) {
-        const bucket = JSON.parse(raw) as { count: number; windowStartMs: number };
-        if (now - bucket.windowStartMs < windowMs) {
-          await r.set(redisKey, JSON.stringify({ count: bucket.count + 1, windowStartMs: bucket.windowStartMs }), "PX", windowMs - (now - bucket.windowStartMs));
-          return;
-        }
-      }
-      await r.set(redisKey, JSON.stringify({ count: 1, windowStartMs: now }), "PX", windowMs);
+      await r.eval(RECORD_LUA, 1, `ratelimit:${key}`, String(Date.now()), String(windowMs));
       return;
     } catch {
       /* fall through to the in-process buckets */
     }
   }
   memoryRecord(key, windowMs);
+}
+
+/** Atomic check-and-record for limiters that count every request (the
+ *  global middleware, signup): one Lua round trip decides on the
+ *  post-increment count, so parallel requests can neither lose an
+ *  increment nor both slip past the cap on a stale read. */
+export async function rateLimitHit(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<{ allowed: boolean; retryAfterMs: number }> {
+  const r = redis();
+  if (r && r.status === "ready") {
+    try {
+      const count = Number(await r.eval(RECORD_LUA, 1, `ratelimit:${key}`, String(Date.now()), String(windowMs)));
+      return { allowed: count <= limit, retryAfterMs: 0 };
+    } catch {
+      /* fall through to the in-process buckets */
+    }
+  }
+  const decision = rateLimitDecision(memory, key, Date.now(), limit, windowMs);
+  if (decision.allowed) memoryRecord(key, windowMs);
+  return decision;
 }
 
 /** Test hook: drop the shared client + buckets between suites. */

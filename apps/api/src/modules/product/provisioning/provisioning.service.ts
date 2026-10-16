@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { isReservedSlug, isValidSlug } from "@dsrclone/security-sdk";
 import { registrationMode } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
-import { rateLimitCheck, rateLimitRecord } from "../../../common/rate-limit-store";
+import { rateLimitHit } from "../../../common/rate-limit-store";
 import { AuditService } from "../../audit/audit.service";
 import { ProductConfigService } from "../product-config.service";
 import { PlansService } from "../plans/plans.service";
@@ -162,12 +162,11 @@ export class CustomerProvisioningService {
   /** Per-IP signup rate limit with parity to AuthService.register:
    *  10 per hour, same shared (Redis-backed) bucket machinery (§22). */
   private async checkRegisterRateLimit(ip: string) {
-    const key = `register|${ip}`;
-    const decision = await rateLimitCheck(key, 10, 60 * 60_000);
+    // Single atomic check-and-record (run-3), parity with AuthService.
+    const decision = await rateLimitHit(`register|${ip}`, 10, 60 * 60_000);
     if (!decision.allowed) {
       throw new HttpException("Too many registration attempts — please try again later.", HttpStatus.TOO_MANY_REQUESTS);
     }
-    await rateLimitRecord(key, 60 * 60_000);
   }
 
   /** §60: single-use, expiring, hashed-at-rest email verification. */

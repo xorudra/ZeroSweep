@@ -8,7 +8,7 @@ import {
 import { isPlatformAdminEmail, loadEnv, registrationMode } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
-import { rateLimitCheck, rateLimitRecord } from "../../common/rate-limit-store";
+import { rateLimitCheck, rateLimitHit, rateLimitRecord } from "../../common/rate-limit-store";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";
 
@@ -244,12 +244,12 @@ export class AuthService {
    *  user + organization + workspace rows per call): cap it per IP —
    *  10 per hour — with the same bucket machinery as login (§22). */
   private async checkRegisterRateLimit(ip: string) {
-    const key = `register|${ip}`;
-    const decision = await rateLimitCheck(key, 10, 60 * 60_000);
+    // Single atomic check-and-record: every attempt counts, decided on
+    // the post-increment count (run-3: no check/record race window).
+    const decision = await rateLimitHit(`register|${ip}`, 10, 60 * 60_000);
     if (!decision.allowed) {
       throw new HttpException("Too many registration attempts — please try again later.", HttpStatus.TOO_MANY_REQUESTS);
     }
-    await this.recordAttempt(key, 60 * 60_000);
   }
 
   private async event(userId: string | null, organizationId: string | null, eventType: string, ip: string) {

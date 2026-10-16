@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { rateLimitCheck, rateLimitRecord } from "../rate-limit-store";
+import { rateLimitHit } from "../rate-limit-store";
 
 export function requestIdMiddleware(req: Request & { requestId?: string }, res: Response, next: NextFunction): void {
   req.requestId = (req.headers["x-request-id"] as string) || randomUUID();
@@ -59,12 +59,11 @@ export function rateLimitMiddleware(limit = 300, windowMs = 60_000) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const key = clientIp(req);
     void (async () => {
-      const decision = await rateLimitCheck(key, limit, windowMs);
+      const decision = await rateLimitHit(key, limit, windowMs);
       if (!decision.allowed) {
         res.status(429).json({ statusCode: 429, message: "Too many requests", timestamp: new Date().toISOString() });
         return;
       }
-      await rateLimitRecord(key, windowMs);
       next();
     })().catch(() => next());
   };
