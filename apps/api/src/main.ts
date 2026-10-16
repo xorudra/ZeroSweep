@@ -18,17 +18,20 @@ async function bootstrap(): Promise<void> {
   // Prompt 25 §30/§33: fail fast on placeholder secrets / unsafe production config.
   assertProductionConfig(env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
-  // Launch Safety A10: the hosted deployment sits behind exactly one
-  // platform proxy hop (Render's edge). Trusting that single hop makes
-  // Express's req.ip the LAST X-Forwarded-For entry — the address the
-  // edge actually observed — instead of the shared edge socket address,
-  // so IP-keyed rate limiting is per real client and unspoofable (the
-  // limiters themselves key via clientIp() in request-id.middleware).
-  (app.getHttpAdapter().getInstance() as { set: (name: string, value: unknown) => void }).set("trust proxy", 1);
-  // clientIp() honors the last XFF hop ONLY under this same configured
-  // single proxy hop; any other process (tests, direct exposure) keys
-  // limiters on the socket peer and ignores client-supplied XFF.
-  setTrustProxyEnabled(true);
+  // Launch Safety A10 + security audit 2026-10-16 run-2: X-Forwarded-For
+  // is trusted ONLY when the deployment declares a proxy in front of the
+  // API (TRUST_PROXY=1) — the hosted topology has exactly one proxy hop
+  // (platform edge / Caddy → container proxy), whose LAST XFF entry is
+  // the address the edge actually observed, so IP-keyed rate limiting is
+  // per real client and unspoofable. In a direct-exposure deployment
+  // (the root compose publishes the API port with no proxy) TRUST_PROXY
+  // stays unset: Express does not trust XFF and clientIp() keys limiters
+  // on the socket peer, so client-supplied XFF cannot mint fresh buckets.
+  const trustProxy = /^(1|true)$/i.test(process.env.TRUST_PROXY ?? "");
+  if (trustProxy) {
+    (app.getHttpAdapter().getInstance() as { set: (name: string, value: unknown) => void }).set("trust proxy", 1);
+    setTrustProxyEnabled(true);
+  }
   // The root info route (GET /) lives outside the prefix; everything else
   // stays under /api/v1 as before.
   app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: "", method: RequestMethod.GET }] });

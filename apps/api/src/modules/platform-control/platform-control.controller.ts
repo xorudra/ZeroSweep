@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
-import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
+import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { PRODUCT_FEATURE_REGISTRY } from "@dsrclone/security-sdk";
 import { ProductPermissionService } from "../product/permissions";
@@ -201,6 +201,7 @@ export class PlatformControlController {
    *  simply not found. No platform permission is required or sufficient;
    *  the approver is recorded as approvedById by the service. */
   @Post("support-access/:id/approve")
+  @Roles("OWNER", "ADMIN")
   async approveSupportSession(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.data.approveSupportSession(user.organizationId, id, user.id);
   }

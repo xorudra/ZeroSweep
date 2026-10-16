@@ -194,6 +194,13 @@ services:
       context: ../..
       dockerfile: deploy/docker/ai.Dockerfile
     restart: unless-stopped
+    environment:
+      # The copilot's fail-closed service-key gate reads NODE_ENV +
+      # AI_SERVICE_KEY (security audit 2026-10-16 run-2): without these
+      # the shipped production topology ran the AI in development mode
+      # with the gate open.
+      NODE_ENV: production
+      AI_SERVICE_KEY: ${AI_SERVICE_KEY:?set the shared AI service key}
     <<: *hardening
     tmpfs: ["/tmp"]
     deploy:

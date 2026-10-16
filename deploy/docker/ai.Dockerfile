@@ -11,7 +11,7 @@ LABEL org.opencontainers.image.title="dsrclone-ai" \
       org.opencontainers.image.description="DSRclone AI copilot service (analyst assistant; no execution surface)" \
       org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
       org.opencontainers.image.licenses="UNLICENSED"
-ENV PYTHONUNBUFFERED=1 PATH="/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1 PATH="/venv/bin:$PATH" NODE_ENV=production
 RUN groupadd -r dsrclone && useradd -r -g dsrclone -d /app dsrclone
 WORKDIR /app
 COPY --from=build /venv /venv

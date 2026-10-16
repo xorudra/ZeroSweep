@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
+import { rateLimitCheck, rateLimitRecord } from "../rate-limit-store";
 
 export function requestIdMiddleware(req: Request & { requestId?: string }, res: Response, next: NextFunction): void {
   req.requestId = (req.headers["x-request-id"] as string) || randomUUID();
@@ -49,39 +50,22 @@ export function clientIp(req: { headers: Record<string, unknown>; ip?: string; s
   return req.ip ?? req.socket?.remoteAddress ?? "unknown";
 }
 
-/** Minimal fixed-window rate limiter (per IP). Redis-backed limiting is a
- *  later hardening step; this keeps the foundation dependency-light.
- *  State is BOUNDED: expired buckets are swept periodically and the map
- *  is hard-capped (oldest entry evicted) so client-address churn cannot
- *  grow memory without limit. NOTE: state is still per-process — under
- *  a multi-replica deployment the effective aggregate cap is
- *  limit × replicas until the limiter moves to the shared Redis. */
-const buckets = new Map<string, { count: number; resetAt: number }>();
-export const MAX_RATE_LIMIT_BUCKETS = 100_000;
-const sweep = setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of buckets) if (bucket.resetAt <= now) buckets.delete(key);
-}, 60_000);
-sweep.unref?.();
+/** Fixed-window rate limiter (per IP) over the shared rate-limit store
+ *  (security audit 2026-10-16 run-2): counters live in Redis when it is
+ *  configured, so replicas share one budget; the bounded in-process
+ *  fallback inside the store keeps single-process deployments and
+ *  Redis outages safe. */
 export function rateLimitMiddleware(limit = 300, windowMs = 60_000) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const key = clientIp(req);
-    const now = Date.now();
-    const bucket = buckets.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      if (!bucket && buckets.size >= MAX_RATE_LIMIT_BUCKETS) {
-        // Hard cap: evict the oldest bucket rather than growing forever.
-        const oldest = buckets.keys().next().value as string | undefined;
-        if (oldest !== undefined) buckets.delete(oldest);
+    void (async () => {
+      const decision = await rateLimitCheck(key, limit, windowMs);
+      if (!decision.allowed) {
+        res.status(429).json({ statusCode: 429, message: "Too many requests", timestamp: new Date().toISOString() });
+        return;
       }
-      buckets.set(key, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-    bucket.count += 1;
-    if (bucket.count > limit) {
-      res.status(429).json({ statusCode: 429, message: "Too many requests", timestamp: new Date().toISOString() });
-      return;
-    }
-    next();
+      await rateLimitRecord(key, windowMs);
+      next();
+    })().catch(() => next());
   };
 }

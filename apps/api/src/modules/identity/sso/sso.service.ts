@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { promises as dns } from "node:dns";
+import { request as httpsRequest } from "node:https";
 import {
   blockedTargetReason, cloudEndpointVerdict,
   generatePkcePair, mapOidcClaims, mapSamlAttributes, normalizeEmail, randomToken, sha256Hex,
@@ -28,9 +29,12 @@ export const OIDC_TRANSPORT = "OIDC_TRANSPORT";
  *  verification fetcher): the endpoint must pass cloudEndpointVerdict
  *  (public https, no embedded credentials, host not in a blocked range)
  *  AND every address it resolves to must clear blockedTargetReason — a
- *  public name resolving into private space is refused too. Redirects
+ *  public name resolving into private space is refused too. The fetch
+ *  itself is PINNED to a validated address (security audit 2026-10-16
+ *  run-2): the hostname is never re-resolved at connection time, closing
+ *  the DNS-rebinding window between the check and the fetch. Redirects
  *  are never followed, so a redirect target is never fetched. */
-async function assertPublicIdpEndpoint(rawUrl: string): Promise<void> {
+async function resolvePublicIdpEndpoint(rawUrl: string): Promise<{ address: string; family: 4 | 6 }> {
   const verdict = cloudEndpointVerdict(rawUrl);
   if (!verdict.allowed) throw new Error(`IdP endpoint refused: ${verdict.reason ?? "ENDPOINT_BLOCKED"}`);
   const host = new URL(rawUrl).hostname;
@@ -38,27 +42,55 @@ async function assertPublicIdpEndpoint(rawUrl: string): Promise<void> {
   if (addresses.length === 0 || addresses.some((a) => blockedTargetReason(a.address))) {
     throw new Error("IdP endpoint resolves to a blocked address");
   }
+  const first = addresses[0]!;
+  return { address: first.address, family: first.family as 4 | 6 };
+}
+
+function pinnedIdpFetch(
+  url: string,
+  pinned: { address: string; family: 4 | 6 },
+  init: { method?: string; headers?: Record<string, string>; body?: string } = {},
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = httpsRequest(
+      {
+        hostname: u.hostname, servername: u.hostname, port: 443,
+        path: `${u.pathname}${u.search}`, method: init.method ?? "GET",
+        headers: init.headers,
+        lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
+        timeout: 5000,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on("data", (chunk: Buffer) => { size += chunk.length; if (size <= 1_000_000) chunks.push(chunk); });
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("IdP fetch timed out")));
+    req.on("error", reject);
+    if (init.body) req.write(init.body);
+    req.end();
+  });
 }
 
 export class FetchOidcTransport implements OidcTransport {
   async discovery(issuer: string) {
     const url = `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
-    await assertPublicIdpEndpoint(url);
-    const res = await fetch(url, { redirect: "manual" });
-    if (!res.ok) throw new Error(`Discovery failed: ${res.status}`);
-    return (await res.json()) as Record<string, unknown>;
+    const res = await pinnedIdpFetch(url, await resolvePublicIdpEndpoint(url));
+    if (res.status < 200 || res.status >= 300) throw new Error(`Discovery failed: ${res.status}`);
+    return JSON.parse(res.text) as Record<string, unknown>;
   }
   async jwks(jwksUri: string) {
-    await assertPublicIdpEndpoint(jwksUri);
-    const res = await fetch(jwksUri, { redirect: "manual" });
-    if (!res.ok) throw new Error(`JWKS failed: ${res.status}`);
-    return (await res.json()) as { keys: never[] };
+    const res = await pinnedIdpFetch(jwksUri, await resolvePublicIdpEndpoint(jwksUri));
+    if (res.status < 200 || res.status >= 300) throw new Error(`JWKS failed: ${res.status}`);
+    return JSON.parse(res.text) as { keys: never[] };
   }
   async token(tokenEndpoint: string, params: Record<string, string>) {
-    await assertPublicIdpEndpoint(tokenEndpoint);
-    const res = await fetch(tokenEndpoint, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params).toString() });
+    const res = await pinnedIdpFetch(tokenEndpoint, await resolvePublicIdpEndpoint(tokenEndpoint), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params).toString() });
     if (res.status >= 300 && res.status < 400) throw new Error("IdP token endpoint redirect refused");
-    return (await res.json()) as { id_token?: string; error?: string };
+    return JSON.parse(res.text) as { id_token?: string; error?: string };
   }
 }
 

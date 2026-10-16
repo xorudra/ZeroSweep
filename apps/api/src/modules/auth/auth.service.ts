@@ -3,11 +3,12 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { loginSchema, registerSchema } from "@dsrclone/validation";
 import {
-  GENERIC_AUTH_ERROR, isPrivilegedOrgRole, normalizeEmail, randomToken, rateLimitDecision, sha256Hex, type AttemptBucket,
+  GENERIC_AUTH_ERROR, isPrivilegedOrgRole, normalizeEmail, randomToken, sha256Hex,
 } from "@dsrclone/security-sdk";
 import { isPlatformAdminEmail, loadEnv, registrationMode } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
+import { rateLimitCheck, rateLimitRecord } from "../../common/rate-limit-store";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";
 
@@ -34,7 +35,6 @@ const DUMMY_PASSWORD_HASH = "$2a$12$s7co1yV7FHcYsYpfGd6MIOActRHxxsJ6iDGZyUVEFDGB
 
 @Injectable()
 export class AuthService {
-  private readonly attempts: AttemptBucket[] = [];
 
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClientLike,
@@ -90,7 +90,7 @@ export class AuthService {
     if (registrationMode() === "invite-only") {
       throw new ForbiddenException("This deployment is invite-only. Public sign-up is closed — ask an organization admin to invite you.");
     }
-    this.checkRegisterRateLimit(ip);
+    await this.checkRegisterRateLimit(ip);
     const normalizedEmail = normalizeEmail(data.email);
     const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new ConflictException("An account with this email already exists");
@@ -118,7 +118,7 @@ export class AuthService {
   async login(raw: unknown, ip = "unknown") {
     const data = parseOrThrow(loginSchema, raw);
     const bucketKey = `${normalizeEmail(data.email)}|${ip}`;
-    this.checkRateLimit(bucketKey);
+    await this.checkRateLimit(bucketKey);
     const user = await this.prisma.user.findUnique({ where: { email: data.email }, include: { memberships: { where: { status: "ACTIVE" }, take: 1 } } });
     // Timing equalization: always run one bcrypt comparison — against
     // the real hash when the account exists, against a dummy hash when
@@ -127,13 +127,13 @@ export class AuthService {
       ? await bcrypt.compare(data.password, user.passwordHash as string)
       : await bcrypt.compare(data.password, DUMMY_PASSWORD_HASH).then(() => false);
     if (!user || !user.isActive || (user.status as string) === "DEACTIVATED" || (user.status as string) === "SUSPENDED" || !passwordOk) {
-      this.recordAttempt(bucketKey);
+      await this.recordAttempt(bucketKey);
       if (user) await this.event(user.id as string, null, "LOGIN_FAILED", ip);
       throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     }
     const membership = user.memberships[0];
     if (!membership) {
-      this.recordAttempt(bucketKey);
+      await this.recordAttempt(bucketKey);
       throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     }
     const organizationId = membership.organizationId as string;
@@ -229,30 +229,27 @@ export class AuthService {
     return { allowed: true, breakGlass: true };
   }
 
-  private checkRateLimit(key: string) {
-    const decision = rateLimitDecision(this.attempts, key, Date.now(), 10, 15 * 60_000);
+  private async checkRateLimit(key: string) {
+    const decision = await rateLimitCheck(key, 10, 15 * 60_000);
     if (!decision.allowed) {
       throw new HttpException(GENERIC_AUTH_ERROR, HttpStatus.TOO_MANY_REQUESTS);
     }
   }
 
-  private recordAttempt(key: string, windowMs = 15 * 60_000) {
-    const now = Date.now();
-    const bucket = this.attempts.find((b) => b.key === key && now - b.windowStartMs < windowMs);
-    if (bucket) bucket.count += 1;
-    else this.attempts.push({ key, count: 1, windowStartMs: now });
+  private async recordAttempt(key: string, windowMs = 15 * 60_000) {
+    await rateLimitRecord(key, windowMs);
   }
 
   /** Registration is a write-heavy unauthenticated endpoint (bcrypt +
    *  user + organization + workspace rows per call): cap it per IP —
    *  10 per hour — with the same bucket machinery as login (§22). */
-  private checkRegisterRateLimit(ip: string) {
+  private async checkRegisterRateLimit(ip: string) {
     const key = `register|${ip}`;
-    const decision = rateLimitDecision(this.attempts, key, Date.now(), 10, 60 * 60_000);
+    const decision = await rateLimitCheck(key, 10, 60 * 60_000);
     if (!decision.allowed) {
       throw new HttpException("Too many registration attempts — please try again later.", HttpStatus.TOO_MANY_REQUESTS);
     }
-    this.recordAttempt(key, 60 * 60_000);
+    await this.recordAttempt(key, 60 * 60_000);
   }
 
   private async event(userId: string | null, organizationId: string | null, eventType: string, ip: string) {
