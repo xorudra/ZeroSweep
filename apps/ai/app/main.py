@@ -88,19 +88,25 @@ def _rate_limited(ip: str) -> bool:
 async def generate(req: GenerateRequest, request: Request, x_service_key: str | None = Header(default=None)) -> dict:
     # The endpoint is reachable on the public internet wherever the
     # service is hosted, and it spends live provider quota: when a
-    # service key is configured it is required, no exceptions.
-    if settings.service_key:
-        if not x_service_key or not secrets.compare_digest(x_service_key, settings.service_key):
-            raise HTTPException(status_code=401, detail="service key required")
+    # service key is configured it is required, no exceptions; when
+    # none is configured the endpoint fails closed outside
+    # development/test (an unset key is local development only).
+    if not settings.service_key:
+        if settings.environment not in ("development", "test"):
+            raise HTTPException(status_code=503, detail="service key not configured")
+    elif not x_service_key or not secrets.compare_digest(x_service_key, settings.service_key):
+        raise HTTPException(status_code=401, detail="service key required")
     if _rate_limited(_client_ip(request)):
         raise HTTPException(status_code=429, detail="generation rate limit exceeded")
     """Run the copilot pipeline: redact secrets from the context and
     evidence, assemble the separated prompt, and answer via the live
     provider when one is connected (the deterministic MOCK provider
     otherwise). Analysis only — no execution authority (§7/§120)."""
+    safe_task, task_redactions = redact_for_ai(req.task)
     safe_context, ctx_redactions = redact_for_ai(req.context)
     safe_evidence, ev_redactions = redact_for_ai(req.evidence)
-    prompt = build_prompt(req.task, safe_context, safe_evidence, req.question)
+    safe_question, q_redactions = redact_for_ai(req.question)
+    prompt = build_prompt(safe_task, safe_context, safe_evidence, safe_question)
     provider = get_provider()
     result = provider.generate(prompt, model=settings.llm_model)
     return {
@@ -110,7 +116,7 @@ async def generate(req: GenerateRequest, request: Request, x_service_key: str | 
         "llm_connected": llm_connected(),
         "prompt_tokens": result.prompt_tokens,
         "completion_tokens": result.completion_tokens,
-        "redactions": ctx_redactions + ev_redactions,
+        "redactions": task_redactions + ctx_redactions + ev_redactions + q_redactions,
     }
 
 

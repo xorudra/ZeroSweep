@@ -42,6 +42,42 @@ def test_redaction_strips_secrets():
     assert count >= 3
 
 
+def test_redaction_parity_shapes():
+    shapes = ['{"password": "fixture"}', 'Cookie: sessionid=fixture', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.fixture-signature', '?token=fixture', 'aws_secret_access_key=fixture']
+    for s in shapes:
+        out, count = redact_for_ai(s)
+        assert 'fixture' not in out or 'eyJ' not in out
+        assert count >= 1
+
+
+def test_redaction_parity_secret_shapes_absent():
+    # Shape set ported from the TypeScript pipeline (redactEvidenceText
+    # + the AI-layer patterns in redaction.ts): the secret VALUE must
+    # never survive, not merely be counted.
+    cases = [
+        '{"password": "fixture-secret", "api_key": "fixture-key"}',
+        "Cookie: sessionid=fixture-secret",
+        "Set-Cookie: sessionid=fixture-secret; HttpOnly",
+        "x-api-key: fixture-secret",
+        "Authorization: Basic Zm9vOmZpcHR1cmUtc2VjcmV0",
+        "Basic Zm9vOmZpcHR1cmUtc2VjcmV0",
+        "https://example.test/cb?token=fixture-secret&next=1",
+        "session_id=fixture-secret",
+        "aws_secret_access_key = fixture-secret",
+        "wifi_psk: fixture-secret",
+        "-----BEGIN DSA PRIVATE KEY-----\nfixture-secret\n-----END DSA PRIVATE KEY-----",
+        "-----BEGIN PGP PRIVATE KEY-----\nfixture-secret\n-----END PGP PRIVATE KEY-----",
+        "sk-fixture0123456789abcdef",
+        "ghp_fixture0123456789abcdefghij",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.fixture-signature-value",
+    ]
+    for text in cases:
+        out, count = redact_for_ai(text)
+        assert "fixture" not in out, text
+        assert "Zm9v" not in out, text
+        assert count >= 1, text
+
+
 def test_mock_provider_grounds_and_refuses_unknown_cve():
     provider = MockProvider()
     prompt = build_prompt("FINDING_EXPLANATION", TRUSTED, "", question="Explain f-1")
@@ -68,6 +104,26 @@ def test_generate_requires_service_key_when_configured():
         assert ok.status_code == 200
     finally:
         object.__setattr__(main.settings, "service_key", "")
+
+
+def test_generate_fails_closed_without_service_key_outside_development():
+    import app.main as main
+    object.__setattr__(main.settings, "service_key", "")
+    object.__setattr__(main.settings, "environment", "production")
+    try:
+        body = {"task": "EXPLAIN", "context": TRUSTED}
+        r = client.post("/copilot/generate", json=body, headers={"x-forwarded-for": "203.0.113.7"})
+        assert r.status_code == 503
+    finally:
+        object.__setattr__(main.settings, "environment", "development")
+
+
+def test_generate_redacts_task_and_question():
+    body = {"task": "EXPLAIN password=fixture-secret", "context": TRUSTED,
+            "question": "what about session_id=fixture-secret"}
+    r = client.post("/copilot/generate", json=body, headers={"x-forwarded-for": "203.0.113.8"})
+    assert r.status_code == 200
+    assert r.json()["redactions"] >= 2
 
 
 def test_generate_rate_limit_is_a_hard_cap():

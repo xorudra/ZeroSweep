@@ -35,11 +35,18 @@ SYSTEM_POLICY = (
 )
 
 _SECRET_PATTERNS = [
-    (re.compile(r"(?i)(authorization\s*:\s*).+"), r"\1[REDACTED]"),
+    (re.compile(r"(?im)^((?:authorization|cookie|set-cookie|x-api-key|x-auth-token|proxy-authorization)\s*:\s*).+$"), r"\1[REDACTED]"),
     (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*"), "Bearer [REDACTED]"),
-    (re.compile(r"(?i)(password|passwd|pwd|secret|api[_-]?key|access[_-]?token)\s*=\s*[^\s&;]+"), r"\1=[REDACTED]"),
-    (re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|$)"), "[REDACTED]"),
+    (re.compile(r"(?i)\bBasic\s+[A-Za-z0-9+/]+=*"), "Basic [REDACTED]"),
+    (re.compile(r"(?i)(\"(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|session(?:[_-]?id)?)\"\s*:\s*\")[^\"]*(\")"), r"\1[REDACTED]\2"),
+    (re.compile(r"(?i)\b(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|session(?:[_-]?id)?)\s*=\s*[^\s&;]+"), r"\1=[REDACTED]"),
+    (re.compile(r"(?i)([?&](?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|token|session(?:[_-]?id)?)=)[^&\s\"']+"), r"\1[REDACTED]"),
+    (re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----|$)"), "[REDACTED]"),
     (re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED]"),
+    (re.compile(r"(?i)\baws_secret_access_key\s*[:=]\s*[^\s\"']+"), "aws_secret_access_key=[REDACTED]"),
+    (re.compile(r"(?i)\b(?:wifi|wpa|wireless)[_\-\s]?(?:psk|pass(?:word|phrase)?|key)\s*[:=]\s*[^\s\"']+"), "[REDACTED]"),
+    (re.compile(r"\b(?:sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z\-_]{30,})\b"), "[REDACTED]"),
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"), "[REDACTED]"),
 ]
 
 
