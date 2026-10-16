@@ -44,7 +44,17 @@ export class AuthFlowService {
    *  challenge and mints a fresh AAL2 session. */
   async verifyMfaChallenge(challengeToken: string, body: { code?: string; recoveryCode?: string }) {
     const challenge = await this.loadChallenge(challengeToken);
-    if ((challenge.attempts as number) >= 5) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
+    // Atomic budget claim (security audit 2026-10-16 run-4): one of the
+    // login's 5 guess slots is claimed BEFORE any code is tested, via a
+    // conditional updateMany CAS — concurrent verifies can no longer
+    // each test a code against a stale snapshot and multiply the bound.
+    // A count of 0 means the budget is exhausted (or the challenge was
+    // consumed concurrently); the outward error is generic either way.
+    const claim = await this.prisma.authChallenge.updateMany({
+      where: { id: challenge.id, consumedAt: null, attempts: { lt: 5 } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (claim.count === 0) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     const meta = challenge.metadata as { organizationId: string; role: string; breakGlass?: boolean };
     const userId = challenge.userId as string;
     let ok = false;
@@ -62,10 +72,16 @@ export class AuthFlowService {
       ok = await this.mfa.consumeRecoveryCode(userId, meta.organizationId, body.recoveryCode);
     }
     if (!ok) {
-      await this.prisma.authChallenge.update({ where: { id: challenge.id }, data: { attempts: (challenge.attempts as number) + 1 } });
+      // The claimed slot stays consumed — that IS the failure accounting.
       throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     }
-    await this.prisma.authChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
+    // Success consumes the challenge atomically: a racing duplicate
+    // verify finds it already consumed and mints no second session.
+    const consumed = await this.prisma.authChallenge.updateMany({
+      where: { id: challenge.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count === 0) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const membership = await this.prisma.membership.findFirst({ where: { userId, organizationId: meta.organizationId, status: "ACTIVE" } });
     if (!user || !membership) throw new UnauthorizedException(GENERIC_AUTH_ERROR);

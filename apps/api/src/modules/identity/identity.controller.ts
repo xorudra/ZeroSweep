@@ -41,7 +41,15 @@ export class IdentityAuthController {
     if (!existing || existing.type !== "MFA_TOTP" || existing.consumedAt) return { challengeToken: null };
     if (new Date(existing.expiresAt as Date).getTime() <= Date.now()) return { challengeToken: null };
     if (((existing.attempts as number) ?? 0) >= 5) return { challengeToken: null };
-    await this.prisma.authChallenge.update({ where: { id: existing.id }, data: { consumedAt: new Date() } });
+    // Atomic consume (security audit 2026-10-16 run-4): exactly one of
+    // any concurrent rotations wins the CAS and mints the replacement;
+    // the losers see the challenge already consumed and mint nothing, so
+    // the login's remaining budget can never be duplicated by racing.
+    const consumed = await this.prisma.authChallenge.updateMany({
+      where: { id: existing.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count === 0) return { challengeToken: null };
     const challengeToken = randomToken(32);
     await this.prisma.authChallenge.create({
       data: { userId: existing.userId, type: "MFA_TOTP", tokenHash: sha256Hex(challengeToken), expiresAt: new Date(existing.expiresAt as Date), attempts: ((existing.attempts as number) ?? 0) as never, metadata: existing.metadata as never },

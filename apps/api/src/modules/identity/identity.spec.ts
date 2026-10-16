@@ -45,9 +45,22 @@ function matches(row: Row, where: Record<string, unknown> = {}): boolean {
     const c = cond as Record<string, unknown>;
     if ("in" in c) { if (!(c.in as unknown[]).includes(value)) return false; continue; }
     if ("not" in c) { if (value === c.not) return false; continue; }
+    if ("lt" in c) { if (!((value as number) < (c.lt as number))) return false; continue; }
+    if ("gt" in c) { if (!((value as number) > (c.gt as number))) return false; continue; }
     return false;
   }
   return true;
+}
+/** Prisma write semantics the services rely on: `{ increment: n }` adds
+ *  to the current value instead of assigning an object (run-4 CAS). */
+function applyData(row: Row, data: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === "object" && "increment" in (value as Record<string, unknown>)) {
+      row[key] = ((row[key] as number) ?? 0) + ((value as { increment: number }).increment);
+    } else {
+      row[key] = value;
+    }
+  }
 }
 function makeTable(name: string) {
   const rows: Row[] = [];
@@ -55,7 +68,9 @@ function makeTable(name: string) {
     rows,
     async create({ data }: { data: Row }) {
       const stamp = new Date(Date.now() + ++seq);
-      const row: Row = { createdAt: stamp, updatedAt: stamp, ...data, id: data.id ?? `${name}-${seq}` };
+      // Schema defaults the fake must honor: AuthChallenge.attempts @default(0).
+      const withDefaults = name === "authChallenge" && data.attempts === undefined ? { attempts: 0, ...data } : data;
+      const row: Row = { createdAt: stamp, updatedAt: stamp, ...withDefaults, id: data.id ?? `${name}-${seq}` };
       rows.push(row);
       return row;
     },
@@ -75,12 +90,12 @@ function makeTable(name: string) {
     async update({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) {
       const row = rows.find((r) => matches(r, where));
       if (!row) throw new Error(`row not found in ${name}`);
-      Object.assign(row, data);
+      applyData(row, data);
       return row;
     },
     async updateMany({ where, data }: { where?: Record<string, unknown>; data: Record<string, unknown> }) {
       let count = 0;
-      for (const row of rows) if (matches(row, where)) { Object.assign(row, data); count += 1; }
+      for (const row of rows) if (matches(row, where)) { applyData(row, data); count += 1; }
       return { count };
     },
     async delete({ where }: { where: Record<string, unknown> }) {
@@ -214,6 +229,61 @@ describe("MFA flows (§119, §120)", () => {
       expiresAt: new Date(Date.now() - 1_000), attempts: 0, metadata: { organizationId: "org-a", role: "OWNER" },
     } as never });
     expect(await ctrl.rotateChallenge({ challengeToken: "expired-fixture-token" })).toEqual({ challengeToken: null });
+  });
+
+  it("concurrent rotations of one challenge mint exactly one replacement (run-4 CAS)", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const u = await seedUser("org-a", "rudra@example.com", "OWNER");
+    const ctrl = new IdentityAuthController(w.flow, w.mfa, w.webauthn, w.sessions, w.prisma, w.auth);
+    await db.authChallenge.create({ data: {
+      userId: u.id, type: "MFA_TOTP", tokenHash: sha256Hex("race-fixture-token"),
+      expiresAt: new Date(Date.now() + 5 * 60_000), attempts: 1, metadata: { organizationId: "org-a", role: "OWNER" },
+    } as never });
+    // Both racers read the SAME unconsumed snapshot (the interleave the
+    // old unconditional update lost): only the CAS winner may mint.
+    const table = db.authChallenge as unknown as { findUnique: (a: { where: Record<string, unknown> }) => Promise<unknown> };
+    const realFindUnique = table.findUnique.bind(table);
+    let reads = 0;
+    table.findUnique = async (args: { where: Record<string, unknown> }) => {
+      const row = await realFindUnique(args) as Record<string, unknown> | null;
+      if (row && args.where.tokenHash === sha256Hex("race-fixture-token") && reads < 2) { reads += 1; return { ...row, consumedAt: null }; }
+      return row;
+    };
+    const [r1, r2] = await Promise.all([
+      ctrl.rotateChallenge({ challengeToken: "race-fixture-token" }),
+      ctrl.rotateChallenge({ challengeToken: "race-fixture-token" }),
+    ]);
+    table.findUnique = realFindUnique;
+    const minted = [r1, r2].filter((r) => r.challengeToken);
+    expect(minted).toHaveLength(1);
+    expect(db.authChallenge.rows.filter((r) => r.type === "MFA_TOTP")).toHaveLength(2); // original + exactly one replacement
+  });
+
+  it("concurrent failed verifies cannot test more codes than the budget allows (run-4 claim-first)", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const u = await seedUser("org-a", "rudra@example.com", "OWNER");
+    const me = asUser(u.id, u.email, "org-a", "OWNER");
+    const enrollment = await w.mfa.enrollTotp(me) as { secret: string };
+    await w.mfa.activateTotp(me, totp(base32Decode(enrollment.secret), Date.now()).code);
+    // A live challenge with ONE guess slot left (attempts = 4 of 5).
+    await db.authChallenge.create({ data: {
+      userId: u.id, type: "MFA_TOTP", tokenHash: sha256Hex("budget-fixture-token"),
+      expiresAt: new Date(Date.now() + 5 * 60_000), attempts: 4, metadata: { organizationId: "org-a", role: "OWNER" },
+    } as never });
+    let codesTested = 0;
+    const realVerify = w.mfa.verifyTotpForUser.bind(w.mfa);
+    (w.mfa as unknown as { verifyTotpForUser: unknown }).verifyTotpForUser = async (...args: Parameters<typeof realVerify>) => { codesTested += 1; return realVerify(...args); };
+    const results = await Promise.allSettled([
+      w.flow.verifyMfaChallenge("budget-fixture-token", { code: "000000" }),
+      w.flow.verifyMfaChallenge("budget-fixture-token", { code: "000001" }),
+      w.flow.verifyMfaChallenge("budget-fixture-token", { code: "000002" }),
+    ]);
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(codesTested).toBe(1); // only the claimed slot ever tested a code
+    const row = db.authChallenge.rows.find((r) => r.tokenHash === sha256Hex("budget-fixture-token"))!;
+    expect(row.attempts).toBe(5);
   });
 
   it("TOTP gates login, completes via challenge, and a replayed code is refused", async () => {
