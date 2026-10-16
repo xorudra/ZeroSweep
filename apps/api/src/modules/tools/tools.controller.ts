@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
+import { Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Patch, Body, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
   CAPABILITIES, NUCLEI_TEMPLATE_CATALOG, NUCLEI_TEMPLATE_SNAPSHOT, RISK_LEVELS, TOOL_CATEGORIES, approvedReviewIdsForProfile, createApiAdapters, createCloudNativeAdapters, createCloudSecAdapters, createDirectoryAdapters, createNetworkAdapters, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters, type SecurityToolAdapter,
@@ -48,6 +48,11 @@ export class ToolsController {
    *  a PATH lookup + `--version` on THIS host — the worker host probes again
    *  at execution time, and plan-time/execution-time health always wins. */
   private readonly reconAdapters: SecurityToolAdapter[] = [...createReconAdapters(), ...createWebDiscoveryAdapters(), ...createVulnAdapters(), ...createApiAdapters(), ...createNetworkAdapters(), ...createCloudNativeAdapters(), ...createCloudSecAdapters(), ...createDirectoryAdapters()];
+
+  /** Brief cache for live adapter probes so repeated health reads by
+   *  privileged callers do not spawn a host process per request. */
+  private readonly probeCache = new Map<string, { at: number; result: { slug: string; healthStatus: string; installed: boolean; detail: string | undefined; source: string } }>();
+  private static readonly PROBE_CACHE_TTL_MS = 30_000;
 
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClientLike) {}
 
@@ -217,25 +222,46 @@ export class ToolsController {
         source: "platform importer registry",
       };
     }
-    // Prompt 5 §39: for adapters implemented in code, report LIVE health —
-    // real version when the binary is present, honest UNAVAILABLE when not.
+    // Prompt 5 §39: for adapters implemented in code, privileged callers
+    // get LIVE health — real version when the binary is present, honest
+    // UNAVAILABLE when not. The live probe spawns a host process and its
+    // detail carries host binary version/path, so it is gated to OWNER /
+    // ADMIN / platform admins; every other authenticated caller gets
+    // only the stored catalog health, with no host detail.
     const adapter = this.reconAdapters.find((a) => a.metadata.slug === tool.slug);
     if (adapter) {
+      const privileged = user?.isPlatformAdmin === true || user?.role === "OWNER" || user?.role === "ADMIN";
+      if (!privileged) {
+        return {
+          slug: tool.slug, healthStatus: tool.healthStatus, installed: tool.installed,
+          source: "stored catalog health (live probe restricted to OWNER/ADMIN/platform administrators)",
+        };
+      }
+      const cached = this.probeCache.get(tool.slug);
+      if (cached && Date.now() - cached.at < ToolsController.PROBE_CACHE_TTL_MS) return cached.result;
       const live = await adapter.healthCheck();
-      return {
+      const result = {
         slug: tool.slug,
         healthStatus: live.status,
         installed: live.status === "HEALTHY",
         detail: live.detail,
         source: "live control-plane probe (worker hosts probe again at execution time)",
       };
+      this.probeCache.set(tool.slug, { at: Date.now(), result });
+      return result;
     }
     return tool;
   }
 
   @Patch(":id")
-  @Roles("OWNER", "ADMIN")
-  async update(@Param("id") id: string, @Body() body: unknown) {
+  async update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user?: RequestUser) {
+    // The Tool row is GLOBAL (untenanted, shared by every tenant): the
+    // enabled flag is deployment-level state, so only a platform
+    // administrator may change it — tenant OWNER/ADMIN roles do not
+    // suffice (same boundary as the platform-ops plane).
+    if (user?.isPlatformAdmin !== true) {
+      throw new ForbiddenException("changing global tool state requires a platform administrator; organization roles do not grant it");
+    }
     const data = parseOrThrow(updateToolSchema, body);
     const tool = await this.prisma.tool.findFirst({ where: { OR: [{ id }, { slug: id }] } });
     if (!tool) throw new NotFoundException("Tool not found");

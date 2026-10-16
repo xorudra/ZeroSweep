@@ -188,7 +188,21 @@ export class PlatformControlController {
   async createSupportSession(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     await this.permissions.requirePlatformPermission(user, "MANAGE_SUPPORT_ACCESS");
     const data = parseOrThrow(supportAccessCreateSchema, body);
-    return this.data.createSupportSession(user, { ...data, expiresInHours: data.expiresInHours ?? 8, tenantApproved: data.tenantApproved ?? false });
+    // tenantApproved is deliberately NOT forwarded: approval is a
+    // separate tenant-side action (see the approve route below), never
+    // a field the operator attests in their own create request.
+    const { tenantApproved: _ignored, ...rest } = data as typeof data & { tenantApproved?: boolean };
+    return this.data.createSupportSession(user, { ...rest, expiresInHours: data.expiresInHours ?? 8 });
+  }
+
+  /** Tenant-side approval (§100–§103): only a member of the target
+   *  tenant can approve — the session is looked up under the CALLER's
+   *  own organization, so a session belonging to another tenant is
+   *  simply not found. No platform permission is required or sufficient;
+   *  the approver is recorded as approvedById by the service. */
+  @Post("support-access/:id/approve")
+  async approveSupportSession(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.data.approveSupportSession(user.organizationId, id, user.id);
   }
 
   @Post("support-access/:id/end")

@@ -85,21 +85,27 @@ export class PlatformControlDataService {
 
   // ---- Support access (§100–§103) ------------------------------------------
 
-  async createSupportSession(operator: { id: string }, input: { organizationId: string; reason: string; scope: { areas: string[] }; expiresInHours: number; tenantApproved: boolean }): Promise<any> {
+  async createSupportSession(operator: { id: string }, input: { organizationId: string; reason: string; scope: { areas: string[] }; expiresInHours: number; tenantApproved?: boolean }): Promise<any> {
     const org = await (this.prisma as any).organization.findUnique({ where: { id: input.organizationId } });
     if (!org) throw new NotFoundException("Organization not found.");
+    // Tenant approval can NEVER be self-attested by the operator in the
+    // create request: any caller-supplied tenantApproved value is ignored
+    // and every session starts PENDING_APPROVAL. Only a tenant member
+    // approving via approveSupportSession (which records approvedById)
+    // can make a session ACTIVE.
+    void input.tenantApproved;
     const session = await (this.prisma as any).supportAccessSession.create({
       data: {
         organizationId: input.organizationId, operatorId: operator.id, reason: input.reason,
-        scope: input.scope as never, status: input.tenantApproved ? "ACTIVE" : "PENDING_APPROVAL",
-        tenantApproved: input.tenantApproved, startedAt: input.tenantApproved ? new Date() : null,
+        scope: input.scope as never, status: "PENDING_APPROVAL",
+        tenantApproved: false, startedAt: null,
         expiresAt: new Date(Date.now() + input.expiresInHours * 3600_000),
       },
     });
     await this.audit.record({
       actorId: operator.id, organizationId: input.organizationId, action: "SUPPORT_ACCESS_STARTED",
       resourceType: "SupportAccessSession", resourceId: session.id,
-      metadata: { reason: input.reason, areas: input.scope.areas, expiresAt: session.expiresAt.toISOString(), tenantApproved: input.tenantApproved },
+      metadata: { reason: input.reason, areas: input.scope.areas, expiresAt: session.expiresAt.toISOString(), tenantApproved: false },
     });
     return session;
   }
@@ -109,10 +115,15 @@ export class PlatformControlDataService {
     if (!session) throw new NotFoundException("Support session not found.");
     if (session.status !== "PENDING_APPROVAL") throw new BadRequestException(`Support session is ${session.status}; only PENDING_APPROVAL can be approved.`);
     if (session.expiresAt < new Date()) throw new BadRequestException("Support session has already expired (§103).");
-    return (this.prisma as any).supportAccessSession.update({
+    const updated = await (this.prisma as any).supportAccessSession.update({
       where: { id: sessionId },
       data: { status: "ACTIVE", tenantApproved: true, approvedById: approverId, startedAt: new Date() },
     });
+    await this.audit.record({
+      actorId: approverId, organizationId, action: "SUPPORT_ACCESS_APPROVED",
+      resourceType: "SupportAccessSession", resourceId: sessionId, metadata: {},
+    });
+    return updated;
   }
 
   async endSupportSession(operatorId: string, sessionId: string): Promise<any> {

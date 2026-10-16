@@ -20,10 +20,14 @@ const run = promisify(execFile);
  *
  * Backups: logical PostgreSQL dumps via pg_dump with FIXED argv (this
  * is internal platform code — no client input ever reaches a command
- * line), optional AES-256 encryption when an operator passphrase file
- * is configured (§166), SHA-256 checksum, and a full status record
- * (§171). If the tooling is unavailable the run is recorded FAILED with
- * the reason — never as a success that did not happen.
+ * line), mandatory AES-256 encryption (§166) into a dedicated private
+ * non-/tmp directory with owner-only permissions, SHA-256 checksum,
+ * and a full status record (§171). Encryption and a private directory
+ * are fail-closed preconditions: without them no dump is written and
+ * the run is recorded FAILED — never a plaintext success. If the
+ * tooling is unavailable the run is likewise recorded FAILED with the
+ * reason — never as a success that did not happen. Artifact paths are
+ * internal and are never returned to API callers.
  *
  * Restores: OWNER-only (RUN_RESTORE), typed confirmation (§202),
  * checksum verified BEFORE any write (§234), target must be an
@@ -44,7 +48,22 @@ export class BackupService {
   }
 
   private backupDir(): string {
-    return process.env.PLATFORM_BACKUP_DIR ?? "/tmp/dsrclone-backups";
+    return process.env.PLATFORM_BACKUP_DIR ?? "/var/backups/dsrclone";
+  }
+
+  /** Fail-closed backup preconditions: encryption passphrase configured
+   *  and a dedicated private directory outside shared /tmp. Throws
+   *  before any dump bytes are written. */
+  private assertBackupConfig(dir: string): string {
+    const passphraseFile = process.env.PLATFORM_BACKUP_PASSPHRASE_FILE;
+    if (!passphraseFile) {
+      throw new Error("backup refused: PLATFORM_BACKUP_PASSPHRASE_FILE is not configured — backups are encrypted by default and never written in plaintext (§166)");
+    }
+    const normalized = dir.replace(/\/+$/, "");
+    if (normalized === "/tmp" || normalized.startsWith("/tmp/")) {
+      throw new Error("backup refused: PLATFORM_BACKUP_DIR must be a dedicated private directory outside /tmp — plaintext or encrypted dumps never land on a predictable shared path");
+    }
+    return passphraseFile;
   }
 
   private conn(): { host: string; port: string; user: string; password?: string; database: string } {
@@ -69,7 +88,9 @@ export class BackupService {
   async listBackups(user: RequestUser) {
     requirePlatformPermission(user, "VIEW_PLATFORM_HEALTH");
     const items = await this.prisma.platformBackup.findMany({ orderBy: { startedAt: "desc" }, take: 50 });
-    return { items: items.map((b) => ({ ...b, sizeBytes: b.sizeBytes?.toString() ?? null })) };
+    // The artifact path (reference) is an internal filesystem location —
+    // never disclosed in API responses.
+    return { items: items.map((b) => { const { reference: _ref, ...rest } = b as typeof b & { reference?: unknown }; return { ...rest, sizeBytes: b.sizeBytes?.toString() ?? null }; }) };
   }
 
   async startBackup(user: RequestUser, input: { kind?: string }) {
@@ -95,7 +116,8 @@ export class BackupService {
       resourceType: "PlatformBackup", resourceId: record.id,
       metadata: { kind, ...(done.errorSummary ? { error: done.errorSummary } : {}) },
     });
-    return { ...done, sizeBytes: done.sizeBytes?.toString() ?? null };
+    const { reference: _ref, ...safe } = done as typeof done & { reference?: unknown };
+    return { ...safe, sizeBytes: done.sizeBytes?.toString() ?? null };
   }
 
   private async executeBackup(id: string, startedAt: Date) {
@@ -104,25 +126,26 @@ export class BackupService {
     let artifact = join(dir, `dsrclone-pg-${stamp}-${id}.dump`);
     let encrypted = false;
     try {
+      // Fail closed BEFORE any dump is written: encryption + private dir.
+      const passphraseFile = this.assertBackupConfig(dir);
       const c = this.conn();
-      await mkdir(dir, { recursive: true });
+      await mkdir(dir, { recursive: true, mode: 0o700 });
       const env = { ...process.env, ...(c.password ? { PGPASSWORD: c.password } : {}) };
       await run(this.tool("pg_dump"), [
         "-h", c.host, "-p", c.port, "-U", c.user, "-d", c.database,
         "-Fc", "--no-owner", "-f", artifact,
       ], { env, timeout: 600_000, maxBuffer: 16 * 1024 * 1024 });
 
-      const passphraseFile = process.env.PLATFORM_BACKUP_PASSPHRASE_FILE;
-      if (passphraseFile) {
-        const encPath = `${artifact}.enc`;
-        await run("openssl", [
-          "enc", "-aes-256-cbc", "-salt", "-pbkdf2",
-          "-pass", `file:${passphraseFile}`, "-in", artifact, "-out", encPath,
-        ], { timeout: 120_000 });
-        await unlink(artifact);
-        artifact = encPath;
-        encrypted = true;
-      }
+      // Encryption is mandatory, not opt-in: the plaintext dump is
+      // always replaced by its AES-256 ciphertext and unlinked.
+      const encPath = `${artifact}.enc`;
+      await run("openssl", [
+        "enc", "-aes-256-cbc", "-salt", "-pbkdf2",
+        "-pass", `file:${passphraseFile}`, "-in", artifact, "-out", encPath,
+      ], { timeout: 120_000 });
+      await unlink(artifact);
+      artifact = encPath;
+      encrypted = true;
       const bytes = await readFile(artifact);
       const checksum = sha256Hex(bytes);
       const st = await stat(artifact);
@@ -134,6 +157,8 @@ export class BackupService {
         },
       });
     } catch (e) {
+      // Never leave a plaintext (or partial) dump behind on failure.
+      if (!encrypted) await unlink(artifact).catch(() => undefined);
       return await this.prisma.platformBackup.update({
         where: { id },
         data: {

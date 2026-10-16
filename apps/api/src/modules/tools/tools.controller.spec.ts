@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { ToolsController } from "./tools.controller";
 import { ROLES_KEY } from "../../common/decorators/auth.decorators";
 
@@ -54,11 +54,25 @@ describe("ToolsController", () => {
 
   it("health returns status metadata only", async () => {
     const { ctrl } = make();
-    const h = await ctrl.health("nuclei");
+    const admin = { id: "u-a", email: "a@x.io", organizationId: "org-1", role: "ADMIN" } as const;
+    const h = await ctrl.health("nuclei", admin as never);
     // Prompt 7: nuclei is now an IMPLEMENTED adapter, so live probe health
-    // wins over the stored catalog value — binary absent on this host means
-    // an honest UNAVAILABLE, never a faked HEALTHY (§49).
+    // wins over the stored catalog value for privileged callers — binary
+    // absent on this host means an honest UNAVAILABLE, never a faked
+    // HEALTHY (§49).
     expect(h).toMatchObject({ slug: "nuclei", healthStatus: "UNAVAILABLE" });
+  });
+
+  it("health does NOT live-probe or leak host detail to non-privileged callers", async () => {
+    const { ctrl } = make();
+    const viewer = { id: "u-v", email: "v@x.io", organizationId: "org-1", role: "VIEWER" } as const;
+    for (const u of [viewer as never, undefined]) {
+      const h = await ctrl.health("nuclei", u) as Record<string, unknown>;
+      // Stored catalog health only: no live probe, no version/path detail.
+      expect(h).toMatchObject({ slug: "nuclei", healthStatus: "UNKNOWN", installed: false });
+      expect(h).not.toHaveProperty("detail");
+      expect(h).not.toHaveProperty("version");
+    }
   });
 
   it("template policy endpoint exposes the governed catalog, OWNER/ADMIN only (§4/§47)", () => {
@@ -74,13 +88,24 @@ describe("ToolsController", () => {
     expect(roles).toEqual(["OWNER", "ADMIN"]);
   });
 
-  it("has no execution endpoint and restricts PATCH to OWNER/ADMIN", () => {
+  it("has no execution endpoint and restricts PATCH to platform administrators", async () => {
     const proto = ToolsController.prototype as unknown as Record<string, unknown>;
     const methods = Object.getOwnPropertyNames(proto).filter((n) => n !== "constructor");
     expect(methods.sort()).toEqual(["capabilities", "categories", "get", "health", "list", "templatePolicy", "update"]);
     expect(methods.some((m) => /exec|run|command|scan/i.test(m))).toBe(false);
-    const roles = Reflect.getMetadata(ROLES_KEY, ToolsController.prototype.update) as string[];
-    expect(roles).toEqual(["OWNER", "ADMIN"]);
+    // The Tool row is global: tenant OWNER/ADMIN roles must NOT flip it.
+    // Only the deployment platform-admin flag authorizes the mutation.
+    expect(Reflect.getMetadata(ROLES_KEY, ToolsController.prototype.update)).toBeUndefined();
+    const { ctrl, calls } = make();
+    const tenantAdmin = { id: "u-ta", email: "ta@x.io", organizationId: "org-1", role: "ADMIN" } as const;
+    const tenantOwner = { id: "u-to", email: "to@x.io", organizationId: "org-1", role: "OWNER" } as const;
+    await expect(ctrl.update("nuclei", { enabled: false }, tenantAdmin as never)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(ctrl.update("nuclei", { enabled: false }, tenantOwner as never)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(ctrl.update("nuclei", { enabled: false }, undefined)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(calls.some((c) => c.model === "tool.update")).toBe(false);
+    const platformAdmin = { id: "u-pa", email: "pa@x.io", organizationId: "org-1", role: "VIEWER", isPlatformAdmin: true } as const;
+    await expect(ctrl.update("nuclei", { enabled: false }, platformAdmin as never)).resolves.toBeTruthy();
+    expect(calls.some((c) => c.model === "tool.update")).toBe(true);
     // Read endpoints carry no role restriction beyond the global JWT guard —
     // any authenticated org member may browse the catalog.
     expect(Reflect.getMetadata(ROLES_KEY, ToolsController.prototype.list)).toBeUndefined();
