@@ -17,6 +17,7 @@ import { WorkflowService } from "./workflows/workflow.service";
 import { NotificationRouterService } from "./notifications/notification-router.service";
 import { AutoRetestService } from "./retesting/auto-retest.service";
 import { MonitoringAnalyticsService } from "./analytics/monitoring-analytics.service";
+import { requireContinuousPermission } from "./permissions";
 
 const dateSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 
@@ -115,6 +116,10 @@ export class MonitoringController {
 
   @Post("tick")
   async tick(@CurrentUser() user: RequestUser) {
+    // The tick is GLOBAL (every tenant's due schedules/retries), so it
+    // is an operator action: leads only (MANAGE_SCAN_SCHEDULES) — a
+    // VIEWER must not be able to drive or lease-starve it.
+    requireContinuousPermission(user, "MANAGE_SCAN_SCHEDULES");
     await resolveWorkspace(this.prisma, user);
     // Operator-triggered tick (deployments may also run it on a
     // timer). Owner identity is the invoking admin for lease audit.
@@ -344,7 +349,7 @@ export class NotificationsController {
   @Patch("policies/:id")
   async updatePolicy(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: unknown) {
     const ws = await resolveWorkspace(this.prisma, user);
-    return this.notifications.updatePolicy(user, ws.id, id, (body ?? {}) as Record<string, unknown>);
+    return this.notifications.updatePolicy(user, ws.id, id, parseOrThrow(notificationPolicySchema.partial(), body ?? {}));
   }
 
   @Post("escalation-policies")

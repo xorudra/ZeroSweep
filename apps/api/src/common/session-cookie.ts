@@ -58,3 +58,15 @@ export function applySessionCookie(res: Response, body: unknown): void {
   const token = (body as { sessionToken?: unknown } | null | undefined)?.sessionToken;
   if (typeof token === "string" && token) setSessionCookie(res, token);
 }
+
+/** The session credential travels ONLY in the HttpOnly cookie (set via
+ *  applySessionCookie from the full service result). Login-shaped
+ *  response bodies must never serialize it — controllers return this
+ *  stripped copy ({accessToken, sessionId, ...} — the same shape the
+ *  refresh handler already returns). */
+export function withoutSessionToken<T extends Record<string, unknown>>(body: T): Omit<T, "sessionToken"> {
+  if (!body || typeof body !== "object") return body as Omit<T, "sessionToken">;
+  const { sessionToken: _redacted, ...safe } = body as Record<string, unknown>;
+  void _redacted;
+  return safe as Omit<T, "sessionToken">;
+}

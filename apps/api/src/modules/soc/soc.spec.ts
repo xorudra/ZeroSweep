@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { ForbiddenException, NotFoundException, BadRequestException } from "@nestjs/common";
 import { generateApiKey } from "@dsrclone/security-sdk";
 import { TelemetryService } from "./telemetry/telemetry.service";
@@ -207,6 +208,63 @@ describe("telemetry ingestion (§8–§13, §128–§129)", () => {
     const ok = await s.coordinator.ingestAndProcess(OWNER, WS, { kind: "API_KEY", reference: generated.plaintext }, [authFailEvent("x", 1)]);
     expect(ok.authMode).toBe("API_KEY");
     expect(ok.stored).toBe(1);
+  });
+
+  it("rejects existence-only SERVICE_ACCOUNT auth: bare id and wrong key (§9)", async () => {
+    const s = makeStack();
+    await s.prisma.serviceAccount.create({ data: {
+      id: "sa-1", organizationId: "org-1", status: "ACTIVE", scopes: ["telemetry:ingest"], workspaceId: null,
+    } as never });
+    // A bare account id is an identifier, not a credential.
+    await expect(s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SERVICE_ACCOUNT", reference: "sa-1" }, [authFailEvent("x", 1)]))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    await expect(s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SERVICE_ACCOUNT", reference: "dsr_live_wrong-key" }, [authFailEvent("x", 1)]))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    const generated = generateApiKey();
+    await s.prisma.apiKey.create({ data: {
+      id: "key-sa", ownerKind: "SERVICE_ACCOUNT", ownerId: "sa-1", organizationId: "org-1", name: "telemetry",
+      prefix: generated.prefix, secretHash: generated.secretHash, scopes: ["telemetry:ingest"],
+    } as never });
+    const ok = await s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SERVICE_ACCOUNT", reference: generated.plaintext }, [authFailEvent("sa-ok", 1)]);
+    expect(ok.authMode).toBe("SERVICE_ACCOUNT");
+    expect(ok.stored).toBe(1);
+  });
+
+  it("binds a workspace-scoped service account to its own workspace (§9)", async () => {
+    const s = makeStack();
+    await s.prisma.serviceAccount.create({ data: {
+      id: "sa-2", organizationId: "org-1", status: "ACTIVE", scopes: ["telemetry:ingest"], workspaceId: WS2,
+    } as never });
+    const generated = generateApiKey();
+    await s.prisma.apiKey.create({ data: {
+      id: "key-sa2", ownerKind: "SERVICE_ACCOUNT", ownerId: "sa-2", organizationId: "org-1", name: "telemetry",
+      prefix: generated.prefix, secretHash: generated.secretHash, scopes: ["telemetry:ingest"],
+    } as never });
+    await expect(s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SERVICE_ACCOUNT", reference: generated.plaintext }, [authFailEvent("x", 1)]))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    const ok = await s.coordinator.ingestAndProcess(OWNER, WS2, { kind: "SERVICE_ACCOUNT", reference: generated.plaintext }, [authFailEvent("sa-ok2", 1)]);
+    expect(ok.authMode).toBe("SERVICE_ACCOUNT");
+  });
+
+  it("SIGNED_WEBHOOK requires a valid HMAC signature, not just an integration id (§9)", async () => {
+    const s = makeStack();
+    process.env.TENANT_SECRET_SOC_HOOK = "soc-test-secret";
+    try {
+      await s.prisma.integration.create({ data: {
+        id: "int-1", workspaceId: WS, enabled: true, secretReference: "env:TENANT_SECRET_SOC_HOOK",
+      } as never });
+      const events = [authFailEvent("hook-1", 1)];
+      await expect(s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SIGNED_WEBHOOK", reference: "int-1" }, events))
+        .rejects.toBeInstanceOf(ForbiddenException);
+      await expect(s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SIGNED_WEBHOOK", reference: "int-1", signature: "00".repeat(32) }, events))
+        .rejects.toBeInstanceOf(ForbiddenException);
+      const signature = createHmac("sha256", "soc-test-secret").update(JSON.stringify(events)).digest("hex");
+      const ok = await s.coordinator.ingestAndProcess(OWNER, WS, { kind: "SIGNED_WEBHOOK", reference: "int-1", signature }, events);
+      expect(ok.authMode).toBe("SIGNED_WEBHOOK");
+      expect(ok.stored).toBe(1);
+    } finally {
+      delete process.env.TENANT_SECRET_SOC_HOOK;
+    }
   });
 
   it("planted secrets in telemetry never reach storage (§157)", async () => {

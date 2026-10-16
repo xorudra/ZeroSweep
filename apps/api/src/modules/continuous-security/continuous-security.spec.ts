@@ -543,6 +543,23 @@ describe("notifications (§66–§74/§115/§116)", () => {
     expect(ok.webhookUrl).toBe("https://hooks.example.com/notify");
     expect((ok as Row).signingSecretRef).toBe("vault:webhook-signing");
   });
+
+  it("policy updates are allowlisted: no workspace reassignment, webhooks re-validated", async () => {
+    const stack = makeStack();
+    const created = await stack.notifications.createPolicy(ADMIN, WS, {
+      name: "p", eventTypes: ["FINDING_CREATED"], channels: ["IN_APP"],
+    });
+    const updated = await stack.notifications.updatePolicy(ADMIN, WS, created.id as string, {
+      name: "p2", workspaceId: "ws-other", createdBy: "attacker", id: "np-forged",
+    });
+    expect(updated.name).toBe("p2");
+    expect((updated as Row).workspaceId).toBe(WS);
+    expect((updated as Row).createdBy).toBe(ADMIN.id);
+    expect(updated.id).toBe(created.id);
+    await expect(stack.notifications.updatePolicy(ADMIN, WS, created.id as string, {
+      webhook: { url: "https://169.254.169.254/hook", allowlist: [] },
+    })).rejects.toThrow(/refused/);
+  });
 });
 
 describe("auto-retest (§51–§55)", () => {

@@ -143,7 +143,11 @@ export class ClientPortalService {
 
   async unpublishFinding(user: RequestUser, workspaceId: string, engagementId: string, findingId: string) {
     requireV2Permission(user, "MANAGE_CLIENT_ENGAGEMENTS");
-    const publication = await this.prisma.clientFindingPublication.findFirst({ where: { engagementId, findingId, revokedAt: null } });
+    // Workspace-scoped exactly like publishFinding: the engagement and
+    // the publication must both live in the caller's workspace, else 404.
+    const engagement = await this.prisma.clientEngagement.findFirst({ where: { id: engagementId, workspaceId } });
+    if (!engagement) throw new NotFoundException("engagement not found in this workspace");
+    const publication = await this.prisma.clientFindingPublication.findFirst({ where: { engagementId, findingId, workspaceId, revokedAt: null } });
     if (!publication) throw new NotFoundException("no active publication for this finding in this engagement");
     const updated = await this.prisma.clientFindingPublication.update({ where: { id: publication.id }, data: { revokedAt: new Date() } });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId, action: "CLIENT_FINDING_UNPUBLISHED", resourceType: "Finding", resourceId: findingId, metadata: { engagementId } as never });
@@ -386,9 +390,19 @@ export class ClientPortalService {
       ? await this.prisma.reportVersion.findFirst({ where: { id: link.reportVersionId, reportId: report.id } })
       : await this.prisma.reportVersion.findFirst({ where: { reportId: report.id }, orderBy: { finalizedAt: "desc" } });
     if (!version) throw new NotFoundException("not found");
+    // Consume the download slot ATOMICALLY before rendering: a single
+    // conditional increment that only lands while the count is below
+    // the cap, so parallel downloads cannot exceed maxDownloads (the
+    // earlier check-then-increment raced on a stale in-memory count).
+    const claimed = await this.prisma.reportShareLink.updateMany({
+      where: typeof link.maxDownloads === "number"
+        ? { id: link.id, downloadCount: { lt: link.maxDownloads } }
+        : { id: link.id },
+      data: { downloadCount: { increment: 1 } },
+    });
+    if (!claimed || claimed.count === 0) throw new NotFoundException("not found");
     const rendered = renderReport(version.document as unknown as ReportSnapshotDocument, format);
     const bytes = Buffer.isBuffer(rendered.content) ? rendered.content : Buffer.from(rendered.content as string);
-    await this.prisma.reportShareLink.update({ where: { id: link.id }, data: { downloadCount: (link.downloadCount ?? 0) + 1 } });
     const workspace = await this.prisma.workspace.findFirst({ where: { id: link.workspaceId } });
     await this.audit.record({
       actorId: "share-link", organizationId: workspace?.organizationId ?? link.workspaceId, workspaceId: link.workspaceId,

@@ -9,7 +9,7 @@ import { createLogger } from "@dsrclone/logger";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { MetricsService } from "./health/metrics.service";
-import { rateLimitMiddleware, requestIdMiddleware } from "./common/middleware/request-id.middleware";
+import { rateLimitMiddleware, requestIdMiddleware, setTrustProxyEnabled } from "./common/middleware/request-id.middleware";
 
 const logger = createLogger("dsrclone-api");
 
@@ -25,6 +25,10 @@ async function bootstrap(): Promise<void> {
   // so IP-keyed rate limiting is per real client and unspoofable (the
   // limiters themselves key via clientIp() in request-id.middleware).
   (app.getHttpAdapter().getInstance() as { set: (name: string, value: unknown) => void }).set("trust proxy", 1);
+  // clientIp() honors the last XFF hop ONLY under this same configured
+  // single proxy hop; any other process (tests, direct exposure) keys
+  // limiters on the socket peer and ignores client-supplied XFF.
+  setTrustProxyEnabled(true);
   // The root info route (GET /) lives outside the prefix; everything else
   // stays under /api/v1 as before.
   app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: "", method: RequestMethod.GET }] });

@@ -25,6 +25,13 @@ import { AuditService } from "../audit/audit.service";
  * - Every successful login mints a BRAND-NEW server-side session (§41/122)
  *   and returns its opaque token alongside the platform JWT.
  */
+/** Precomputed bcrypt hash (cost 12, same as real password hashes) of a
+ *  throwaway value. Login compares against it when the account does not
+ *  exist so a missing account costs the same bcrypt work as a real one —
+ *  otherwise response timing alone enumerates registered emails despite
+ *  the generic error. The comparison result is always discarded. */
+const DUMMY_PASSWORD_HASH = "$2a$12$s7co1yV7FHcYsYpfGd6MIOActRHxxsJ6iDGZyUVEFDGBInC6Z2m9K";
+
 @Injectable()
 export class AuthService {
   private readonly attempts: AttemptBucket[] = [];
@@ -113,7 +120,12 @@ export class AuthService {
     const bucketKey = `${normalizeEmail(data.email)}|${ip}`;
     this.checkRateLimit(bucketKey);
     const user = await this.prisma.user.findUnique({ where: { email: data.email }, include: { memberships: { where: { status: "ACTIVE" }, take: 1 } } });
-    const passwordOk = user ? await bcrypt.compare(data.password, user.passwordHash as string) : false;
+    // Timing equalization: always run one bcrypt comparison — against
+    // the real hash when the account exists, against a dummy hash when
+    // it does not — so elapsed time does not reveal account existence.
+    const passwordOk = user
+      ? await bcrypt.compare(data.password, user.passwordHash as string)
+      : await bcrypt.compare(data.password, DUMMY_PASSWORD_HASH).then(() => false);
     if (!user || !user.isActive || (user.status as string) === "DEACTIVATED" || (user.status as string) === "SUSPENDED" || !passwordOk) {
       this.recordAttempt(bucketKey);
       if (user) await this.event(user.id as string, null, "LOGIN_FAILED", ip);

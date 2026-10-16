@@ -106,7 +106,33 @@ export class NotificationRouterService {
     requireContinuousPermission(user, "MANAGE_NOTIFICATION_POLICIES");
     const existing = await this.prisma.notificationPolicy.findFirst({ where: { id, workspaceId } });
     if (!existing) throw new NotFoundException("notification policy not found in this workspace");
-    const updated = await this.prisma.notificationPolicy.update({ where: { id }, data: input as never });
+    // Same discipline as createPolicy: a nested webhook is re-validated
+    // through the SSRF guard, and the Prisma write is built from an
+    // explicit allowlist — raw client keys (id, workspaceId, createdBy,
+    // …) can never be mass-assigned into the row.
+    const webhook = input.webhook as { url: string; allowlist?: string[]; signingSecretRef?: string } | undefined;
+    if (webhook) {
+      const verdict = await validateWebhookDestination({ url: webhook.url, allowlist: webhook.allowlist ?? [], resolver: this.resolver });
+      if (!verdict.ok) throw new BadRequestException(`webhook destination refused: ${verdict.message}`);
+    }
+    const { webhook: _w, ...rest } = input;
+    void _w;
+    const data = {
+      ...(rest.name !== undefined ? { name: rest.name as string } : {}),
+      ...(rest.eventTypes !== undefined ? { eventTypes: rest.eventTypes as never } : {}),
+      ...(rest.minSeverity !== undefined ? { minSeverity: rest.minSeverity as string } : {}),
+      ...(rest.minPriority !== undefined ? { minPriority: rest.minPriority as string } : {}),
+      ...(rest.riskThreshold !== undefined ? { riskThreshold: rest.riskThreshold as number } : {}),
+      ...(rest.channels !== undefined ? { channels: rest.channels as never } : {}),
+      ...(rest.recipients !== undefined ? { recipients: rest.recipients as never } : {}),
+      ...(rest.dedupWindowMinutes !== undefined ? { dedupWindowMinutes: rest.dedupWindowMinutes as number } : {}),
+      ...(rest.quietHours !== undefined ? { quietHours: rest.quietHours as never } : {}),
+      ...(rest.emergencySeverities !== undefined ? { emergencySeverities: rest.emergencySeverities as never } : {}),
+      ...(rest.throttlePerHour !== undefined ? { throttlePerHour: rest.throttlePerHour as number } : {}),
+      ...(rest.enabled !== undefined ? { enabled: rest.enabled as boolean } : {}),
+      ...(webhook ? { webhookUrl: webhook.url, webhookAllowlist: (webhook.allowlist ?? []) as never, signingSecretRef: webhook.signingSecretRef } : {}),
+    };
+    const updated = await this.prisma.notificationPolicy.update({ where: { id }, data: data as never });
     await this.audit.record({
       actorId: user.id, organizationId: user.organizationId, workspaceId,
       action: "NOTIFICATION_POLICY_UPDATED", resourceType: "NotificationPolicy", resourceId: id,

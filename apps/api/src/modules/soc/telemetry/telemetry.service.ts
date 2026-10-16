@@ -1,15 +1,17 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import {
   normalizeTelemetryEvent, verifyApiKey,
   type CanonicalTelemetryEvent,
 } from "@dsrclone/security-sdk";
+import { resolveTenantEnvSecret } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireSocPermission } from "../permissions";
 import type { Row } from "../helpers";
 
-export interface IngestAuth { kind: string; reference: string }
+export interface IngestAuth { kind: string; reference: string; signature?: string }
 export interface IngestedEvent {
   id: string; fingerprint: string; event: CanonicalTelemetryEvent; duplicate: boolean;
 }
@@ -59,8 +61,10 @@ export class TelemetryService {
     return { items, total: items.length };
   }
 
-  /** §9: verify the ingestion identity. Returns the verified mode. */
-  async verifyIngestionAuth(user: RequestUser, workspaceId: string, auth: IngestAuth): Promise<string> {
+  /** §9: verify the ingestion identity. Returns the verified mode.
+   *  Every kind must PROVE possession of a credential — a bare
+   *  identifier (account id, integration id) never authenticates. */
+  async verifyIngestionAuth(user: RequestUser, workspaceId: string, auth: IngestAuth, rawEvents?: unknown[]): Promise<string> {
     if (auth.kind === "USER_SESSION") {
       requireSocPermission(user, "MANAGE_DETECTIONS");
       return "USER_SESSION";
@@ -77,25 +81,51 @@ export class TelemetryService {
       throw new ForbiddenException("Ingestion API key is invalid, expired, revoked, or lacks the telemetry:ingest scope");
     }
     if (auth.kind === "SERVICE_ACCOUNT") {
-      const account = await this.prisma.serviceAccount.findFirst({
-        where: { id: auth.reference, organizationId: user.organizationId, status: "ACTIVE" },
-      });
-      const scopes = ((account?.scopes as string[]) ?? []);
-      if (!account || !scopes.includes("telemetry:ingest")) {
-        throw new ForbiddenException("Service account is missing, disabled, or lacks the telemetry:ingest scope");
+      // auth.reference is a PRESENTED API KEY (plaintext, shown once at
+      // mint) owned by a service account — never a bare account id. It
+      // is verified against the stored hash exactly like the API_KEY
+      // branch, the owning account must be ACTIVE, and a
+      // workspace-scoped account may ingest only into its own workspace.
+      const prefix = auth.reference.slice(0, 16);
+      const keys = await this.prisma.apiKey.findMany({ where: { prefix, organizationId: user.organizationId, ownerKind: "SERVICE_ACCOUNT", revokedAt: null } });
+      for (const key of keys as Row[]) {
+        const scopes = (key.scopes as string[]) ?? [];
+        if (!scopes.includes("telemetry:ingest")) continue;
+        if (key.expiresAt && new Date(key.expiresAt as string).getTime() < Date.now()) continue;
+        if (!verifyApiKey(auth.reference, key.secretHash as string)) continue;
+        const account = await this.prisma.serviceAccount.findFirst({
+          where: { id: key.ownerId as string, organizationId: user.organizationId },
+        });
+        if (!account || (account.status as string) !== "ACTIVE") continue;
+        const accountScopes = ((account.scopes as string[]) ?? []);
+        if (!accountScopes.includes("telemetry:ingest")) continue;
+        if (account.workspaceId && (account.workspaceId as string) !== workspaceId) continue;
+        return "SERVICE_ACCOUNT";
       }
-      return "SERVICE_ACCOUNT";
+      throw new ForbiddenException("Service-account ingestion key is invalid, expired, revoked, mis-scoped, or bound to another workspace");
     }
     if (auth.kind === "SIGNED_WEBHOOK") {
-      // Signature verification itself happens in the integrations
-      // webhook layer (P24); SOC ingestion additionally requires the
-      // named integration to exist, be enabled, and carry a secret
-      // reference in THIS workspace.
+      // The named integration must exist, be enabled, and carry a secret
+      // reference in THIS workspace — and the caller must prove
+      // possession of that secret with an HMAC signature over the
+      // canonical events payload. Existence alone never authenticates.
       const integration = await this.prisma.integration.findFirst({
         where: { id: auth.reference, workspaceId, enabled: true },
       });
       if (!integration || !(integration as Row).secretReference) {
         throw new ForbiddenException("Signed-webhook ingestion requires an enabled integration with a secret reference in this workspace");
+      }
+      if (!auth.signature) {
+        throw new ForbiddenException("Signed-webhook ingestion requires a signature");
+      }
+      const secret = resolveTenantEnvSecret((integration as Row).secretReference as string);
+      if (!secret) {
+        throw new ForbiddenException("Signed-webhook ingestion secret is not resolvable");
+      }
+      const expected = createHmac("sha256", secret).update(JSON.stringify(rawEvents ?? [])).digest();
+      const presented = Buffer.from(auth.signature, "hex");
+      if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+        throw new ForbiddenException("Signed-webhook ingestion signature is invalid");
       }
       return "SIGNED_WEBHOOK";
     }
@@ -116,7 +146,7 @@ export class TelemetryService {
   async ingest(user: RequestUser, workspaceId: string, auth: IngestAuth, rawEvents: unknown[]): Promise<{
     authMode: string; stored: IngestedEvent[]; duplicates: number; rejected: Array<{ index: number; errors: string[] }>;
   }> {
-    const authMode = await this.verifyIngestionAuth(user, workspaceId, auth);
+    const authMode = await this.verifyIngestionAuth(user, workspaceId, auth, rawEvents);
     if (!this.rateLimit(workspaceId, rawEvents.length)) {
       throw new ForbiddenException("Telemetry ingestion rate limit exceeded for this workspace (§10)");
     }

@@ -17,6 +17,11 @@ export const ingestTelemetrySchema = z.object({
   auth: z.object({
     kind: z.enum(["API_KEY", "SERVICE_ACCOUNT", "SIGNED_WEBHOOK", "USER_SESSION"]),
     reference: z.string().min(1).max(300),
+    /** Required for SIGNED_WEBHOOK: hex HMAC-SHA256 of the canonical
+     *  events payload under the integration's resolved secret. A bare
+     *  integration id is an identifier, not a credential — the service
+     *  rejects a signed-webhook ingest without a valid signature. */
+    signature: z.string().min(1).max(256).optional(),
   }),
   events: z.array(z.unknown()).min(1).max(500),
 });

@@ -158,9 +158,15 @@ describe("A7 session-linked JWTs (guard + refresh + logout)", () => {
       body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
     });
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { accessToken: string; sessionToken: string; sessionId: string };
+    const body = (await res.json()) as { accessToken: string; sessionToken?: string; sessionId: string };
+    // The session credential must NOT appear in the JSON body — it
+    // travels only in the HttpOnly Set-Cookie header. Tests obtain it
+    // from the cookie, exactly like the web client does.
+    expect(body.sessionToken).toBeUndefined();
     const setCookie = res.headers.getSetCookie().find((c) => c.startsWith("dsrclone_session=")) ?? "";
-    return { ...body, cookie: setCookie.split(";")[0] as string };
+    const cookie = setCookie.split(";")[0] as string;
+    const sessionToken = decodeURIComponent(cookie.slice("dsrclone_session=".length));
+    return { ...body, sessionToken, cookie };
   }
 
   const probe = (token: string) => fetch(`${base}/probe`, { headers: { authorization: `Bearer ${token}` } });

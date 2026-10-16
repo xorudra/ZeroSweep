@@ -30,6 +30,10 @@ function matches(row: Row, where: Record<string, unknown> = {}): boolean {
       const cond = v as Record<string, unknown>;
       if ("in" in cond) { if (!(cond.in as unknown[]).some((x) => cmpVal(row[k], x))) return false; continue; }
       if ("not" in cond) { if (cmpVal(row[k], cond.not) && cond.not !== null) return false; if (cond.not === null && row[k] === null) return false; continue; }
+      if ("lt" in cond) { if (!(((row[k] as number) ?? 0) < (cond.lt as number))) return false; continue; }
+      if ("lte" in cond) { if (!(((row[k] as number) ?? 0) <= (cond.lte as number))) return false; continue; }
+      if ("gt" in cond) { if (!(((row[k] as number) ?? 0) > (cond.gt as number))) return false; continue; }
+      if ("gte" in cond) { if (!(((row[k] as number) ?? 0) >= (cond.gte as number))) return false; continue; }
       continue;
     }
     if (v === null) { if (row[k] !== null && row[k] !== undefined) return false; continue; }
@@ -71,7 +75,7 @@ function makeTable(store: Map<string, Row[]>, name: string, all: Map<string, Row
     count: async (args: { where?: Record<string, unknown> } = {}) => rows().filter((r) => matches(r, args.where)).length,
     create: async (args: { data: Row }) => {
       // Mirror the Prisma column defaults the services rely on.
-      const defaults: Record<string, unknown> = name === "securityReport" ? { version: "v1", status: "DRAFT", approvalStatus: "DRAFT" } : {};
+      const defaults: Record<string, unknown> = name === "securityReport" ? { version: "v1", status: "DRAFT", approvalStatus: "DRAFT" } : name === "reportShareLink" ? { downloadCount: 0 } : {};
       const data = args.data as Record<string, unknown>;
       const row = { ...defaults, id: nid(name), createdAt: now, updatedAt: now, ...data } as Row;
       rows().push(row);
@@ -82,6 +86,22 @@ function makeTable(store: Map<string, Row[]>, name: string, all: Map<string, Row
       if (!row) throw new Error("missing row");
       Object.assign(row, args.data);
       return { ...row };
+    },
+    updateMany: async (args: { where?: Record<string, unknown>; data: Record<string, unknown> }) => {
+      // Mirror Prisma semantics, including { increment } field updates —
+      // the share-link download cap relies on the conditional form being
+      // atomic (check + increment in one operation).
+      let count = 0;
+      for (const row of rows()) {
+        if (!matches(row, args.where)) continue;
+        for (const [k, v] of Object.entries(args.data)) {
+          if (v && typeof v === "object" && "increment" in (v as Record<string, unknown>)) {
+            row[k] = ((row[k] as number) ?? 0) + ((v as { increment: number }).increment);
+          } else row[k] = v;
+        }
+        count++;
+      }
+      return { count };
     },
     deleteMany: async (args: { where?: Record<string, unknown> } = {}) => {
       const before = rows().length;
@@ -172,6 +192,14 @@ describe("Prompt 37 — client portal", () => {
     await portal.publishFinding(owner, WS, engagementId, findingId);
     await portal.unpublishFinding(owner, WS, engagementId, findingId);
     await expect(portal.myFinding(clientUser, engagementId, findingId)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("unpublishing from another workspace is a 404 and changes nothing", async () => {
+    await portal.publishFinding(owner, WS, engagementId, findingId);
+    await expect(portal.unpublishFinding(owner, "ws-other", engagementId, findingId)).rejects.toMatchObject({ status: 404 });
+    // The publication in the owning workspace is untouched.
+    const view = await portal.myFinding(clientUser, engagementId, findingId);
+    expect(view.title).toBe("Reflected XSS");
   });
 
   it("client isolation: other organizations' engagements are 404, never 403 (§144)", async () => {
