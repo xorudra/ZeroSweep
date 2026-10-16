@@ -50,9 +50,15 @@ export class IdentityAuthController {
       data: { consumedAt: new Date() },
     });
     if (consumed.count === 0) return { challengeToken: null };
+    // Inherit the POST-CAS attempts (security audit 2026-10-16 run-5):
+    // verify claims that landed between the snapshot read and the CAS
+    // must stay spent. After consumption no further claim can land
+    // (claims require consumedAt: null), so this re-read is final.
+    const current = await this.prisma.authChallenge.findUnique({ where: { id: existing.id } });
+    const inheritedAttempts = ((current?.attempts as number) ?? (existing.attempts as number) ?? 0);
     const challengeToken = randomToken(32);
     await this.prisma.authChallenge.create({
-      data: { userId: existing.userId, type: "MFA_TOTP", tokenHash: sha256Hex(challengeToken), expiresAt: new Date(existing.expiresAt as Date), attempts: ((existing.attempts as number) ?? 0) as never, metadata: existing.metadata as never },
+      data: { userId: existing.userId, type: "MFA_TOTP", tokenHash: sha256Hex(challengeToken), expiresAt: new Date(existing.expiresAt as Date), attempts: inheritedAttempts as never, metadata: existing.metadata as never },
     });
     return { challengeToken };
   }

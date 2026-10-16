@@ -29,12 +29,21 @@ export class AuthFlowService {
   ) {}
 
   /** Enroll TOTP against a login challenge (policy-required MFA with no
-   *  method yet). The secret is shown once; activation happens in verify. */
+   *  method yet). The secret is shown once; activation happens in verify.
+   *  NEVER for an already-enrolled account (security audit 2026-10-16
+   *  run-5, high): a challenge must not let its holder substitute a new
+   *  factor for the enrolled one — that would reduce MFA to the password
+   *  alone. The login records `enrolled` in the challenge metadata; the
+   *  live method check backs it up. Factor replacement belongs to the
+   *  authenticated step-up / admin-reset paths. */
   async enrollViaChallenge(challengeToken: string) {
     const challenge = await this.loadChallenge(challengeToken);
     const user = await this.prisma.user.findUnique({ where: { id: challenge.userId } });
     if (!user) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
-    const meta = challenge.metadata as { organizationId: string; role: string };
+    const meta = challenge.metadata as { organizationId: string; role: string; enrolled?: boolean };
+    if (meta.enrolled === true) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
+    const activeMethod = await this.prisma.mfaMethod.findFirst({ where: { userId: user.id, isActive: true } });
+    if (activeMethod) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
     const synthetic: RequestUser = { id: user.id as string, email: user.email as string, organizationId: meta.organizationId, role: meta.role as RequestUser["role"] };
     return this.mfa.enrollTotp(synthetic);
   }
@@ -55,12 +64,16 @@ export class AuthFlowService {
       data: { attempts: { increment: 1 } },
     });
     if (claim.count === 0) throw new UnauthorizedException(GENERIC_AUTH_ERROR);
-    const meta = challenge.metadata as { organizationId: string; role: string; breakGlass?: boolean };
+    const meta = challenge.metadata as { organizationId: string; role: string; breakGlass?: boolean; enrolled?: boolean };
     const userId = challenge.userId as string;
     let ok = false;
     if (body.code) {
-      // First-code activation for a just-enrolled pending method.
-      const pending = await this.prisma.mfaMethod.findFirst({ where: { userId, type: "TOTP", isActive: false } });
+      // First-code activation for a just-enrolled pending method — ONLY
+      // on an unenrolled challenge (run-5 high): on an enrolled account
+      // a pending method must never preempt the enrolled factor.
+      const activeTotp = await this.prisma.mfaMethod.findFirst({ where: { userId, type: "TOTP", isActive: true } });
+      const unenrolled = meta.enrolled !== true && !activeTotp;
+      const pending = unenrolled ? await this.prisma.mfaMethod.findFirst({ where: { userId, type: "TOTP", isActive: false } }) : null;
       if (pending) {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         const synthetic: RequestUser = { id: userId, email: user?.email as string, organizationId: meta.organizationId, role: meta.role as RequestUser["role"] };

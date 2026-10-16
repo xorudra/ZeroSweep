@@ -286,6 +286,65 @@ describe("MFA flows (§119, §120)", () => {
     expect(row.attempts).toBe(5);
   });
 
+  it("an enrolled account can never substitute a new factor via its login challenge (run-5 high)", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const u = await seedUser("org-a", "rudra@example.com", "OWNER");
+    const me = asUser(u.id, u.email, "org-a", "OWNER");
+    // Victim is fully enrolled: active TOTP method in place.
+    const enrollment = await w.mfa.enrollTotp(me) as { secret: string };
+    await w.mfa.activateTotp(me, totp(base32Decode(enrollment.secret), Date.now()).code);
+    // Password-only attacker reaches the MFA challenge…
+    const login = await w.auth.login({ email: u.email, password: u.password }) as { mfaRequired?: boolean; enrolled?: boolean; challengeToken?: string };
+    expect(login.mfaRequired).toBe(true);
+    expect(login.enrolled).toBe(true);
+    // …but challenge-bound enrollment is refused for enrolled accounts.
+    await expect(w.flow.enrollViaChallenge(login.challengeToken!)).rejects.toThrow(/Invalid email or password/);
+    // Even with a pending method planted (settings re-enrollment shape),
+    // the challenge verify must test the ENROLLED factor, never activate
+    // the pending substitute.
+    const planted = await w.mfa.enrollTotp(me) as { secret: string };
+    const plantedCode = totp(base32Decode(planted.secret), Date.now()).code;
+    await expect(w.flow.verifyMfaChallenge(login.challengeToken!, { code: plantedCode })).rejects.toThrow(/Invalid email or password/);
+    const pendingRow = db.mfaMethod.rows.find((r) => r.userId === u.id && r.isActive === false);
+    expect(pendingRow).toBeDefined(); // still pending — NOT activated by the challenge
+    // The enrolled factor still completes the login on a fresh challenge.
+    const login2 = await w.auth.login({ email: u.email, password: u.password }) as { challengeToken?: string };
+    const activeCode = totp(base32Decode(enrollment.secret), Date.now() + 30_000).code;
+    const done = await w.flow.verifyMfaChallenge(login2.challengeToken!, { code: activeCode }) as { accessToken: string };
+    expect(done.accessToken).toContain("jwt.");
+  });
+
+  it("rotation inherits attempts landed after the snapshot read (run-5 low)", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const u = await seedUser("org-a", "rudra@example.com", "OWNER");
+    const ctrl = new IdentityAuthController(w.flow, w.mfa, w.webauthn, w.sessions, w.prisma, w.auth);
+    await db.authChallenge.create({ data: {
+      userId: u.id, type: "MFA_TOTP", tokenHash: sha256Hex("stale-fixture-token"),
+      expiresAt: new Date(Date.now() + 5 * 60_000), attempts: 1, metadata: { organizationId: "org-a", role: "OWNER" },
+    } as never });
+    // Simulate verify claims landing between the controller's snapshot
+    // read and its consume CAS: the first updateMany carrying a
+    // consumedAt write first bumps the live row's attempts to 4.
+    const table = db.authChallenge as unknown as { updateMany: (a: { where?: Record<string, unknown>; data: Record<string, unknown> }) => Promise<{ count: number }> };
+    const realUpdateMany = table.updateMany.bind(table);
+    let bumped = false;
+    table.updateMany = async (args: { where?: Record<string, unknown>; data: Record<string, unknown> }) => {
+      if (!bumped && "consumedAt" in args.data) {
+        bumped = true;
+        const row = db.authChallenge.rows.find((r) => r.tokenHash === sha256Hex("stale-fixture-token"))!;
+        row.attempts = 4;
+      }
+      return realUpdateMany(args);
+    };
+    const rotated = await ctrl.rotateChallenge({ challengeToken: "stale-fixture-token" });
+    table.updateMany = realUpdateMany;
+    expect(rotated.challengeToken).toBeTruthy();
+    const replacement = db.authChallenge.rows.find((r) => r.tokenHash === sha256Hex(rotated.challengeToken!))!;
+    expect(replacement.attempts).toBe(4); // spent slots stay spent
+  });
+
   it("TOTP gates login, completes via challenge, and a replayed code is refused", async () => {
     const w = makeWorld();
     await seedOrg("org-a");
