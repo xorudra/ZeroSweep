@@ -1,7 +1,7 @@
 import { createHash, createSign, generateKeyPairSync } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 import {
-  base32Decode, buildSignedResponse, totp,
+  base32Decode, buildSignedResponse, sha256Hex, totp,
 } from "@dsrclone/security-sdk";
 
 /** Minimal CBOR encoder for WebAuthn fixtures (mirrors the SDK spec). */
@@ -21,6 +21,7 @@ function cborEncode(value: unknown): Buffer {
 }
 import { AuthService } from "../auth/auth.service";
 import { AuthFlowService } from "./auth-flow.service";
+import { IdentityAuthController } from "./identity.controller";
 import { SecretResolver } from "./secret-resolver";
 import { SessionsService } from "./sessions/sessions.service";
 import { MfaService } from "./mfa/mfa.service";
@@ -189,6 +190,32 @@ describe("local login & sessions (§117, §118, §122, §123, §124)", () => {
 });
 
 describe("MFA flows (§119, §120)", () => {
+  it("challenge rotation inherits attempts + expiry; expired/exhausted challenges cannot rotate", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const u = await seedUser("org-a", "rudra@example.com", "OWNER");
+    const ctrl = new IdentityAuthController(w.flow, w.mfa, w.webauthn, w.sessions, w.prisma, w.auth);
+    const expires = new Date(Date.now() + 5 * 60_000);
+    await db.authChallenge.create({ data: {
+      userId: u.id, type: "MFA_TOTP", tokenHash: sha256Hex("rotation-fixture-token"),
+      expiresAt: expires, attempts: 3, metadata: { organizationId: "org-a", role: "OWNER" },
+    } as never });
+    const rotated = await ctrl.rotateChallenge({ challengeToken: "rotation-fixture-token" });
+    expect(rotated.challengeToken).toBeTruthy();
+    const replacement = db.authChallenge.rows.find((r) => r.tokenHash === sha256Hex(rotated.challengeToken!))!;
+    expect(replacement.attempts).toBe(3); // budget NOT reset
+    expect(new Date(replacement.expiresAt as Date).getTime()).toBe(expires.getTime()); // window NOT extended
+    // Attempt budget exhausted → rotation refused, no fresh challenge.
+    await db.authChallenge.update({ where: { id: replacement.id }, data: { attempts: 5 } });
+    expect(await ctrl.rotateChallenge({ challengeToken: rotated.challengeToken! })).toEqual({ challengeToken: null });
+    // Expired → rotation refused.
+    await db.authChallenge.create({ data: {
+      userId: u.id, type: "MFA_TOTP", tokenHash: sha256Hex("expired-fixture-token"),
+      expiresAt: new Date(Date.now() - 1_000), attempts: 0, metadata: { organizationId: "org-a", role: "OWNER" },
+    } as never });
+    expect(await ctrl.rotateChallenge({ challengeToken: "expired-fixture-token" })).toEqual({ challengeToken: null });
+  });
+
   it("TOTP gates login, completes via challenge, and a replayed code is refused", async () => {
     const w = makeWorld();
     await seedOrg("org-a");
@@ -286,10 +313,10 @@ describe("OIDC SSO (§125, §126)", () => {
   async function setupOidc(w: ReturnType<typeof makeWorld>) {
     await seedOrg("org-a");
     const admin = await seedUser("org-a", "admin@example.com", "OWNER");
-    process.env.OIDC_TEST_SECRET = "fixture-client-secret";
+    process.env.TENANT_SECRET_OIDC_TEST = "fixture-client-secret";
     const provider = await w.sso.createProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), {
       type: "OIDC", name: "Fixture IdP", issuer: "https://idp.example.com", clientId: "dsr-client",
-      clientSecretRef: "env:OIDC_TEST_SECRET", jitEnabled: true,
+      clientSecretRef: "env:TENANT_SECRET_OIDC_TEST", jitEnabled: true,
     }) as { id: string };
     await w.sso.enrollBreakGlass(asUser(admin.id, admin.email, "org-a", "OWNER"), admin.id);
     await w.sso.updateProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), provider.id, { enabled: true });
@@ -335,7 +362,7 @@ describe("OIDC SSO (§125, §126)", () => {
     await seedOrg("org-a");
     const admin = await seedUser("org-a", "admin@example.com", "OWNER");
     const provider = await w.sso.createProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), {
-      type: "OIDC", name: "Unprovisioned", issuer: "https://idp.example.com", clientId: "dsr-client", clientSecretRef: "env:DEFINITELY_MISSING_VAR",
+      type: "OIDC", name: "Unprovisioned", issuer: "https://idp.example.com", clientId: "dsr-client", clientSecretRef: "env:TENANT_SECRET_DEFINITELY_MISSING",
     }) as { id: string };
     const test = await w.sso.testProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), provider.id) as { status: string };
     expect(test.status).toBe("NOT_CONFIGURED");
@@ -352,7 +379,7 @@ describe("SAML SSO (§127, §128)", () => {
     const admin = await seedUser("org-a", "admin@example.com", "OWNER");
     const provider = await w.sso.createProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), {
       type: "SAML", name: "Fixture SAML", idpEntityId: "https://idp.example.com", ssoUrl: "https://idp.example.com/sso",
-      spEntityId: "dsrclone-sp", certificate: idpCert, jitEnabled: true,
+      spEntityId: "dsrclone-sp", certificate: idpCert, jitEnabled: true, acsUrl: "https://app.example.com/acs",
     }) as { id: string };
     await w.sso.enrollBreakGlass(asUser(admin.id, admin.email, "org-a", "OWNER"), admin.id);
     await w.sso.updateProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), provider.id, { enabled: true });
@@ -369,14 +396,41 @@ describe("SAML SSO (§127, §128)", () => {
     const providerId = await setupSaml(w);
     const start = await w.sso.startSamlLogin("org-a", providerId) as { requestId: string };
     const responseXml = fixtureFor(start.requestId);
-    const result = await w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(responseXml).toString("base64"), acsUrl: "https://app.example.com/acs" }) as { accessToken: string };
+    const result = await w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(responseXml).toString("base64"), relayState: start.requestId }) as { accessToken: string };
     expect(result.accessToken).toContain("jwt.");
     const start2 = await w.sso.startSamlLogin("org-a", providerId) as { requestId: string };
     void start2;
-    await expect(w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(responseXml).toString("base64"), acsUrl: "https://app.example.com/acs" })).rejects.toThrow(/SSO login failed/); // assertion replay
+    await expect(w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(responseXml).toString("base64") })).rejects.toThrow(/SSO login failed/); // unsolicited (no live challenge) + assertion replay
     const start3 = await w.sso.startSamlLogin("org-a", providerId) as { requestId: string };
     const tampered = fixtureFor(start3.requestId).replace("Rudra", "Mallory");
-    await expect(w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(tampered).toString("base64"), acsUrl: "https://app.example.com/acs" })).rejects.toThrow(/SSO login failed/);
+    await expect(w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(tampered).toString("base64"), relayState: start3.requestId })).rejects.toThrow(/SSO login failed/);
+  });
+
+  it("rejects an assertion issued for a different recipient than the configured ACS URL", async () => {
+    const w = makeWorld();
+    const providerId = await setupSaml(w);
+    const start = await w.sso.startSamlLogin("org-a", providerId) as { requestId: string };
+    const foreign = fixtureFor(start.requestId, { acsUrl: "https://evil.example.com/acs" });
+    await expect(w.sso.samlAcs("org-a", providerId, { samlResponse: Buffer.from(foreign).toString("base64"), relayState: start.requestId })).rejects.toThrow(/SSO login failed/);
+  });
+
+  it("JIT disabled: a pre-existing non-member user is NOT silently granted membership", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    await seedOrg("org-b");
+    const admin = await seedUser("org-a", "admin@example.com", "OWNER");
+    const existing = await seedUser("org-b", "rudra@example.com", "MEMBER"); // global user, member of org-b only
+    void existing;
+    const provider = await w.sso.createProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), {
+      type: "SAML", name: "No-JIT SAML", idpEntityId: "https://idp.example.com", ssoUrl: "https://idp.example.com/sso",
+      spEntityId: "dsrclone-sp", certificate: idpCert, jitEnabled: false, acsUrl: "https://app.example.com/acs",
+    }) as { id: string };
+    await w.sso.enrollBreakGlass(asUser(admin.id, admin.email, "org-a", "OWNER"), admin.id);
+    await w.sso.updateProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), provider.id, { enabled: true });
+    const start = await w.sso.startSamlLogin("org-a", provider.id) as { requestId: string };
+    const responseXml = fixtureFor(start.requestId);
+    await expect(w.sso.samlAcs("org-a", provider.id, { samlResponse: Buffer.from(responseXml).toString("base64"), relayState: start.requestId })).rejects.toThrow(/SSO login failed/);
+    expect(db.membership.rows.some((m) => m.organizationId === "org-a" && m.userId === existing.id)).toBe(false);
   });
 });
 
@@ -557,5 +611,94 @@ describe("break-glass & tenant isolation (§137, §141, §100)", () => {
     const item = items.find((i) => i.subjectType === "MEMBERSHIP" && i.subjectId === targetMembership.id)!;
     await w.governance.decideAccessReviewItem(me, review.id, item.id, "REVOKE");
     expect(db.membership.rows.find((m) => m.id === targetMembership.id)!.status).toBe("REVOKED");
+  });
+});
+
+describe("audit remediation regressions (2026-10-16)", () => {
+  it("admin MFA reset refuses foreign-organization targets (404) and revokes same-org sessions", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    await seedOrg("org-b");
+    const adminA = await seedUser("org-a", "admin@example.com", "OWNER");
+    const foreign = await seedUser("org-b", "foreign@example.com", "MEMBER");
+    const local = await seedUser("org-a", "local@example.com", "MEMBER");
+    await db.mfaMethod.create({ data: { userId: foreign.id, type: "TOTP", isActive: true } as never });
+    const actorA = asUser(adminA.id, adminA.email, "org-a", "OWNER");
+    await expect(w.mfa.adminResetMfa(actorA, foreign.id)).rejects.toThrow(/not found/i);
+    expect(db.mfaMethod.rows.some((r) => r.userId === foreign.id)).toBe(true); // untouched
+    const login = await w.auth.login({ email: local.email, password: local.password }) as { sessionToken: string };
+    await db.mfaMethod.create({ data: { userId: local.id, type: "TOTP", isActive: true } as never });
+    await w.mfa.adminResetMfa(actorA, local.id);
+    expect(db.mfaMethod.rows.some((r) => r.userId === local.id)).toBe(false);
+    await expect(w.sessions.validateSessionToken(login.sessionToken)).rejects.toThrow(/revoked/);
+  });
+
+  it("plain members cannot rotate/revoke or even list service-account API keys", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const owner = await seedUser("org-a", "owner@example.com", "OWNER");
+    const member = await seedUser("org-a", "member@example.com", "MEMBER");
+    const ownerCtx = asUser(owner.id, owner.email, "org-a", "OWNER");
+    const memberCtx = asUser(member.id, member.email, "org-a", "MEMBER");
+    const account = await w.keys.createServiceAccount(ownerCtx, { name: "ci", scopes: ["findings:read"] }) as { id: string };
+    const cred = await w.keys.createServiceAccountCredential(ownerCtx, account.id, { name: "ci key" }) as { id: string };
+    const memberList = await w.keys.listApiKeys(memberCtx) as { id: string }[];
+    expect(memberList.some((k) => k.id === cred.id)).toBe(false);
+    await expect(w.keys.rotateApiKey(memberCtx, cred.id)).rejects.toThrow(/MANAGE_SERVICE_ACCOUNTS/);
+    await expect(w.keys.revokeApiKey(memberCtx, cred.id)).rejects.toThrow(/MANAGE_SERVICE_ACCOUNTS/);
+    const rotated = await w.keys.rotateApiKey(ownerCtx, cred.id) as { plaintext: string };
+    expect(rotated.plaintext).toBeTruthy(); // privileged rotation still works
+  });
+
+  it("SCIM deprovision in one org leaves a shared user's other org untouched", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    await seedOrg("org-b");
+    const shared = await w.scim.createUser("org-a", { userName: "shared@example.com", displayName: "Shared" }) as { id: string };
+    await db.membership.create({ data: { userId: shared.id, organizationId: "org-b", role: "MEMBER", status: "ACTIVE" } as never });
+    await w.scim.deactivateUser("org-a", shared.id);
+    const userRow = db.user.rows.find((r) => r.id === shared.id)!;
+    expect(userRow.isActive).toBe(true); // still a member elsewhere — global row untouched
+    expect(db.membership.rows.find((m) => m.userId === shared.id && m.organizationId === "org-a")!.status).toBe("REVOKED");
+    expect(db.membership.rows.find((m) => m.userId === shared.id && m.organizationId === "org-b")!.status).toBe("ACTIVE");
+  });
+
+  it("refresh rotation is a compare-and-swap: replaying a rotated credential revokes the session family", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const u = await seedUser("org-a", "rudra@example.com", "OWNER");
+    const login = await w.auth.login({ email: u.email, password: u.password }) as { sessionToken: string; sessionId: string };
+    const rotated = await w.sessions.rotateSessionCredential(login.sessionId, login.sessionToken);
+    expect(rotated.sessionToken).not.toBe(login.sessionToken);
+    // Replay of the superseded credential: CAS miss → reuse → family revoked.
+    await expect(w.sessions.rotateSessionCredential(login.sessionId, login.sessionToken)).rejects.toThrow(/reuse/);
+    await expect(w.sessions.validateSessionToken(rotated.sessionToken)).rejects.toThrow(/revoked/);
+    expect(db.authenticationEvent.rows.some((r) => r.eventType === "SESSION_TOKEN_REUSE_DETECTED")).toBe(true);
+  });
+
+  it("role change revokes the demoted member's live sessions (§124)", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const admin = await seedUser("org-a", "admin@example.com", "OWNER");
+    const target = await seedUser("org-a", "target@example.com", "ADMIN");
+    const login = await w.auth.login({ email: target.email, password: target.password }) as { sessionToken: string };
+    await w.governance.setMembershipRole(asUser(admin.id, admin.email, "org-a", "OWNER"), target.id, "VIEWER");
+    await expect(w.sessions.validateSessionToken(login.sessionToken)).rejects.toThrow(/revoked/);
+  });
+
+  it("SSO write sites reject platform env secret references and non-public issuers", async () => {
+    const w = makeWorld();
+    await seedOrg("org-a");
+    const admin = await seedUser("org-a", "admin@example.com", "OWNER");
+    const me = asUser(admin.id, admin.email, "org-a", "OWNER");
+    await expect(w.sso.createProvider(me, {
+      type: "OIDC", name: "Evil", issuer: "https://idp.example.com", clientId: "x", clientSecretRef: "env:JWT_SECRET",
+    })).rejects.toThrow(/TENANT_SECRET/);
+    await expect(w.sso.createProvider(me, {
+      type: "OIDC", name: "Ssrf", issuer: "https://169.254.169.254", clientId: "x", clientSecretRef: "env:TENANT_SECRET_OK",
+    })).rejects.toThrow(/ENDPOINT_BLOCKED|blocked/i);
+    await expect(w.sso.createProvider(me, {
+      type: "OIDC", name: "Http", issuer: "http://idp.example.com", clientId: "x", clientSecretRef: "env:TENANT_SECRET_OK",
+    })).rejects.toThrow(/ENDPOINT_NOT_HTTPS/);
   });
 });

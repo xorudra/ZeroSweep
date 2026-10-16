@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import {
   base32Decode, decryptSecret, encryptSecret, generateRecoveryCodes as genCodes, generateTotpSecret,
   hashRecoveryCode, isPrivilegedOrgRole, platformKeyFromMaterial, totpSetupUri, verifyRecoveryCode, verifyTotp,
@@ -117,11 +117,16 @@ export class MfaService {
   }
 
   /** Controlled MFA reset (§112): admin action, strongly audited; the user's
-   *  methods are removed and their sessions revoked by the caller flow. */
+   *  methods are removed and their sessions revoked. The target must hold an
+   *  ACTIVE membership in the ACTOR's organization — a foreign target is a
+   *  404, per the module's tenant-isolation convention (§141). */
   async adminResetMfa(actor: RequestUser, targetUserId: string) {
+    const membership = await this.prisma.membership.findFirst({ where: { userId: targetUserId, organizationId: actor.organizationId, status: "ACTIVE" } });
+    if (!membership) throw new NotFoundException("User not found");
     await this.prisma.mfaMethod.deleteMany({ where: { userId: targetUserId } });
     await this.prisma.webAuthnCredential.deleteMany({ where: { userId: targetUserId } });
     await this.prisma.recoveryCode.deleteMany({ where: { userId: targetUserId } });
+    await this.prisma.userSession.updateMany({ where: { userId: targetUserId, revokedAt: null }, data: { revokedAt: new Date() } });
     await this.audit.record({ actorId: actor.id, organizationId: actor.organizationId, action: "MFA_RESET", resourceType: "User", resourceId: targetUserId });
     await this.prisma.authenticationEvent.create({ data: { userId: targetUserId, organizationId: actor.organizationId, eventType: "MFA_RESET" } });
     return { reset: true };

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { CurrentUser, Public, type RequestUser } from "../../common/decorators/auth.decorators";
-import { applySessionCookie, clearSessionCookie, readSessionCookie, setSessionCookie } from "../../common/session-cookie";
+import { applySessionCookie, clearSessionCookie, readSessionCookie, setSessionCookie, withoutSessionToken } from "../../common/session-cookie";
 import { requireIdentityPermission } from "./permissions";
 import { AuthFlowService } from "./auth-flow.service";
 import { MfaService } from "./mfa/mfa.service";
@@ -33,12 +33,18 @@ export class IdentityAuthController {
   @Post("mfa/challenge")
   async rotateChallenge(@Body() body: { challengeToken: string }) {
     // Re-issue a fresh challenge for an in-flight MFA login (old one dies).
+    // Rotation must NOT reset the login's security budget: an expired
+    // challenge stays dead and the 5-attempt bound + original expiry are
+    // inherited by the replacement, so total MFA guesses per login stay
+    // bounded at 5 within the original 10-minute window.
     const existing = await this.prisma.authChallenge.findUnique({ where: { tokenHash: sha256Hex(body.challengeToken) } });
     if (!existing || existing.type !== "MFA_TOTP" || existing.consumedAt) return { challengeToken: null };
+    if (new Date(existing.expiresAt as Date).getTime() <= Date.now()) return { challengeToken: null };
+    if (((existing.attempts as number) ?? 0) >= 5) return { challengeToken: null };
     await this.prisma.authChallenge.update({ where: { id: existing.id }, data: { consumedAt: new Date() } });
     const challengeToken = randomToken(32);
     await this.prisma.authChallenge.create({
-      data: { userId: existing.userId, type: "MFA_TOTP", tokenHash: sha256Hex(challengeToken), expiresAt: new Date(Date.now() + 10 * 60_000), metadata: existing.metadata as never },
+      data: { userId: existing.userId, type: "MFA_TOTP", tokenHash: sha256Hex(challengeToken), expiresAt: new Date(existing.expiresAt as Date), attempts: ((existing.attempts as number) ?? 0) as never, metadata: existing.metadata as never },
     });
     return { challengeToken };
   }
@@ -54,7 +60,7 @@ export class IdentityAuthController {
   async verifyMfa(@Body() body: { challengeToken: string; code?: string; recoveryCode?: string }, @Res({ passthrough: true }) res: Response) {
     const result = await this.flow.verifyMfaChallenge(body.challengeToken, body);
     applySessionCookie(res, result);
-    return result;
+    return withoutSessionToken(result);
   }
 
   @Post("mfa/enroll")
@@ -111,7 +117,7 @@ export class IdentityAuthController {
     const login = await this.auth.completeLogin(user, user.memberships[0], "unknown", false, "PHISHING_RESISTANT");
     const result = { authenticated: true, ...login };
     applySessionCookie(res, result);
-    return result;
+    return withoutSessionToken(result);
   }
 
   @Get("sessions")
@@ -140,7 +146,7 @@ export class IdentityAuthController {
     const presented = readSessionCookie(req);
     if (!presented) throw new UnauthorizedException("No session cookie");
     const ctx = await this.sessions.validateSessionToken(presented);
-    const rotated = await this.sessions.rotateSessionCredential(ctx.sessionId);
+    const rotated = await this.sessions.rotateSessionCredential(ctx.sessionId, presented);
     const user = await this.prisma.user.findUnique({ where: { id: ctx.user.id } });
     const accessToken = this.auth.issueAccessToken({
       sub: ctx.user.id, email: ctx.user.email, name: (user?.name as string | undefined) ?? undefined,
@@ -395,7 +401,7 @@ export class SsoController {
   async oidcCallback(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { code: string; state: string; redirectUri: string }, @Res({ passthrough: true }) res: Response) {
     const result = await this.sso.oidcCallback(org, provider, body);
     applySessionCookie(res, result);
-    return result;
+    return withoutSessionToken(result);
   }
 
   @Public()
@@ -406,10 +412,10 @@ export class SsoController {
 
   @Public()
   @Post("saml/:organizationId/:providerId/acs")
-  async samlAcs(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { samlResponse: string; relayState?: string; acsUrl: string }, @Res({ passthrough: true }) res: Response) {
+  async samlAcs(@Param("organizationId") org: string, @Param("providerId") provider: string, @Body() body: { samlResponse: string; relayState?: string }, @Res({ passthrough: true }) res: Response) {
     const result = await this.sso.samlAcs(org, provider, body);
     applySessionCookie(res, result);
-    return result;
+    return withoutSessionToken(result);
   }
 }
 

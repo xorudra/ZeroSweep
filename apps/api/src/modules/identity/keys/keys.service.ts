@@ -105,7 +105,9 @@ export class KeysService {
 
   async listApiKeys(user: RequestUser) {
     const rows = await this.prisma.apiKey.findMany({ where: { organizationId: user.organizationId, ownerKind: "USER", ownerId: user.id }, orderBy: { createdAt: "desc" } });
-    const serviceKeys = await this.prisma.apiKey.findMany({ where: { organizationId: user.organizationId, ownerKind: "SERVICE_ACCOUNT" }, orderBy: { createdAt: "desc" } });
+    // Service-account keys are visible only to callers who may manage them.
+    const canManageServiceAccounts = ["OWNER", "ADMIN", "SECURITY_ADMIN"].includes(user.role);
+    const serviceKeys = canManageServiceAccounts ? await this.prisma.apiKey.findMany({ where: { organizationId: user.organizationId, ownerKind: "SERVICE_ACCOUNT" }, orderBy: { createdAt: "desc" } }) : [];
     return [...rows, ...serviceKeys].map((k) => this.presentApiKey(k));
   }
 
@@ -174,8 +176,15 @@ export class KeysService {
   private async ownApiKey(user: RequestUser, id: string) {
     const key = await this.prisma.apiKey.findFirst({ where: { id, organizationId: user.organizationId } });
     if (!key) throw new NotFoundException("API key not found");
-    if (key.ownerKind === "USER" && key.ownerId !== user.id && !["OWNER", "ADMIN", "SECURITY_ADMIN"].includes(user.role)) {
+    const privileged = ["OWNER", "ADMIN", "SECURITY_ADMIN"].includes(user.role);
+    if (key.ownerKind === "USER" && key.ownerId !== user.id && !privileged) {
       throw new NotFoundException("API key not found");
+    }
+    // Service-account keys are additionally gated in service (see
+    // MANAGE_API_KEYS in permissions.ts): rotate/revoke — and the plaintext
+    // a rotation returns — require MANAGE_SERVICE_ACCOUNTS privilege.
+    if (key.ownerKind === "SERVICE_ACCOUNT" && !privileged) {
+      throw new ForbiddenException("Missing identity permission MANAGE_SERVICE_ACCOUNTS");
     }
     return key;
   }

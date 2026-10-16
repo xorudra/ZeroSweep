@@ -7056,6 +7056,10 @@ model SamlProviderConfig {
   nameAttribute           String  @default("displayName")
   groupsAttribute         String  @default("groups")
   wantEncryptedAssertions Boolean @default(false)
+  // Operator-configured SP ACS URL (security audit 2026-10-16): the SAML
+  // Recipient/Destination expectation is ALWAYS this configured value,
+  // never request input.
+  acsUrl                  String  @default("")
 
   @@index([providerId])
 }

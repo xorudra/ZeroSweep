@@ -1,10 +1,13 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
+import { promises as dns } from "node:dns";
 import {
+  blockedTargetReason, cloudEndpointVerdict,
   generatePkcePair, mapOidcClaims, mapSamlAttributes, normalizeEmail, randomToken, sha256Hex,
   validateDiscovery, validateIdToken, validateSamlResponse, SamlRejected,
 } from "@dsrclone/security-sdk";
+import { isTenantSecretSlotReference } from "@dsrclone/config";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { SecretResolver } from "../secret-resolver";
@@ -21,19 +24,40 @@ export interface OidcTransport {
 
 export const OIDC_TRANSPORT = "OIDC_TRANSPORT";
 
+/** SSRF guard for every server-side IdP fetch (same policy as the target
+ *  verification fetcher): the endpoint must pass cloudEndpointVerdict
+ *  (public https, no embedded credentials, host not in a blocked range)
+ *  AND every address it resolves to must clear blockedTargetReason — a
+ *  public name resolving into private space is refused too. Redirects
+ *  are never followed, so a redirect target is never fetched. */
+async function assertPublicIdpEndpoint(rawUrl: string): Promise<void> {
+  const verdict = cloudEndpointVerdict(rawUrl);
+  if (!verdict.allowed) throw new Error(`IdP endpoint refused: ${verdict.reason ?? "ENDPOINT_BLOCKED"}`);
+  const host = new URL(rawUrl).hostname;
+  const addresses = await dns.lookup(host, { all: true });
+  if (addresses.length === 0 || addresses.some((a) => blockedTargetReason(a.address))) {
+    throw new Error("IdP endpoint resolves to a blocked address");
+  }
+}
+
 export class FetchOidcTransport implements OidcTransport {
   async discovery(issuer: string) {
-    const res = await fetch(`${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`);
+    const url = `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
+    await assertPublicIdpEndpoint(url);
+    const res = await fetch(url, { redirect: "manual" });
     if (!res.ok) throw new Error(`Discovery failed: ${res.status}`);
     return (await res.json()) as Record<string, unknown>;
   }
   async jwks(jwksUri: string) {
-    const res = await fetch(jwksUri);
+    await assertPublicIdpEndpoint(jwksUri);
+    const res = await fetch(jwksUri, { redirect: "manual" });
     if (!res.ok) throw new Error(`JWKS failed: ${res.status}`);
     return (await res.json()) as { keys: never[] };
   }
   async token(tokenEndpoint: string, params: Record<string, string>) {
-    const res = await fetch(tokenEndpoint, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params).toString() });
+    await assertPublicIdpEndpoint(tokenEndpoint);
+    const res = await fetch(tokenEndpoint, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params).toString() });
+    if (res.status >= 300 && res.status < 400) throw new Error("IdP token endpoint redirect refused");
     return (await res.json()) as { id_token?: string; error?: string };
   }
 }
@@ -64,9 +88,26 @@ export class SsoService {
     return out;
   }
 
+  /** Write-site closure for tenant-supplied secret references: an `env:`
+   *  reference may only name an operator-provisioned tenant slot
+   *  (env:TENANT_SECRET_*); anything else is rejected at write time, not
+   *  merely left unresolvable. Non-env references stay unresolvable. */
+  private assertTenantSecretRef(reference: string, field: string) {
+    if (reference.startsWith("env:") && !isTenantSecretSlotReference(reference)) {
+      throw new BadRequestException(`${field}: env: references must name an operator-provisioned tenant secret slot (env:TENANT_SECRET_*)`);
+    }
+  }
+
   async createProvider(user: RequestUser, body: Record<string, unknown>) {
     const type = body.type as string;
     if (type !== "OIDC" && type !== "SAML") throw new BadRequestException("Provider type must be OIDC or SAML");
+    if (body.clientSecretRef !== undefined) this.assertTenantSecretRef(String(body.clientSecretRef ?? ""), "clientSecretRef");
+    if (type === "OIDC") {
+      // The issuer is fetched server-side at login/test time: it must be a
+      // public https endpoint before it is persisted (SSRF policy).
+      const verdict = cloudEndpointVerdict(String(body.issuer ?? ""));
+      if (!verdict.allowed) throw new BadRequestException(`issuer: ${verdict.reason ?? "ENDPOINT_BLOCKED"}`);
+    }
     const provider = await this.prisma.enterpriseSsoProvider.create({
       data: {
         organizationId: user.organizationId, name: String(body.name ?? "SSO"), type,
@@ -88,6 +129,7 @@ export class SsoService {
         data: {
           providerId: provider.id, idpEntityId: String(body.idpEntityId ?? ""), ssoUrl: String(body.ssoUrl ?? ""),
           certificate: String(body.certificate ?? ""), spEntityId: String(body.spEntityId ?? ""),
+          acsUrl: String(body.acsUrl ?? ""),
           emailAttribute: String(body.emailAttribute ?? "email"), nameAttribute: String(body.nameAttribute ?? "displayName"),
           groupsAttribute: String(body.groupsAttribute ?? "groups"), wantEncryptedAssertions: Boolean(body.wantEncryptedAssertions),
         },
@@ -99,6 +141,7 @@ export class SsoService {
 
   async updateProvider(user: RequestUser, providerId: string, body: Record<string, unknown>) {
     await this.ownProvider(user, providerId);
+    if (body.clientSecretRef !== undefined) this.assertTenantSecretRef(String(body.clientSecretRef ?? ""), "clientSecretRef");
     const data: Record<string, unknown> = {};
     for (const field of ["enabled", "enforceSso", "jitEnabled", "jitDefaultRole", "name"]) {
       if (body[field] !== undefined) data[field] = body[field];
@@ -200,24 +243,38 @@ export class SsoService {
     return { requestId, ssoUrl: (await this.samlConfig(organizationId, providerId)).config.ssoUrl };
   }
 
-  async samlAcs(organizationId: string, providerId: string, body: { samlResponse: string; relayState?: string; acsUrl: string }) {
+  async samlAcs(organizationId: string, providerId: string, body: { samlResponse: string; relayState?: string }) {
     const { provider, config } = await this.samlConfig(organizationId, providerId);
     if (!provider.enabled) throw new ForbiddenException("SSO provider is not enabled");
     if (config.wantEncryptedAssertions) throw new BadRequestException("Provider demands encrypted assertions — NOT_SUPPORTED in this build");
-    let expectedInResponseTo: string | null = null;
-    if (body.relayState) {
-      const challenge = await this.prisma.authChallenge.findUnique({ where: { tokenHash: sha256Hex(body.relayState) } });
-      if (challenge && !challenge.consumedAt && new Date(challenge.expiresAt as Date).getTime() >= Date.now()) {
-        expectedInResponseTo = body.relayState;
-        await this.prisma.authChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
-      }
+    // The expected recipient comes ONLY from server configuration — never
+    // from the unauthenticated request.
+    if (!config.acsUrl) throw new BadRequestException("SAML provider is NOT_CONFIGURED: no ACS URL in provider configuration");
+    // Request correlation is MANDATORY for SP-initiated login (as the OIDC
+    // callback already requires for state): the relayState must name a
+    // live, unconsumed SAML_FLOW challenge bound to this org + provider,
+    // and its request id is the required InResponseTo. Unsolicited
+    // responses are rejected.
+    const challenge = body.relayState
+      ? await this.prisma.authChallenge.findUnique({ where: { tokenHash: sha256Hex(body.relayState) } })
+      : null;
+    if (
+      !challenge || challenge.type !== "SAML_FLOW" || challenge.consumedAt
+      || new Date(challenge.expiresAt as Date).getTime() < Date.now()
+      || (challenge.userId as string) !== providerId
+      || (challenge.metadata as { organizationId?: string } | null)?.organizationId !== organizationId
+    ) {
+      await this.failEvent(organizationId, "SSO_LOGIN", "STATE_INVALID");
+      throw new UnauthorizedException("SSO login failed");
     }
+    await this.prisma.authChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
+    const expectedInResponseTo = body.relayState as string;
     const xml = Buffer.from(body.samlResponse, "base64").toString("utf8");
     let identity;
     try {
       identity = validateSamlResponse({
         responseXml: xml, idpEntityId: config.idpEntityId, idpCertificatePem: config.certificate,
-        spEntityId: config.spEntityId, acsUrl: body.acsUrl, expectedInResponseTo, nowMs: Date.now(),
+        spEntityId: config.spEntityId, acsUrl: config.acsUrl as string, expectedInResponseTo, nowMs: Date.now(),
       });
     } catch (err) {
       if (err instanceof SamlRejected) await this.failEvent(organizationId, "SSO_LOGIN", "ASSERTION_INVALID");
@@ -239,9 +296,11 @@ export class SsoService {
       ?? await this.prisma.user.findUnique({ where: { email: identity.email } });
     let membership = user ? await this.prisma.membership.findFirst({ where: { userId: user.id, organizationId } }) : null;
     const mappedRole = await this.mappedRoleForGroups(organizationId, identity.groups);
+    // JIT gates EVERY provisioning side effect of SSO login — a new user
+    // row AND a first membership for a pre-existing user alike.
+    const orgPolicy = await this.prisma.organizationSecurityPolicy.findUnique({ where: { organizationId } });
+    const jitAllowed = Boolean(provider.jitEnabled) && Boolean(orgPolicy?.jitEnabled ?? true);
     if (!user) {
-      const orgPolicy = await this.prisma.organizationSecurityPolicy.findUnique({ where: { organizationId } });
-      const jitAllowed = Boolean(provider.jitEnabled) && Boolean(orgPolicy?.jitEnabled ?? true);
       if (!jitAllowed) { await this.failEvent(organizationId, "SSO_LOGIN", "JIT_DISABLED"); throw new UnauthorizedException("SSO login failed"); }
       // JIT (§86/87): account is created at the provider's configured
       // default role. A group mapping may raise it ONLY through the explicit
@@ -259,8 +318,9 @@ export class SsoService {
         throw new UnauthorizedException("SSO login failed");
       }
       if (!membership) {
+        if (!jitAllowed) { await this.failEvent(organizationId, "SSO_LOGIN", "JIT_DISABLED"); throw new UnauthorizedException("SSO login failed"); }
         membership = await this.prisma.membership.create({
-          data: { userId: user.id, organizationId, role: (mappedRole ?? "VIEWER") as never, status: "ACTIVE", joinedAt: new Date() },
+          data: { userId: user.id, organizationId, role: (mappedRole ?? (provider.jitDefaultRole as string) ?? "VIEWER") as never, status: "ACTIVE", joinedAt: new Date() },
         });
       } else if (membership.status !== "ACTIVE") {
         await this.failEvent(organizationId, "SSO_LOGIN", "MEMBERSHIP_INACTIVE");
@@ -349,7 +409,7 @@ export class SsoService {
       return { ...base, oidc: config ? { issuer: config.issuer, clientId: config.clientId, clientSecretRef: config.clientSecretRef, clientSecretConfigured: Boolean(this.secrets.resolve(config.clientSecretRef as string)), scopes: config.scopes } : null };
     }
     const config = await this.prisma.samlProviderConfig.findUnique({ where: { providerId: p.id as string } });
-    return { ...base, saml: config ? { idpEntityId: config.idpEntityId, ssoUrl: config.ssoUrl, spEntityId: config.spEntityId, certificateConfigured: Boolean(config.certificate), wantEncryptedAssertions: config.wantEncryptedAssertions } : null };
+    return { ...base, saml: config ? { idpEntityId: config.idpEntityId, ssoUrl: config.ssoUrl, spEntityId: config.spEntityId, acsUrl: config.acsUrl, certificateConfigured: Boolean(config.certificate), wantEncryptedAssertions: config.wantEncryptedAssertions } : null };
   }
 
   private async failEvent(organizationId: string, eventType: string, reason: string) {

@@ -60,7 +60,13 @@ export class GovernanceService {
   async setMembershipRole(user: RequestUser, targetUserId: string, role: string) {
     const membership = await this.prisma.membership.findFirst({ where: { userId: targetUserId, organizationId: user.organizationId } });
     if (!membership) throw new NotFoundException("Membership not found");
+    const previousRole = membership.role as string;
     const updated = await this.prisma.membership.update({ where: { id: membership.id }, data: { role: role as never } });
+    // A role change revokes the target's org sessions (same pattern as
+    // setMembershipStatus): live tokens must not keep the old role (§124).
+    if (previousRole !== role) {
+      await this.prisma.userSession.updateMany({ where: { userId: targetUserId, organizationId: user.organizationId, revokedAt: null }, data: { revokedAt: new Date() } });
+    }
     return updated;
   }
 
@@ -279,7 +285,12 @@ export class GovernanceService {
     }
     if (decision === "CHANGE_ROLE") {
       if (item.subjectType !== "MEMBERSHIP" || !newRole) throw new BadRequestException("CHANGE_ROLE requires a membership item and a new role");
+      const membership = await this.prisma.membership.findUnique({ where: { id: item.subjectId } });
+      const previousRole = membership?.role as string | undefined;
       await this.prisma.membership.update({ where: { id: item.subjectId }, data: { role: newRole as never } });
+      if (membership && previousRole !== newRole) {
+        await this.prisma.userSession.updateMany({ where: { userId: membership.userId, organizationId: user.organizationId, revokedAt: null }, data: { revokedAt: new Date() } });
+      }
     }
     await this.prisma.accessReviewItem.update({ where: { id: itemId }, data: { decision: decision as never, decidedBy: user.id, decidedAt: new Date() } });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, action: "ACCESS_REVIEW_DECIDED", resourceType: "AccessReviewItem", resourceId: itemId, metadata: { decision } });

@@ -128,24 +128,36 @@ export class ScimService {
     if (Object.keys(data).length > 0) await this.prisma.user.update({ where: { id }, data });
     if (body.active !== undefined) {
       if (body.active === false) return this.deactivateUser(organizationId, id);
+      // Reactivation is organization-local: one org's SCIM token must not
+      // globally re-enable an account another org (or the platform)
+      // disabled — the global User row is never written here.
       await this.prisma.membership.updateMany({ where: { userId: id, organizationId }, data: { status: "ACTIVE" } });
-      await this.prisma.user.update({ where: { id }, data: { isActive: true, status: "ACTIVE" } });
     }
     if (body.groups !== undefined) {
       const role = await this.roleForScimGroups(organizationId, body.groups);
-      if (role) await this.prisma.membership.updateMany({ where: { userId: id, organizationId }, data: { role: role as never } });
+      if (role) {
+        await this.prisma.membership.updateMany({ where: { userId: id, organizationId }, data: { role: role as never } });
+        // Role changes revoke the target's org sessions (§124 pattern).
+        await this.prisma.userSession.updateMany({ where: { userId: id, organizationId, revokedAt: null }, data: { revokedAt: new Date() } });
+      }
     }
     await this.audit.record({ actorId: "scim", organizationId, action: "SCIM_USER_UPDATED", resourceType: "User", resourceId: id });
     return this.getUser(organizationId, id);
   }
 
   /** Deprovisioning (§69): disable — never delete — revoke org access,
-   *  revoke sessions, preserve audit/history. */
+   *  revoke sessions, preserve audit/history. Deprovisioning is
+   *  organization-local: the global User row is disabled ONLY when no
+   *  ACTIVE membership in any organization remains, so one org's SCIM
+   *  token cannot deactivate an account shared with other orgs. */
   async deactivateUser(organizationId: string, id: string) {
     const { user } = await this.mustFindScimUser(organizationId, id);
-    await this.prisma.user.update({ where: { id }, data: { isActive: false, status: "DEACTIVATED" } });
     await this.prisma.membership.updateMany({ where: { userId: id, organizationId }, data: { status: "REVOKED" } });
     await this.prisma.userSession.updateMany({ where: { userId: id, organizationId, revokedAt: null }, data: { revokedAt: new Date() } });
+    const remainingActive = await this.prisma.membership.count({ where: { userId: id, status: "ACTIVE" } });
+    if (remainingActive === 0) {
+      await this.prisma.user.update({ where: { id }, data: { isActive: false, status: "DEACTIVATED" } });
+    }
     await this.prisma.authenticationEvent.create({ data: { userId: id, organizationId, eventType: "SCIM_DEPROVISIONED" } });
     await this.audit.record({ actorId: "scim", organizationId, action: "SCIM_USER_DEACTIVATED", resourceType: "User", resourceId: id });
     return this.presentUser({ ...user, isActive: false }, organizationId, false);
@@ -162,6 +174,8 @@ export class ScimService {
     if (mapping) {
       for (const member of members) {
         await this.prisma.membership.updateMany({ where: { userId: member.value, organizationId }, data: { role: mapping.organizationRole } });
+        // Role changes revoke the target's org sessions (§124 pattern).
+        await this.prisma.userSession.updateMany({ where: { userId: member.value, organizationId, revokedAt: null }, data: { revokedAt: new Date() } });
         if (mapping.workspaceId && mapping.workspaceRole) {
           const existingWm = await this.prisma.workspaceMembership.findFirst({ where: { userId: member.value, workspaceId: mapping.workspaceId } });
           if (!existingWm) {

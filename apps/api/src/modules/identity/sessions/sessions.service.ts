@@ -77,14 +77,29 @@ export class SessionsService {
    *  credential in place. The session row (and its id, hence the `sid`
    *  claim of JWTs minted for it) survives; the previously presented
    *  token dies immediately because only the new token's hash is stored.
-   *  Callers must validate the presented token first (validateSessionToken)
-   *  — rotation itself trusts the session id it is handed. */
-  async rotateSessionCredential(sessionId: string) {
+   *  Callers must validate the presented token first (validateSessionToken).
+   *
+   *  The write is an atomic compare-and-swap on the PRESENTED token's
+   *  hash: of two concurrent refreshes presenting the same credential,
+   *  exactly one wins. A CAS miss means the credential was already
+   *  rotated (replay of a superseded credential, or the loser of the
+   *  race) — treated as token reuse: the whole session family is
+   *  revoked, so neither the replayed nor the winning credential can
+   *  be used again, and the reuse is recorded as an auth event. */
+  async rotateSessionCredential(sessionId: string, presentedToken: string) {
     const token = randomToken(32);
-    await this.prisma.userSession.update({
-      where: { id: sessionId },
+    const result = await this.prisma.userSession.updateMany({
+      where: { id: sessionId, tokenHash: sha256Hex(presentedToken), revokedAt: null },
       data: { tokenHash: sha256Hex(token), lastSeenAt: new Date() },
     });
+    if (result.count === 0) {
+      const session = await this.prisma.userSession.findUnique({ where: { id: sessionId } });
+      await this.prisma.userSession.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date() } });
+      if (session) {
+        await this.prisma.authenticationEvent.create({ data: { userId: session.userId, organizationId: session.organizationId, eventType: "SESSION_TOKEN_REUSE_DETECTED" } });
+      }
+      throw new UnauthorizedException("Session credential reuse detected");
+    }
     return { sessionToken: token };
   }
 
