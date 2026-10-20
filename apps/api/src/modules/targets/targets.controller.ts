@@ -20,6 +20,11 @@ export class TargetsController {
   @Get(":id")
   async get(@CurrentUser() user: RequestUser, @Param("id") id: string) { return this.targets.get(user, id); }
 
+  @Get(":id/verifications")
+  async listVerifications(@CurrentUser() user: RequestUser, @Param("id") id: string) {
+    return this.targets.listVerifications(user, id);
+  }
+
   @Post(":id/verifications")
   @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async startVerification(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: unknown) {

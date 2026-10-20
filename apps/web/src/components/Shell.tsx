@@ -130,7 +130,7 @@ const GROUPS: NavGroup[] = [
  * Owner order 2026-10-20: "make it simple and guided".
  */
 const PRIMARY: { href: string; label: string; hint: string; icon: (props: IconProps) => JSX.Element }[] = [
-  { href: "/targets", label: "1 · Add a target", hint: "Your website or app", icon: RadarIcon },
+  { href: "/targets", label: "1 · Add a target", hint: "Add it, then verify it's yours", icon: RadarIcon },
   { href: "/assessments", label: "2 · Plan & approve", hint: "The check, agreed first", icon: ClipboardIcon },
   { href: "/scans", label: "3 · Run the scan", hint: "Watch it work", icon: PulseIcon },
   { href: "/findings", label: "4 · Read findings", hint: "Problems, worst first", icon: BugIcon },

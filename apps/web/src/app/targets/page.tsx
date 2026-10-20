@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { ResourceList, Row } from "@/components/ResourceList";
 import { Badge, Card } from "@dsrclone/ui";
@@ -70,7 +71,7 @@ export default function Page() {
 
   return (
     <>
-      <PageHeader eyebrow="Targets — step 1" title="Targets" body="Add the website, app or system you want checked — only ones you own or have permission to test. A target must be verified before any scan can run." />
+      <PageHeader eyebrow="Targets — step 1" title="Targets" body="Add the website, app or system you want checked — only ones you own or have permission to test. Then open a target from the list to verify it's yours (step 2) — a target must be verified before any scan can run." />
       <div className="mb-6">
         <Card eyebrow="Step 1" title="Add a target">
           <form onSubmit={submit} className="grid gap-4 md:grid-cols-[1fr_220px_1fr_auto] md:items-end">
@@ -104,7 +105,7 @@ export default function Page() {
         emptyBody="Use the Add a target form above — a domain, web application, IP, API, repository, image or lab environment — then verify ownership to continue."
         columns={['Name','Type','Value','Status','Verified']}
         renderRow={(item: Record<string, unknown>, i: number) => (
-          <Row key={i} cells={[String(item.name ?? ""), String(item.type ?? ""), String(item.value ?? ""), String(item.status ?? ""), item.verified ? <Badge tone="VERIFIED">Verified</Badge> : <Badge tone="PENDING">Pending</Badge>]} />
+          <Row key={i} cells={[<Link key="name" href={`/targets/${String(item.id ?? "")}`} className="text-sky-300 hover:underline">{String(item.name ?? "")}</Link>, String(item.type ?? ""), String(item.value ?? ""), String(item.status ?? ""), item.verified ? <Badge tone="VERIFIED">Verified</Badge> : <Badge tone="PENDING">Pending</Badge>]} />
         )}
       />
     </>

@@ -10,6 +10,18 @@ import { assertTargetInOrg, resolveWorkspace } from "../../common/tenant";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";
 
+/** Verification challenges are placed on the target's HOST. DOMAIN
+ *  targets store the bare host already; WEB_APPLICATION targets store a
+ *  full URL (https://example.com/) — resolving TXT records or building
+ *  the well-known URL from the raw value could never work for those. */
+function hostOf(value: string): string {
+  try {
+    return new URL(value).hostname || value;
+  } catch {
+    return value;
+  }
+}
+
 /** Pinned HTTPS fetch seam: connects to the already-validated
  *  `address` while TLS SNI + certificate validation keep the original
  *  hostname, so the name is never re-resolved at fetch time (DNS
@@ -81,6 +93,16 @@ export class TargetsService {
     return assertTargetInOrg(this.prisma, user, id);
   }
 
+  /** Verification attempts for one target, newest first — the target
+   *  detail page renders these so a started challenge survives reloads. */
+  async listVerifications(user: RequestUser, targetId: string) {
+    const target = await assertTargetInOrg(this.prisma, user, targetId);
+    return this.prisma.targetVerification.findMany({
+      where: { targetId: target.id },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   /** Start an ownership-verification challenge. Nothing is marked verified
    *  until a real check passes — no fake verification. */
   async startVerification(user: RequestUser, targetId: string, method: "DNS_TXT" | "HTTP_FILE" | "MANUAL_APPROVAL") {
@@ -93,11 +115,12 @@ export class TargetsService {
         expiresAt: new Date(Date.now() + 72 * 3600 * 1000),
       },
     });
+    const host = hostOf(target.value);
     const instructions =
       method === "DNS_TXT"
-        ? `Add a TXT record to ${target.value}: ${challenge}`
+        ? `Add a TXT record to ${host}: ${challenge}`
         : method === "HTTP_FILE"
-          ? `Serve the challenge text at https://${target.value}/.well-known/dsrclone-verification.txt`
+          ? `Serve the challenge text at https://${host}/.well-known/dsrclone-verification.txt`
           : "An administrator will review ownership evidence and approve manually.";
     return { verification, instructions };
   }
@@ -113,9 +136,10 @@ export class TargetsService {
       return { status: "EXPIRED" };
     }
     let verified = false;
+    const host = hostOf(target.value);
     if (verification.method === "DNS_TXT") {
       try {
-        const records = await dns.resolveTxt(target.value);
+        const records = await dns.resolveTxt(host);
         verified = records.flat().some((r) => r.includes(verification.challenge));
       } catch { verified = false; }
     } else if (verification.method === "MANUAL_APPROVAL") {
@@ -139,13 +163,13 @@ export class TargetsService {
       // (pinnedHttpsFetch): the hostname is never re-resolved at fetch
       // time, closing the DNS-rebinding TOCTOU between check and fetch.
       // Redirects are never followed: a redirect is a failed check.
-      const url = `https://${target.value}/.well-known/dsrclone-verification.txt`;
+      const url = `https://${host}/.well-known/dsrclone-verification.txt`;
       const verdict = cloudEndpointVerdict(url);
       if (!verdict.allowed) {
         verified = false;
       } else {
         try {
-          const addresses = await dns.lookup(target.value, { all: true });
+          const addresses = await dns.lookup(host, { all: true });
           if (addresses.length === 0 || addresses.some((a) => blockedTargetReason(a.address))) {
             verified = false;
           } else {
