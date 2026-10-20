@@ -13,9 +13,11 @@ import { apiFetch } from "@/lib/api-client";
  * search field with a ⌘K badge (live-filters the navigation), flat
  * monochrome menu rows whose active state is a neutral dark-grey pill
  * with white text, and the user profile pinned at the bottom. No accent
- * colour anywhere — the set is deliberately black/white/grey. Our 86
- * destinations sit behind the eight group rows; groups expand in place
- * and the group holding the current page opens automatically.
+ * colour anywhere — the set is deliberately black/white/grey. The five
+ * steps of the normal road (PRIMARY below) sit flat at the top; our 86
+ * destinations sit behind the eight "Advanced tools" group rows, which
+ * expand in place and the group holding the current page opens
+ * automatically.
  */
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -26,6 +28,7 @@ const ic = (path: ReactNode) => function Icon(props: IconProps) {
 };
 const GridIcon = ic(<><rect x="3.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.8" /></>);
 const ClipboardIcon = ic(<><rect x="5" y="4.5" width="14" height="17" rx="2" /><path d="M9 4.5a3 3 0 0 1 6 0" /><path d="M9 12h6M9 16h4" /></>);
+const DocIcon = ic(<><path d="M6 3.5h8L19 8v12.5H6Z" /><path d="M13.5 3.5V8H19M9 13h6M9 16.5h4" /></>);
 const RadarIcon = ic(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="1" fill="currentColor" /><path d="M12 12 17 6" /></>);
 const ShieldIcon = ic(<><path d="M12 3.5 5 6v5c0 4.6 3 7.7 7 9.5 4-1.8 7-4.9 7-9.5V6l-7-2.5Z" /><path d="m9.3 12 2 2 3.6-3.8" /></>);
 const BugIcon = ic(<><rect x="7" y="8" width="10" height="11" rx="4.5" /><path d="M12 8V5M8.5 5.5 7 3.8M15.5 5.5 17 3.8M7 13H3.8M7 17H4.5M17 13h3.2M17 17h2.5" /></>);
@@ -119,6 +122,21 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * The normal road, always visible at the top of the sidebar: the five
+ * pages a user actually needs, in the order the work flows. Everything
+ * else lives below under "Advanced tools" (the GROUPS index above) —
+ * nothing is removed, it just stops shouting over the main flow.
+ * Owner order 2026-10-20: "make it simple and guided".
+ */
+const PRIMARY: { href: string; label: string; hint: string; icon: (props: IconProps) => JSX.Element }[] = [
+  { href: "/targets", label: "1 · Add a target", hint: "Your website or app", icon: RadarIcon },
+  { href: "/assessments", label: "2 · Plan & approve", hint: "The check, agreed first", icon: ClipboardIcon },
+  { href: "/scans", label: "3 · Run the scan", hint: "Watch it work", icon: PulseIcon },
+  { href: "/findings", label: "4 · Read findings", hint: "Problems, worst first", icon: BugIcon },
+  { href: "/reports", label: "5 · Get the report", hint: "Download & share", icon: DocIcon },
+];
+
 const isActive = (pathname: string, href: string) =>
   href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 
@@ -191,6 +209,20 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
             <Link href="/" onClick={go} className={rowCls(isActive(pathname, "/"))}>
               <GridIcon className="shrink-0" /><span>Overview</span>
             </Link>
+            <p className="px-3 pb-1 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6E6E6E]">Start here — the normal road</p>
+            {PRIMARY.map((item) => {
+              const ItemIcon = item.icon;
+              return (
+                <Link key={item.href} href={item.href} onClick={go} className={rowCls(isActive(pathname, item.href))}>
+                  <ItemIcon className="shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate leading-tight">{item.label}</span>
+                    <span className="block truncate text-[11px] leading-tight text-[#8A8A8A]">{item.hint}</span>
+                  </span>
+                </Link>
+              );
+            })}
+            <p className="px-3 pb-1 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6E6E6E]">Advanced tools</p>
             {GROUPS.map((group) => {
               const GroupIcon = group.icon;
               const expanded = Boolean(open[group.label]);
