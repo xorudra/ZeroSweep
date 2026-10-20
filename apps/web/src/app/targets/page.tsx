@@ -50,9 +50,12 @@ export default function Page() {
     e.preventDefault();
     setBusy(true); setError(""); setAdded("");
     try {
+      // NOTE: no Content-Type header here — apiFetch already sets
+      // application/json; passing it again (different casing) makes the
+      // browser send "application/json, application/json", which the
+      // API's JSON parser does not recognize, so the body arrives empty.
       await apiFetch("/targets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), type, value: value.trim() }),
       });
       setAdded(`"${name.trim()}" added below. It starts as Pending — a target must be verified as yours before anything can scan it.`);
