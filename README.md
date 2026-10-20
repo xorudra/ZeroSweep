@@ -35,10 +35,10 @@ address, and sign-up is invite-only.
 
 | Piece | URL |
 |---|---|
-| Web console | https://dsrclone.130-210-56-74.sslip.io |
-| API health | https://dsrclone.130-210-56-74.sslip.io/api/v1/health/live |
-| AI copilot service health | https://dsrclone.130-210-56-74.sslip.io/ai/health |
-| Worker health | https://dsrclone.130-210-56-74.sslip.io/worker-health |
+| Web console | https://dsrclone.dpdns.org |
+| API health | https://dsrclone.dpdns.org/api/v1/health/live |
+| AI copilot service health | https://dsrclone.dpdns.org/ai/health |
+| Worker health | https://dsrclone.dpdns.org/worker-health |
 | Database / storage | Neon Postgres 16 (free plan) + private Supabase Storage bucket |
 
 Verified live 2026-10-12: API health reports **all checks ok** (api /
