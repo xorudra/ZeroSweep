@@ -171,10 +171,10 @@ describe("scanner instances (§15–§17, §54/§55)", () => {
     expect(health.healthStatus).toBe("MISCONFIGURED");
   });
 
-  it("write routes are OWNER/ADMIN only", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, ScannersController.prototype.createInstance)).toEqual(["OWNER", "ADMIN"]);
-    expect(Reflect.getMetadata(ROLES_KEY, ScannersController.prototype.healthCheck)).toEqual(["OWNER", "ADMIN"]);
-    expect(Reflect.getMetadata(ROLES_KEY, ScanHttpHistoryController.prototype.raw)).toEqual(["OWNER", "ADMIN"]);
+  it("write routes carry no role restriction (owner order 2026-10-21: zero restriction)", () => {
+    expect(Reflect.getMetadata(ROLES_KEY, ScannersController.prototype.createInstance)).toBeUndefined();
+    expect(Reflect.getMetadata(ROLES_KEY, ScannersController.prototype.healthCheck)).toBeUndefined();
+    expect(Reflect.getMetadata(ROLES_KEY, ScanHttpHistoryController.prototype.raw)).toBeUndefined();
   });
 });
 

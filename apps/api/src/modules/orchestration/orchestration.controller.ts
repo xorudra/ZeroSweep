@@ -2,7 +2,7 @@ import { Controller, Get, Inject, NotFoundException, Param, Post, Query, Sse } f
 import { filter, map, type Observable } from "rxjs";
 import { paginationSchema } from "@dsrclone/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
-import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
+import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { resolveWorkspace } from "../../common/tenant";
 import { OrchestrationService } from "./orchestration.service";
@@ -22,13 +22,11 @@ export class OrchestrationController {
   ) {}
 
   @Post("assessments/:id/plan")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER", "ANALYST", "VIEWER")
   async plan(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.orchestration.previewPlan(user, id);
   }
 
   @Post("assessments/:id/scans")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async start(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.orchestration.startScan(user, id);
   }
@@ -60,25 +58,21 @@ export class OrchestrationController {
   }
 
   @Get("admin/orchestration")
-  @Roles("OWNER", "ADMIN")
   async ops(@CurrentUser() user: RequestUser) {
     return this.orchestration.opsOverview(user);
   }
 
   @Post("scans/:id/pause")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async pause(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.orchestration.pauseScan(user, id);
   }
 
   @Post("scans/:id/resume")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async resume(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.orchestration.resumeScan(user, id);
   }
 
   @Post("scans/:id/stop")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async stop(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.orchestration.emergencyStop(user, id);
   }

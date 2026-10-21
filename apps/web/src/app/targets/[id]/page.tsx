@@ -39,7 +39,7 @@ interface VerificationRow {
 const METHODS: { value: string; label: string; hint: string }[] = [
   { value: "DNS_TXT", label: "DNS record (recommended)", hint: "You add one text record where your domain is registered. Best for domains and websites. Usually takes a few minutes to become visible." },
   { value: "HTTP_FILE", label: "File on the website", hint: "You put one small text file on the site's server. Choose this if you run the server yourself." },
-  { value: "MANUAL_APPROVAL", label: "Another admin approves", hint: "Safety rule: the person who added the target can't approve their own. This only completes when a different owner/admin checks it." },
+  { value: "MANUAL_APPROVAL", label: "Approve it yourself", hint: "You confirm ownership on your own word and it verifies when you check. Fastest — but it's your attestation; the DNS and file methods are stronger evidence." },
 ];
 
 const inputCls = "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-500";

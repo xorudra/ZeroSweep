@@ -4,7 +4,7 @@ import {
   grantScanApprovalSchema, scannerImportSchema, updateScannerInstanceSchema,
 } from "@dsrclone/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
-import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
+import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
@@ -26,40 +26,34 @@ export class ScannersController {
 
   // ------------------------------ instances ------------------------------
   @Get("instances")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   listInstances(@CurrentUser() user: RequestUser) {
     return this.scanners.listInstances(user);
   }
 
   @Post("instances")
-  @Roles("OWNER", "ADMIN")
   createInstance(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(createScannerInstanceSchema, body);
     return this.scanners.createInstance(user, { ...data, deploymentType: data.deploymentType ?? "MANAGED_DAEMON" });
   }
 
   @Patch("instances/:id")
-  @Roles("OWNER", "ADMIN")
   updateInstance(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: unknown) {
     const data = parseOrThrow(updateScannerInstanceSchema, body);
     return this.scanners.updateInstance(user, id, data);
   }
 
   @Delete("instances/:id")
-  @Roles("OWNER", "ADMIN")
   deleteInstance(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.scanners.deleteInstance(user, id);
   }
 
   @Post("instances/:id/health-check")
-  @Roles("OWNER", "ADMIN")
   healthCheck(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.scanners.healthCheckInstance(user, id);
   }
 
   // --------------------------- session profiles ---------------------------
   @Get("session-profiles")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async listSessionProfiles(@CurrentUser() user: RequestUser) {
     const workspace = await resolveWorkspace(this.prisma, user);
     return this.prisma.sessionProfile.findMany({
@@ -70,7 +64,6 @@ export class ScannersController {
   }
 
   @Post("session-profiles")
-  @Roles("OWNER", "ADMIN")
   async createSessionProfile(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(createSessionProfileSchema, body);
     const workspace = await resolveWorkspace(this.prisma, user);
@@ -87,7 +80,6 @@ export class ScannersController {
   }
 
   @Post("session-profiles/:id/authentication-profiles")
-  @Roles("OWNER", "ADMIN")
   async createAuthenticationProfile(@CurrentUser() user: RequestUser, @Param("id") id: string, @Body() body: unknown) {
     const data = parseOrThrow(createAuthenticationProfileSchema, body);
     const workspace = await resolveWorkspace(this.prisma, user);
@@ -106,27 +98,23 @@ export class ScannersController {
 
   // ------------------------------ approvals ------------------------------
   @Get("approvals")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   listApprovals(@CurrentUser() user: RequestUser, @Query("assessmentId") assessmentId?: string) {
     return this.scanners.listApprovals(user, assessmentId);
   }
 
   @Post("approvals")
-  @Roles("OWNER", "ADMIN")
   grantApproval(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(grantScanApprovalSchema, body);
     return this.scanners.grantApproval(user, { ...data, capability: data.capability ?? "ACTIVE_WEB_SCANNING" });
   }
 
   @Post("approvals/:id/revoke")
-  @Roles("OWNER", "ADMIN")
   revokeApproval(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     return this.scanners.revokeApproval(user, id);
   }
 
   // ------------------------------- imports -------------------------------
   @Post("import")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   importExport(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(scannerImportSchema, body);
     return this.scanners.importExport(user, data);
@@ -184,7 +172,6 @@ export class ScanHttpHistoryController {
   }
 
   @Get(":id/http-history/:txId/raw")
-  @Roles("OWNER", "ADMIN")
   async raw(@CurrentUser() user: RequestUser, @Param("id") id: string, @Param("txId") txId: string) {
     const { workspace } = await this.resolveScan(user, id);
     const tx = await this.prisma.httpTransaction.findFirst({ where: { id: txId, scanId: id, workspaceId: workspace.id } });

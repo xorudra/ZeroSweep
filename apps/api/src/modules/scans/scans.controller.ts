@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, 
 import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
 import { createScanSchema, paginationSchema } from "@dsrclone/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
-import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
+import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
@@ -37,7 +37,6 @@ export class ScansController {
   }
 
   @Post()
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async create(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(createScanSchema, body);
     const workspace = await resolveWorkspace(this.prisma, user);
@@ -144,7 +143,6 @@ export class ScansController {
   }
 
   @Post(":id/cancel")
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async cancel(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     const workspace = await resolveWorkspace(this.prisma, user);
     const scan = await this.prisma.scan.findFirst({ where: { id, workspaceId: workspace.id } });

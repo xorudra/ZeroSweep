@@ -143,13 +143,13 @@ export class TargetsService {
         verified = records.flat().some((r) => r.includes(verification.challenge));
       } catch { verified = false; }
     } else if (verification.method === "MANUAL_APPROVAL") {
-      // Independence (security audit 2026-10-16 run-2): manual approval is
-      // a second-person control — the approver must be an OWNER/ADMIN who
-      // is neither the target's creator nor the person who opened this
-      // verification. Role alone never verifies a target.
-      verified = (user.role === "OWNER" || user.role === "ADMIN")
-        && user.id !== target.createdBy
-        && (verification.requestedBy == null || user.id !== verification.requestedBy);
+      // Independence REMOVED by explicit owner order (2026-10-21,
+      // zero restriction): manual approval is the signed-in user's own
+      // attestation of ownership. It supersedes the audit-era
+      // second-person rule (2026-10-16 run-2); the TARGET_VERIFIED
+      // audit record below still names the actor. DNS_TXT and
+      // HTTP_FILE remain available as the stronger evidence proofs.
+      verified = true;
     } else {
       // HTTP_FILE check fetches the well-known file over HTTPS (plain
       // ownership proof, not a security scan). Launch Safety A5: the URL

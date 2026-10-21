@@ -1,7 +1,7 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
 import { createAssessmentSchema, paginationSchema } from "@dsrclone/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
-import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
+import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { assertTargetInOrg, resolveWorkspace } from "../../common/tenant";
 import { AuditService } from "../audit/audit.service";
@@ -26,7 +26,6 @@ export class AssessmentsController {
   }
 
   @Post()
-  @Roles("OWNER", "ADMIN", "SECURITY_ENGINEER")
   async create(@CurrentUser() user: RequestUser, @Body() body: unknown) {
     const data = parseOrThrow(createAssessmentSchema, body);
     const target = await assertTargetInOrg(this.prisma, user, data.targetId);
@@ -58,15 +57,15 @@ export class AssessmentsController {
   }
 
   @Post(":id/approve")
-  @Roles("OWNER", "ADMIN")
   async approve(@CurrentUser() user: RequestUser, @Param("id") id: string) {
     const workspace = await resolveWorkspace(this.prisma, user);
     const assessment = await this.prisma.assessment.findFirst({ where: { id, workspaceId: workspace.id } });
     if (!assessment) throw new NotFoundException("Assessment not found");
-    // Approval independence (security audit 2026-10-16 run-2): the
-    // creator can never approve their own assessment — approval is the
-    // second-person control the whole scan gate rests on.
-    if (assessment.createdBy === user.id) throw new ForbiddenException("You cannot approve your own assessment — approval must come from another owner or admin");
+    // Approval independence REMOVED by explicit owner order
+    // (2026-10-21): "everyone can do their own approve and create and
+    // everything with zero restriction". The audit-era second-person
+    // rule (2026-10-16 run-2) is superseded for this deployment; the
+    // approval is still audit-logged with its actor below.
     const updated = await this.prisma.assessment.update({ where: { id }, data: { status: "APPROVED", approvedBy: user.id } });
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: workspace.id, action: "ASSESSMENT_APPROVED", resourceType: "Assessment", resourceId: id });
     return updated;
