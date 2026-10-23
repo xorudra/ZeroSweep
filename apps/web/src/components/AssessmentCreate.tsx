@@ -30,8 +30,8 @@ const PROFILES: { value: string; label: string }[] = [
 ];
 
 const inputCls = "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-500";
-const labelCls = "block text-xs font-medium text-slate-400";
-const btnCls = "inline-flex h-9 items-center rounded-full bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-slate-200 disabled:opacity-50";
+const labelCls = "block text-xs font-medium uppercase tracking-wider text-slate-400";
+const btnCls = "rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0F0F0F] transition-colors hover:bg-slate-200 disabled:opacity-50";
 
 export function CreateAssessment({ onChanged }: { onChanged: () => void }) {
   const [targets, setTargets] = useState<TargetOption[] | null>(null);
@@ -148,7 +148,7 @@ export function PendingApprovals({ refreshKey, onChanged }: { refreshKey: number
             <li key={a.id} className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-slate-200">{a.name}</span>
               <span className="text-xs text-slate-500">{a.profile}</span>
-              <button type="button" disabled={busyId !== null} onClick={() => void approve(a)} className="rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition-colors hover:bg-slate-200 disabled:opacity-50">
+              <button type="button" disabled={busyId !== null} onClick={() => void approve(a)} className="rounded bg-sky-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
                 {busyId === a.id ? "Approving…" : "Approve"}
               </button>
             </li>

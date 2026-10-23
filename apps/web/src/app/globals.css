@@ -3,35 +3,17 @@
 @tailwind utilities;
 
 body {
-  background-color: #000000;
-  color: #ffffff;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
+  background-color: #020617;
+  color: #e2e8f0;
 }
 
-/* Numbers align digit-for-digit wherever they are compared. */
-table, .tnum {
-  font-variant-numeric: tabular-nums;
-}
-
-::selection {
-  background: #4cb3f0;
-  color: #000000;
-}
-
-/* Thin dark scrollbars that belong to the design, not the OS. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #2a2a2a transparent;
-}
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-
-/* Launch Safety D22: keyboard focus must be VISIBLE. A high-contrast
-   outline in the data hue on :focus-visible only (mouse/touch
-   interaction unaffected). */
+/* Launch Safety D22: keyboard focus must be VISIBLE. On this dark UI
+   the browser-default outline is effectively invisible against slate
+   backgrounds, so keyboard users could not tell where focus was.
+   A high-contrast sky outline on :focus-visible only (mouse/touch
+   interaction is unaffected). */
 :focus-visible {
-  outline: 2px solid #4cb3f0;
+  outline: 2px solid #38bdf8;
   outline-offset: 2px;
 }
+
