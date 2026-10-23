@@ -142,10 +142,10 @@ export default function Page() {
       <div className="mb-6">
         <Card eyebrow="Target" title={target.value}>
           <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div><dt className="text-xs uppercase tracking-wider text-slate-500">Type</dt><dd className="mt-1 text-slate-200">{target.type}</dd></div>
-            <div><dt className="text-xs uppercase tracking-wider text-slate-500">Status</dt><dd className="mt-1 text-slate-200">{target.status}</dd></div>
-            <div><dt className="text-xs uppercase tracking-wider text-slate-500">Ownership</dt><dd className="mt-1">{target.verified ? <Badge tone="VERIFIED">Verified</Badge> : <Badge tone="PENDING">Pending</Badge>}</dd></div>
-            <div><dt className="text-xs uppercase tracking-wider text-slate-500">Added</dt><dd className="mt-1 text-slate-200">{new Date(target.createdAt).toLocaleString()}</dd></div>
+            <div><dt className="text-xs text-slate-400">Type</dt><dd className="mt-1 text-slate-200">{target.type}</dd></div>
+            <div><dt className="text-xs text-slate-400">Status</dt><dd className="mt-1 text-slate-200">{target.status}</dd></div>
+            <div><dt className="text-xs text-slate-400">Ownership</dt><dd className="mt-1">{target.verified ? <Badge tone="VERIFIED">Verified</Badge> : <Badge tone="PENDING">Pending</Badge>}</dd></div>
+            <div><dt className="text-xs text-slate-400">Added</dt><dd className="mt-1 text-slate-200">{new Date(target.createdAt).toLocaleString()}</dd></div>
           </dl>
           <p className="mt-4 text-sm">
             <Link href="/targets" className="text-sky-300 hover:underline">← Back to all targets</Link>
@@ -165,7 +165,7 @@ export default function Page() {
           <p className="text-sm text-slate-300">Pick how to prove you own this target. DSRclone really checks — nothing is marked verified until the proof is found.</p>
           <div className="mt-4 grid gap-4 md:grid-cols-[260px_1fr_auto] md:items-end">
             <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor="verify-method">Method</label>
+              <label className="block text-xs font-medium text-slate-400" htmlFor="verify-method">Method</label>
               <select id="verify-method" className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
                 {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
@@ -177,7 +177,8 @@ export default function Page() {
           </div>
           {instructions ? (
             <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900 p-3">
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Do this, then check below</p>
+              <p className="text-xs font-medium text-slate-400">Do this, then check below</p>
+              {/* taste-skill-ignore: mono is for the literal verification string the user must copy exactly */}
               <p className="mt-1 break-all font-mono text-sm text-slate-100">{instructions}</p>
             </div>
           ) : null}

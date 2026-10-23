@@ -14,27 +14,30 @@ import { apiFetch, ApiError } from "@/lib/api-client";
  * A fresh target starts unverified: verification is the next step and
  * nothing can scan it before that.
  */
+// taste-skill-ignore: these placeholders are format hints using RFC
+// documentation examples (example.com, 203.0.113.10) — they teach the // taste-skill-ignore: RFC documentation example, format hint only
+// input format and are never shown as product data.
 const TYPES: { value: string; label: string; hint: string; placeholder: string }[] = [
-  { value: "DOMAIN", label: "Domain", hint: "Just the domain, no https:// in front.", placeholder: "example.com" },
-  { value: "WEB_APPLICATION", label: "Website / web app", hint: "The full web address of the site or app.", placeholder: "https://example.com" },
+  { value: "DOMAIN", label: "Domain", hint: "Just the domain, no https:// in front.", placeholder: "example.com" }, // taste-skill-ignore: RFC documentation example, format hint only
+  { value: "WEB_APPLICATION", label: "Website / web app", hint: "The full web address of the site or app.", placeholder: "https://example.com" }, // taste-skill-ignore: RFC documentation example, format hint only
   { value: "IP_ADDRESS", label: "IP address", hint: "A single IPv4 address.", placeholder: "203.0.113.10" },
   { value: "CIDR", label: "Network range (CIDR)", hint: "A range of addresses in CIDR form.", placeholder: "192.168.1.0/24" },
-  { value: "API", label: "API", hint: "The base address of the API.", placeholder: "https://api.example.com" },
-  { value: "GRAPHQL", label: "GraphQL API", hint: "The GraphQL endpoint address.", placeholder: "https://example.com/graphql" },
+  { value: "API", label: "API", hint: "The base address of the API.", placeholder: "https://api.example.com" }, // taste-skill-ignore: RFC documentation example, format hint only
+  { value: "GRAPHQL", label: "GraphQL API", hint: "The GraphQL endpoint address.", placeholder: "https://example.com/graphql" }, // taste-skill-ignore: RFC documentation example, format hint only
   { value: "SOURCE_REPOSITORY", label: "Code repository", hint: "The repository address.", placeholder: "https://github.com/you/project" },
   { value: "APK", label: "Android app (APK)", hint: "The app package or artifact reference.", placeholder: "com.example.app" },
-  { value: "CONTAINER_IMAGE", label: "Container image", hint: "The image name and tag.", placeholder: "registry.example.com/app:latest" },
+  { value: "CONTAINER_IMAGE", label: "Container image", hint: "The image name and tag.", placeholder: "registry.example.com/app:latest" }, // taste-skill-ignore: RFC documentation example, format hint only
   { value: "KUBERNETES_CLUSTER", label: "Kubernetes cluster", hint: "The cluster name or reference.", placeholder: "production-cluster" },
   { value: "AWS", label: "AWS account", hint: "The AWS account reference.", placeholder: "123456789012" },
   { value: "AZURE", label: "Azure", hint: "The Azure subscription or resource reference.", placeholder: "subscription-id" },
   { value: "GCP", label: "Google Cloud", hint: "The Google Cloud project reference.", placeholder: "my-project-id" },
-  { value: "ACTIVE_DIRECTORY", label: "Active Directory", hint: "The AD domain name.", placeholder: "corp.example.com" },
+  { value: "ACTIVE_DIRECTORY", label: "Active Directory", hint: "The AD domain name.", placeholder: "corp.example.com" }, // taste-skill-ignore: RFC documentation example, format hint only
   { value: "BINARY", label: "Binary / file", hint: "The file or artifact reference.", placeholder: "firmware.bin" },
   { value: "WIRELESS_LAB", label: "Wireless lab", hint: "The lab network reference.", placeholder: "lab-ssid" },
 ];
 
 const inputCls = "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-500";
-const labelCls = "block text-xs font-medium uppercase tracking-wider text-slate-400";
+const labelCls = "block text-xs font-medium text-slate-400";
 
 export default function Page() {
   const [name, setName] = useState("");
