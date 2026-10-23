@@ -68,7 +68,7 @@ export function AssessmentActions() {
               <span className="text-sm text-slate-200">{a.name}</span>
               <span className="text-xs text-slate-500">{a.profile}</span>
               <button disabled={busy !== null} onClick={() => void preview(a.id)} className="rounded bg-slate-800 px-3 py-1 text-xs text-slate-200 disabled:opacity-50">Preview plan</button>
-              <button disabled={busy !== null} onClick={() => void start(a.id)} className="rounded bg-sky-600 px-3 py-1 text-xs text-white disabled:opacity-50">Start scan (simulation)</button>
+              <button disabled={busy !== null} onClick={() => void start(a.id)} className="rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition-colors hover:bg-slate-200 disabled:opacity-50">Start scan (simulation)</button>
             </div>
           ))}
         </div>

@@ -101,7 +101,7 @@ const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 function stageTone(status: string): string {
   switch (status) {
     case "COMPLETED": return "bg-emerald-500/15 text-emerald-300";
-    case "RUNNING": return "bg-sky-500/15 text-sky-300";
+    case "RUNNING": return "bg-[#12242e] text-[#4cb3f0]";
     case "FAILED": return "bg-red-500/15 text-red-300";
     case "PARTIAL": return "bg-amber-500/15 text-amber-300";
     case "CANCELLED": case "SKIPPED": return "bg-slate-500/15 text-slate-400";
@@ -201,7 +201,7 @@ export default function Page() {
               <Badge>{scan.status}</Badge>
               <div className="min-w-48 flex-1">
                 <div className="h-2 rounded bg-slate-800">
-                  <div className="h-2 rounded bg-sky-500 transition-all" style={{ width: `${scan.progress}%` }} />
+                  <div className="h-2 rounded bg-[#4cb3f0] transition-all" style={{ width: `${scan.progress}%` }} />
                 </div>
                 <p className="mt-1 text-xs text-slate-400">{scan.progress}% · current stage: {scan.currentStage ?? "—"} · elapsed {elapsed(scan)}</p>
               </div>
@@ -210,7 +210,7 @@ export default function Page() {
                   <button disabled={busy !== null} onClick={() => void act("pause")} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-50">Pause</button>
                 )}
                 {scan.status === "PAUSED" && (
-                  <button disabled={busy !== null} onClick={() => void act("resume")} className="rounded bg-sky-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">Resume</button>
+                  <button disabled={busy !== null} onClick={() => void act("resume")} className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-black transition-colors hover:bg-slate-200 disabled:opacity-50">Resume</button>
                 )}
                 {!TERMINAL.has(scan.status) && (
                   <>

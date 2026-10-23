@@ -90,7 +90,7 @@ export default function Page() {
               <input id="target-value" className={inputCls} value={value} onChange={(e) => setValue(e.target.value)} placeholder={selected.placeholder} required maxLength={2048} />
               <p className="mt-1 text-xs text-slate-500">{selected.hint}</p>
             </div>
-            <button type="submit" disabled={busy} className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0F0F0F] transition-colors hover:bg-slate-200 disabled:opacity-50">
+            <button type="submit" disabled={busy} className="inline-flex h-9 items-center rounded-full bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-slate-200 disabled:opacity-50">
               {busy ? "Adding…" : "Add target"}
             </button>
           </form>

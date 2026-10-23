@@ -7,17 +7,18 @@ import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api-client";
 
 /**
- * Console shell — sidebar built to the owner-selected design #3 from
- * "8 Free Sidebar Designs" (Raafi G, CC BY 4.0): a flush full-height
- * near-black panel (#0F0F0F), a workspace switcher box at the top, a
- * search field with a ⌘K badge (live-filters the navigation), flat
- * monochrome menu rows whose active state is a neutral dark-grey pill
- * with white text, and the user profile pinned at the bottom. No accent
- * colour anywhere — the set is deliberately black/white/grey. The five
- * steps of the normal road (PRIMARY below) sit flat at the top; our 86
- * destinations sit behind the eight "Advanced tools" group rows, which
- * expand in place and the group holding the current page opens
- * automatically.
+ * Console shell — "True-black flat" system (taste-skill app sheet,
+ * 2026-10-23; structure kept from the owner-selected sidebar design
+ * #3, Raafi G, CC BY 4.0): sidebar and page share one true-black
+ * ground divided by a single 1px rule (#1A1A1A); the workspace
+ * switcher sits flat at the top, a search field with a ⌘K badge
+ * live-filters the navigation, and the user profile is pinned at the
+ * bottom. The active nav item is marked by brightness alone — its
+ * label goes from #B4B4B4 to white, no filled pill, no accent colour
+ * on chrome anywhere. The five steps of the normal road (PRIMARY
+ * below) sit flat at the top; our 86 destinations sit behind the
+ * eight "Advanced tools" group rows, which expand in place and the
+ * group holding the current page opens automatically.
  */
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -143,9 +144,9 @@ const isActive = (pathname: string, href: string) =>
 interface MeInfo { name?: string; email?: string; role?: string; isPlatformAdmin?: boolean; }
 
 const rowCls = (active: boolean) =>
-  `flex h-[38px] items-center gap-[11px] rounded-lg px-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+  `flex h-[38px] items-center gap-[11px] rounded-lg px-3 text-[13px] transition-colors ${active ? "font-medium text-white" : "text-[#B4B4B4] hover:bg-[#111111] hover:text-white"}`;
 const subCls = (active: boolean) =>
-  `block rounded-lg py-[7px] pl-10 pr-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+  `block rounded-lg py-[7px] pl-10 pr-3 text-[13px] transition-colors ${active ? "font-medium text-white" : "text-[#B4B4B4] hover:bg-[#111111] hover:text-white"}`;
 
 interface SidebarContentProps {
   me: MeInfo | null;
@@ -174,31 +175,31 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
   return (
     <>
       <div className="px-4 pb-1 pt-4">
-        <div className={`flex items-center gap-3 rounded-xl bg-[#262626] px-3 py-2.5 ${drawer ? "pr-11" : ""}`}>
+        <div className={`flex items-center gap-3 px-3 py-2 ${drawer ? "pr-11" : ""}`}>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
             <ShieldIcon width="16" height="16" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold leading-tight text-white">DSRclone</span>
-            <span className="block text-[11px] leading-tight text-[#9C9C9C]">VAPT Console</span>
+            <span className="block text-[11px] leading-tight text-[#949494]">VAPT Console</span>
           </span>
-          {drawer ? null : (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8A8A8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>)}
+          {drawer ? null : (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#949494" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>)}
         </div>
 
         <div className="relative mt-3">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A8A]" width="15" height="15" />
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#949494]" width="15" height="15" />
           <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && results?.[0]) { onSearchEnter?.(results[0].href); go(); } if (e.key === "Escape") setQuery(""); }}
             placeholder="Search" aria-label="Search navigation"
-            className="h-[38px] w-full rounded-lg bg-[#262626] pl-9 pr-12 text-[13px] text-white placeholder-[#8A8A8A] outline-none ring-white/20 transition focus:ring-1" />
-          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-[#3A3A3A] px-1.5 py-0.5 text-[10px] font-medium text-[#C9C9C9]">⌘K</kbd>
+            className="h-9 w-full rounded-full border border-[#2E2E2E] bg-[#111111] pl-9 pr-12 text-[13px] text-white placeholder-[#949494] outline-none transition focus:border-[#444444]" />
+          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-[#2A2A2A] px-1.5 py-0.5 text-[10px] font-medium text-[#B4B4B4]">⌘K</kbd>
         </div>
       </div>
 
       <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
         {results ? (
           results.length === 0 ? (
-            <p className="px-3 py-2 text-[12.5px] text-[#8A8A8A]">No pages match your search.</p>
+            <p className="px-3 py-2 text-[12.5px] text-[#949494]">No pages match your search.</p>
           ) : results.map((item) => (
             <Link key={item.href} href={item.href} onClick={go} className={rowCls(isActive(pathname, item.href))}>
               <span className="truncate">{item.label}</span>
@@ -209,7 +210,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
             <Link href="/" onClick={go} className={rowCls(isActive(pathname, "/"))}>
               <GridIcon className="shrink-0" /><span>Overview</span>
             </Link>
-            <p className="px-3 pb-1 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6E6E6E]">Start here — the normal road</p>
+            <p className="px-3 pb-1 pt-4 text-xs text-[#949494]">Start here — the normal road</p>
             {PRIMARY.map((item) => {
               const ItemIcon = item.icon;
               return (
@@ -217,12 +218,12 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
                   <ItemIcon className="shrink-0" />
                   <span className="min-w-0">
                     <span className="block truncate leading-tight">{item.label}</span>
-                    <span className="block truncate text-[11px] leading-tight text-[#8A8A8A]">{item.hint}</span>
+                    <span className="block truncate text-[11px] leading-tight text-[#949494]">{item.hint}</span>
                   </span>
                 </Link>
               );
             })}
-            <p className="px-3 pb-1 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6E6E6E]">Advanced tools</p>
+            <p className="px-3 pb-1 pt-4 text-xs text-[#949494]">Advanced tools</p>
             {GROUPS.map((group) => {
               const GroupIcon = group.icon;
               const expanded = Boolean(open[group.label]);
@@ -233,7 +234,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
                     className={`${rowCls(groupActive)} w-full`}>
                     <GroupIcon className="shrink-0" />
                     <span className="flex-1 text-left">{group.label}</span>
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#8A8A8A] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}><path d="m9.5 5.5 6.5 6.5-6.5 6.5" /></svg>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#949494] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}><path d="m9.5 5.5 6.5 6.5-6.5 6.5" /></svg>
                   </button>
                   {expanded ? (
                     <div className="space-y-0.5 py-0.5">
@@ -254,17 +255,17 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
         )}
       </nav>
 
-      <div className="border-t border-white/[0.06] p-3">
+      <div className="border-t border-[#1A1A1A] p-3">
         <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
           <Link href="/profile" onClick={go} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg" title="Your profile">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#333333] text-[12px] font-semibold text-white">{initials}</span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2A2A2A] text-[12px] font-semibold text-white">{initials}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-medium leading-tight text-white">{me?.name ?? "…"}</span>
-              <span className="block truncate text-[11.5px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</span>
+              <span className="block truncate text-[11.5px] leading-tight text-[#949494]">{me?.email ?? ""}</span>
             </span>
           </Link>
           <button type="button" onClick={logout} title="Sign out" aria-label="Sign out"
-            className="shrink-0 rounded-lg p-2 text-[#8A8A8A] transition-colors hover:bg-[#262626] hover:text-white">
+            className="shrink-0 rounded-lg p-2 text-[#949494] transition-colors hover:bg-[#111111] hover:text-white">
             <LogoutIcon width="16" height="16" />
           </button>
         </div>
@@ -355,17 +356,17 @@ export function Shell({ children }: { children: ReactNode }) {
     // signed-in console, and a signed-out reader has no session behind
     // it). A slim header with a path back to sign-in is all they need.
     return (
-      <div className="min-h-screen bg-slate-950">
-        <header className="border-b border-white/[0.06] bg-[#0F0F0F] px-5 py-3">
+      <div className="min-h-screen bg-black">
+        <header className="border-b border-[#1A1A1A] bg-black px-5 py-3">
           <div className="mx-auto flex max-w-5xl items-center gap-3">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
               <ShieldIcon width="15" height="15" />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">DSRclone</span>
-              <span className="block text-[11px] leading-tight text-[#8A8A8A]">Legal documents</span>
+              <span className="block text-[11px] leading-tight text-[#949494]">Legal documents</span>
             </span>
-            <Link href="/login" className="shrink-0 rounded-lg bg-[#262626] px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333]">Sign in</Link>
+            <Link href="/login" className="shrink-0 rounded-full bg-white px-3.5 py-2 text-[13px] font-medium text-black transition-colors hover:bg-[#E6E6E6]">Sign in</Link>
           </div>
           <nav aria-label="Legal documents" className="mx-auto mt-3 flex max-w-5xl flex-wrap gap-1.5">
             {[
@@ -376,7 +377,7 @@ export function Shell({ children }: { children: ReactNode }) {
               { href: "/legal/subprocessors", label: "Subprocessors" },
             ].map((d) => (
               <Link key={d.href} href={d.href}
-                className={`rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${pathname === d.href ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`}>
+                className={`rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors ${pathname === d.href ? "font-medium text-white" : "text-[#B4B4B4] hover:bg-[#111111] hover:text-white"}`}>
                 {d.label}
               </Link>
             ))}
@@ -394,27 +395,27 @@ export function Shell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-white/[0.06] bg-[#0F0F0F] md:flex">
+    <div className="flex min-h-screen bg-black">
+      <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-[#1A1A1A] bg-black md:flex">
         <SidebarContent {...contentProps} searchRef={searchRef} />
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/[0.06] bg-[#0F0F0F] px-4 py-3 md:hidden">
+        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-[#1A1A1A] bg-black px-4 py-3 md:hidden">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
             <ShieldIcon width="15" height="15" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">DSRclone</span>
-            <span className="block truncate text-[11px] leading-tight text-[#8A8A8A]">{me?.name ?? "VAPT Console"}</span>
+            <span className="block truncate text-[11px] leading-tight text-[#949494]">{me?.name ?? "VAPT Console"}</span>
           </span>
           {canAdmin ? (
-            <Link href="/admin" aria-label="Admin Panel" className="shrink-0 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
+            <Link href="/admin" aria-label="Admin Panel" className="shrink-0 rounded-lg p-2 text-[#B4B4B4] transition-colors hover:bg-[#111111] hover:text-white">
               <DiamondIcon width="18" height="18" />
             </Link>
           ) : null}
           <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu"
-            className="shrink-0 rounded-lg p-2 text-white transition-colors hover:bg-[#262626]">
+            className="shrink-0 rounded-lg p-2 text-white transition-colors hover:bg-[#111111]">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
         </header>
@@ -422,9 +423,9 @@ export function Shell({ children }: { children: ReactNode }) {
         {mobileOpen ? (
           <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
             <button type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} className="absolute inset-0 h-full w-full bg-black/60" />
-            <div className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col bg-[#0F0F0F] shadow-2xl">
+            <div className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col bg-black shadow-2xl">
               <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close menu"
-                className="absolute right-3 top-3 z-10 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
+                className="absolute right-3 top-3 z-10 rounded-lg p-2 text-[#B4B4B4] transition-colors hover:bg-[#111111] hover:text-white">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
               <SidebarContent {...contentProps} drawer onNavigate={() => setMobileOpen(false)} />
@@ -438,12 +439,17 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-export function PageHeader({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
+/**
+ * Page header — one noun title at 20px/600 and one plain sentence
+ * under it. The old mono uppercase cyan kicker (`eyebrow`) is gone
+ * everywhere (taste house rule: no eyebrows); the prop is still
+ * accepted so all existing call sites keep working.
+ */
+export function PageHeader({ title, body }: { eyebrow?: string; title: string; body?: string }) {
   return (
     <div className="mb-6">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-cyan-400">{eyebrow}</p>
-      <h1 className="mt-1 text-2xl font-bold text-slate-50">{title}</h1>
-      {body ? <p className="mt-1 max-w-2xl text-sm text-slate-400">{body}</p> : null}
+      <h1 className="text-xl font-semibold text-white">{title}</h1>
+      {body ? <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-300">{body}</p> : null}
     </div>
   );
 }
