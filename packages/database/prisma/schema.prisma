@@ -1228,6 +1228,17 @@ model TargetVerification {
   // MANUAL_APPROVAL check must be independent of both the target's
   // creator and this requester. Null on rows predating the column.
   requestedBy String?
+  // Attestation declaration record (2026-10-25, owner order): when a
+  // MANUAL_APPROVAL check completes, the declaration the user ticked
+  // (guidelines version) plus the network address the request came from
+  // are stored here. These three columns are platform-admin-only reads
+  // (TargetsService strips them for everyone else) — they are the abuse
+  // record if a declaration turns out false. Null on rows predating the
+  // column and on DNS_TXT / HTTP_FILE rows, which prove ownership
+  // cryptographically instead of by declaration.
+  attestationIp                 String?
+  attestationGuidelinesVersion String?
+  attestationAt                DateTime?
   status     VerificationStatus @default(PENDING)
   verifiedAt DateTime?
   expiresAt  DateTime?

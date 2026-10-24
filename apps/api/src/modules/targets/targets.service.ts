@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { promises as dns } from "node:dns";
 import { request as httpsRequest } from "node:https";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { createTargetSchema, paginationSchema } from "@dsrclone/validation";
 import { blockedTargetReason, cloudEndpointVerdict } from "@dsrclone/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
@@ -93,13 +93,26 @@ export class TargetsService {
     return assertTargetInOrg(this.prisma, user, id);
   }
 
+  /** The guidelines text version shown before the "I have permission"
+   *  declaration tick. Bump when the guidelines wording changes so every
+   *  stored declaration names exactly what the user read. */
+  static readonly ATTESTATION_GUIDELINES_VERSION = "1";
+
   /** Verification attempts for one target, newest first — the target
-   *  detail page renders these so a started challenge survives reloads. */
+   *  detail page renders these so a started challenge survives reloads.
+   *  The attestation record (network address, guidelines version, time)
+   *  is platform-admin-only: everyone else gets the rows without it. */
   async listVerifications(user: RequestUser, targetId: string) {
     const target = await assertTargetInOrg(this.prisma, user, targetId);
-    return this.prisma.targetVerification.findMany({
+    const rows = await this.prisma.targetVerification.findMany({
       where: { targetId: target.id },
       orderBy: { createdAt: "desc" },
+    });
+    if (user.isPlatformAdmin) return rows;
+    return rows.map((row) => {
+      const { attestationIp, attestationGuidelinesVersion, attestationAt, ...rest } = row as Record<string, unknown>;
+      void attestationIp; void attestationGuidelinesVersion; void attestationAt;
+      return rest;
     });
   }
 
@@ -126,8 +139,13 @@ export class TargetsService {
   }
 
   /** Check a pending challenge. DNS_TXT performs a real DNS lookup;
-   *  MANUAL_APPROVAL can only be completed by an OWNER/ADMIN. */
-  async checkVerification(user: RequestUser, targetId: string, verificationId: string) {
+   *  MANUAL_APPROVAL completes on the signed-in user's own attestation —
+   *  but only with an explicit declaration: the caller must pass
+   *  declarationAccepted (the web page only sends it after the user has
+   *  read the guidelines and ticked "I have permission"). Without it the
+   *  check is refused, so no verification row can complete on a bare
+   *  API call with no declaration on record. */
+  async checkVerification(user: RequestUser, targetId: string, verificationId: string, opts?: { declarationAccepted?: boolean; clientIp?: string }) {
     const target = await assertTargetInOrg(this.prisma, user, targetId);
     const verification = await this.prisma.targetVerification.findFirst({ where: { id: verificationId, targetId: target.id } });
     if (!verification) throw new NotFoundException("Verification not found");
@@ -149,6 +167,13 @@ export class TargetsService {
       // second-person rule (2026-10-16 run-2); the TARGET_VERIFIED
       // audit record below still names the actor. DNS_TXT and
       // HTTP_FILE remain available as the stronger evidence proofs.
+      // Since 2026-10-25 the attestation additionally requires an
+      // explicit declaration (guidelines read + "I have permission"
+      // ticked); the declaration and the request's network address are
+      // stored on the row as the abuse record.
+      if (!opts?.declarationAccepted) {
+        throw new BadRequestException("a MANUAL_APPROVAL check requires the permission declaration (guidelines read, \"I have permission\" ticked)");
+      }
       verified = true;
     } else {
       // HTTP_FILE check fetches the well-known file over HTTPS (plain
@@ -181,9 +206,27 @@ export class TargetsService {
       }
     }
     if (verified) {
-      await this.prisma.targetVerification.update({ where: { id: verification.id }, data: { status: "VERIFIED", verifiedAt: new Date() } });
+      await this.prisma.targetVerification.update({
+        where: { id: verification.id },
+        data: {
+          status: "VERIFIED", verifiedAt: new Date(),
+          // Declaration record, MANUAL_APPROVAL only. The network
+          // address stays on this row (platform-admin-only read) and
+          // is deliberately NOT copied into the audit metadata.
+          ...(verification.method === "MANUAL_APPROVAL" ? {
+            attestationIp: opts?.clientIp ?? null,
+            attestationGuidelinesVersion: TargetsService.ATTESTATION_GUIDELINES_VERSION,
+            attestationAt: new Date(),
+          } : {}),
+        },
+      });
       await this.prisma.target.update({ where: { id: target.id }, data: { verified: true, status: "VERIFIED" } });
-      await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: target.workspaceId, action: "TARGET_VERIFIED", resourceType: "Target", resourceId: target.id });
+      await this.audit.record({
+        actorId: user.id, organizationId: user.organizationId, workspaceId: target.workspaceId, action: "TARGET_VERIFIED", resourceType: "Target", resourceId: target.id,
+        metadata: verification.method === "MANUAL_APPROVAL"
+          ? { method: "MANUAL_APPROVAL", declarationGuidelinesVersion: TargetsService.ATTESTATION_GUIDELINES_VERSION }
+          : undefined,
+      });
     }
     return { status: verified ? "VERIFIED" : "PENDING", detail: verified ? "Ownership verified" : "Challenge not found yet" };
   }

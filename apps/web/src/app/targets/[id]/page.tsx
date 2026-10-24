@@ -42,6 +42,18 @@ const METHODS: { value: string; label: string; hint: string }[] = [
   { value: "MANUAL_APPROVAL", label: "Approve it yourself", hint: "You confirm ownership on your own word and it verifies when you check. Fastest — but it's your attestation; the DNS and file methods are stronger evidence." },
 ];
 
+/** Guidelines shown before the "I have permission" declaration tick.
+ *  Plain words, no legalese: what you may declare, what you must not,
+ *  the legal note, and what happens on a false declaration. The server
+ *  records the declaration (with the network address it came from) on
+ *  the verification row, visible only to platform administrators. */
+const DECLARATION_GUIDELINES = [
+  { title: "You may declare only if", body: "You own this target, or the owner gave you written permission to test it, or it is listed in scope of a public bug-bounty program that allows the testing you plan." },
+  { title: "You must NOT declare for", body: "Any site you do not own and have no permission for — including famous sites, your college or company site, or a client's site without their say-so." },
+  { title: "The legal note", body: "Testing a system without permission can be illegal — in India under the IT Act, in the US under the CFAA, and under similar laws elsewhere. You are responsible for your scans, not DSRclone." },
+  { title: "If you declare falsely", body: "Your declaration is recorded with your account, the time, and the network address it came from. Your account can be blocked, your scans stopped, and the record shown to the target owner if they complain." },
+];
+
 const inputCls = "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-500";
 const btnCls = "rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0F0F0F] transition-colors hover:bg-slate-200 disabled:opacity-50";
 const ghostBtnCls = "rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50";
@@ -53,6 +65,7 @@ export default function Page() {
   const [attempts, setAttempts] = useState<VerificationRow[]>([]);
   const [loadError, setLoadError] = useState("");
   const [method, setMethod] = useState(METHODS[0].value);
+  const [guidelinesRead, setGuidelinesRead] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -90,12 +103,17 @@ export default function Page() {
     }
   }
 
-  async function check(verificationId: string) {
+  async function check(verificationId: string, verificationMethod?: string) {
     setBusy(true); setError(""); setMessage("");
+    if (verificationMethod === "MANUAL_APPROVAL" && !guidelinesRead) {
+      setError("Read the guidelines above and tick \"I have permission\" before checking.");
+      setBusy(false);
+      return;
+    }
     try {
       const res = await apiFetch<{ status: string; detail?: string }>(`/targets/${id}/verifications/${verificationId}/check`, {
         method: "POST",
-        body: "{}",
+        body: JSON.stringify(verificationMethod === "MANUAL_APPROVAL" ? { declarationAccepted: true } : {}),
       });
       if (res.status === "VERIFIED") {
         setMessage("Verified — this target is yours. You can now create an assessment for it.");
@@ -131,6 +149,10 @@ export default function Page() {
   }
 
   const selected = METHODS.find((m) => m.value === method) ?? METHODS[0];
+  // Guidelines must also show for a pending MANUAL_APPROVAL attempt
+  // started earlier (method selector defaults to DNS_TXT on reload),
+  // otherwise its Check now button could never be enabled.
+  const showGuidelines = method === "MANUAL_APPROVAL" || attempts.some((a) => a.method === "MANUAL_APPROVAL" && a.status === "PENDING");
 
   return (
     <>
@@ -163,15 +185,36 @@ export default function Page() {
       ) : (
         <Card eyebrow="Step 2" title="Verify it's yours">
           <p className="text-sm text-slate-300">Pick how to prove you own this target. DSRclone really checks — nothing is marked verified until the proof is found.</p>
+          {showGuidelines ? (
+            <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900 p-4">
+              <p className="text-sm font-semibold text-slate-100">Before you declare — read this</p>
+              <ul className="mt-3 space-y-3">
+                {DECLARATION_GUIDELINES.map((g) => (
+                  <li key={g.title} className="text-sm text-slate-300">
+                    <span className="font-medium text-slate-100">{g.title}: </span>{g.body}
+                  </li>
+                ))}
+              </ul>
+              <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-white"
+                  checked={guidelinesRead}
+                  onChange={(e) => setGuidelinesRead(e.target.checked)}
+                />
+                <span>I have read the guidelines and I confirm I own this target or have the owner&apos;s permission to test it.</span>
+              </label>
+            </div>
+          ) : null}
           <div className="mt-4 grid gap-4 md:grid-cols-[260px_1fr_auto] md:items-end">
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-slate-400" htmlFor="verify-method">Method</label>
-              <select id="verify-method" className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+              <select id="verify-method" className={inputCls} value={method} onChange={(e) => { setMethod(e.target.value); setGuidelinesRead(false); }}>
                 {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
             <p className="text-xs text-slate-500">{selected.hint}</p>
-            <button type="button" onClick={() => void start()} disabled={busy} className={btnCls}>
+            <button type="button" onClick={() => void start()} disabled={busy || (method === "MANUAL_APPROVAL" && !guidelinesRead)} className={btnCls}>
               {busy ? "Working…" : "Start verification"}
             </button>
           </div>
@@ -194,7 +237,7 @@ export default function Page() {
                     {a.status === "VERIFIED" ? <Badge tone="VERIFIED">Verified</Badge> : a.status === "EXPIRED" ? <Badge tone="PENDING">Expired</Badge> : <Badge tone="PENDING">Pending</Badge>}
                     <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-500" title={a.challenge}>{a.challenge}</span>
                     {a.status === "PENDING" ? (
-                      <button type="button" onClick={() => void check(a.id)} disabled={busy} className={ghostBtnCls}>Check now</button>
+                      <button type="button" onClick={() => void check(a.id, a.method)} disabled={busy} className={ghostBtnCls}>Check now</button>
                     ) : null}
                   </li>
                 ))}

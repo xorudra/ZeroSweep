@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
 import { z } from "zod";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { TargetsService } from "./targets.service";
 
 const verificationSchema = z.object({ method: z.enum(["DNS_TXT", "HTTP_FILE", "MANUAL_APPROVAL"]).default("DNS_TXT") });
+const checkSchema = z.object({ declarationAccepted: z.boolean().optional() });
 
 @Controller("targets")
 export class TargetsController {
@@ -31,7 +32,11 @@ export class TargetsController {
   }
 
   @Post(":id/verifications/:verificationId/check")
-  async checkVerification(@CurrentUser() user: RequestUser, @Param("id") id: string, @Param("verificationId") verificationId: string) {
-    return this.targets.checkVerification(user, id, verificationId);
+  async checkVerification(@CurrentUser() user: RequestUser, @Param("id") id: string, @Param("verificationId") verificationId: string, @Body() body: unknown, @Req() req: { ip?: string }) {
+    const { declarationAccepted } = parseOrThrow(checkSchema, body ?? {});
+    // Trust proxy is 1 (main.ts), so req.ip is the last X-Forwarded-For
+    // hop — the address the platform edge actually observed, not a
+    // client-supplied first entry. Stored only on the verification row.
+    return this.targets.checkVerification(user, id, verificationId, { declarationAccepted, clientIp: req.ip });
   }
 }

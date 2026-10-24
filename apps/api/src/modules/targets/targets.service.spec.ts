@@ -119,3 +119,60 @@ describe("TargetsService HTTP_FILE verification fetch guard (A5)", () => {
     expect(updates.some((u) => u.model === "target" && u.data.status === "VERIFIED")).toBe(true);
   });
 });
+
+/**
+ * Attestation declaration (2026-10-25): a MANUAL_APPROVAL check only
+ * completes with an explicit declaration (guidelines read + "I have
+ * permission" ticked); the declaration and the request's network
+ * address are stored on the verification row, and the attestation
+ * record is visible only to platform administrators.
+ */
+describe("TargetsService MANUAL_APPROVAL declaration", () => {
+  function makeSvc() {
+    const updates: Array<{ model: string; data: Record<string, unknown> }> = [];
+    const prismaMock = {
+      target: {
+        findFirst: async () => ({ id: "t1", value: "example.com", workspaceId: "ws1" }),
+        update: async (args: { data: Record<string, unknown> }) => { updates.push({ model: "target", data: args.data }); return {}; },
+      },
+      targetVerification: {
+        findFirst: async () => ({
+          id: "v1", targetId: "t1", method: "MANUAL_APPROVAL",
+          expiresAt: new Date(Date.now() + 3600_000),
+        }),
+        findMany: async () => ([{
+          id: "v1", targetId: "t1", method: "MANUAL_APPROVAL", status: "VERIFIED",
+          attestationIp: "203.0.113.9", attestationGuidelinesVersion: "1",
+          attestationAt: new Date(),
+        }]),
+        update: async (args: { data: Record<string, unknown> }) => { updates.push({ model: "verification", data: args.data }); return {}; },
+      },
+    };
+    const svc = new TargetsService(prismaMock as never, { record: async () => undefined } as never);
+    return { svc, updates };
+  }
+
+  it("refuses a MANUAL_APPROVAL check with no declaration", async () => {
+    const { svc } = makeSvc();
+    await expect(svc.checkVerification(user, "t1", "v1")).rejects.toThrow("declaration");
+    await expect(svc.checkVerification(user, "t1", "v1", { declarationAccepted: false })).rejects.toThrow("declaration");
+  });
+
+  it("verifies with a declaration and stores the attestation record", async () => {
+    const { svc, updates } = makeSvc();
+    const res = await svc.checkVerification(user, "t1", "v1", { declarationAccepted: true, clientIp: "203.0.113.9" });
+    expect(res.status).toBe("VERIFIED");
+    const v = updates.find((u) => u.model === "verification");
+    expect(v?.data.attestationIp).toBe("203.0.113.9");
+    expect(v?.data.attestationGuidelinesVersion).toBe("1");
+    expect(v?.data.attestationAt).toBeInstanceOf(Date);
+  });
+
+  it("strips the attestation record for non-admins, keeps it for platform admins", async () => {
+    const { svc } = makeSvc();
+    const rows = await svc.listVerifications(user, "t1");
+    expect("attestationIp" in (rows[0] as Record<string, unknown>)).toBe(false);
+    const adminRows = await svc.listVerifications({ ...user, isPlatformAdmin: true }, "t1");
+    expect((adminRows[0] as Record<string, unknown>).attestationIp).toBe("203.0.113.9");
+  });
+});
