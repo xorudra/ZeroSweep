@@ -61,7 +61,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Getting started" title="Onboarding" body="Set up your organization safely. DSRclone only tests targets you own or are explicitly authorized to test — the security scope step records that attestation before any active testing (§70/§168)." />
+      <PageHeader eyebrow="Getting started" title="Onboarding" body="Set up your organization safely. ZeroSweep only tests targets you own or are explicitly authorized to test — the security scope step records that attestation before any active testing (§70/§168)." />
       {error && <Card><p className="text-sm text-red-300">{error}</p></Card>}
       {!state && !error && <EmptyState title="Loading onboarding…" body="Fetching your onboarding progress." />}
       {state && (

@@ -137,7 +137,7 @@ export const BINARY_DISABLED_REGISTRATIONS: BinaryDisabledRegistration[] = [
     name: "Cutter (analyst GUI)",
     capabilities: ["STATIC_BINARY_ANALYSIS", "DISASSEMBLY"],
     executionState: "ANALYST_TOOL",
-    reason: "Prompt 18 §35: Cutter is registered as an ANALYST_TOOL — analysts use its GUI and may import exported artifacts/projects. DSRclone does not claim or invent unsupported headless Cutter automation.",
+    reason: "Prompt 18 §35: Cutter is registered as an ANALYST_TOOL — analysts use its GUI and may import exported artifacts/projects. ZeroSweep does not claim or invent unsupported headless Cutter automation.",
   },
 ];
 

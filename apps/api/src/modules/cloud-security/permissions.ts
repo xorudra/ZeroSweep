@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Cloud-security permissions (Prompt 14 §88). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * Managing accounts is administrative; raw artifact (resource
  * configuration) access is OWNER/ADMIN and audited per access (§103).
  */

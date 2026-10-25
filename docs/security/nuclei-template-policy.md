@@ -2,7 +2,7 @@
 
 Nuclei's power is its template library — which includes checks that
 probe for SQL injection, reflected XSS, SSRF callbacks, default
-credentials and denial-of-service conditions. DSRclone's automated
+credentials and denial-of-service conditions. ZeroSweep's automated
 platform must be able to prove those checks **cannot run** in an
 automated scan. This policy is enforced in code, in three layers.
 

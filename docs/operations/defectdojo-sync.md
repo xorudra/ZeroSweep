@@ -7,7 +7,7 @@
   (both, metadata effects only).
 - After each PULL, review `GET /vulnerability-integrations/sync-conflicts`:
   conflicts mean both sides changed the same field since the last
-  sync. Resolve in DSRclone (canonical) or accept the external
+  sync. Resolve in ZeroSweep (canonical) or accept the external
   severity under the TAKE_EXTERNAL_METADATA policy on a later run —
   status never auto-applies.
 - Echo safety: re-running the same PULL is idempotent; our own

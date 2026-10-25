@@ -7,7 +7,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
 
 /**
  * Admin → Scanner Instances (Prompt 8 §54/§55). Owner/Admin register the
- * ZAP / Burp / Caido deployments DSRclone may talk to. The form accepts an
+ * ZAP / Burp / Caido deployments ZeroSweep may talk to. The form accepts an
  * opaque endpoint REFERENCE NAME (resolved from server configuration) and
  * a credential REFERENCE NAME — never a URL and never a secret value, so
  * this page cannot become an SSRF or credential-leak surface (§17/§20).
@@ -84,7 +84,7 @@ export default function ScannerSettingsPage() {
   return (
     <>
       <PageHeader eyebrow="Settings / Scanners" title="Scanner instances"
-        body="Register the OWASP ZAP, Burp Suite Professional and Caido deployments DSRclone may use. Instances are referenced by NAME: the real endpoint is resolved from server configuration and credentials live in the vault — neither is ever entered or shown here." />
+        body="Register the OWASP ZAP, Burp Suite Professional and Caido deployments ZeroSweep may use. Instances are referenced by NAME: the real endpoint is resolved from server configuration and credentials live in the vault — neither is ever entered or shown here." />
       {error ? <Card><p className="text-sm text-red-300">{error}</p></Card> : null}
       {notice ? <Card><p className="text-sm text-emerald-300">{notice}</p></Card> : null}
 

@@ -144,7 +144,7 @@ export function scanMobileSecrets(
           const fingerprint = fingerprints.fingerprint(value);
           findings.push({
             title: `Hardcoded ${p.type === "API_KEY" ? "API key" : "secret"} in decompiled source`,
-            description: "A secret-shaped value is embedded in the application package. Embedded secrets are extractable by anyone with the binary; rotate the credential and move it behind a server-side proxy or short-lived token flow. The value itself is never stored by DSRclone — metadata only (§28).",
+            description: "A secret-shaped value is embedded in the application package. Embedded secrets are extractable by anyone with the binary; rotate the credential and move it behind a server-side proxy or short-lived token flow. The value itself is never stored by ZeroSweep — metadata only (§28).",
             severity: "HIGH",
             confidence: 0.85,
             cwe: "CWE-798",

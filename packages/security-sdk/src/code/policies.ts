@@ -20,7 +20,7 @@ export interface SemgrepRulePack {
 
 /** The governed Semgrep pack catalog (§22). Registry pack ids are the
  *  public Semgrep registry names; the pin records the approved policy
- *  version in DSRclone, and pack content is fetched by the tool itself
+ *  version in ZeroSweep, and pack content is fetched by the tool itself
  *  on source workers — never supplied by users. */
 export const SEMGREP_RULE_PACKS: SemgrepRulePack[] = [
   { id: "p/security-audit", name: "Security Audit", version: "1.0.0", languages: [], profiles: ["SOURCE_BASELINE", "SOURCE_COMPREHENSIVE", "SAST_ONLY"], approvalState: "APPROVED" },

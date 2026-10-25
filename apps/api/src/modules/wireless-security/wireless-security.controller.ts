@@ -14,7 +14,7 @@ import { WirelessSecurityService } from "./wireless-security.service";
  * tenant-scoped reads are the whole surface. There is NO endpoint
  * that transmits, deauthenticates, triggers handshakes, cracks keys,
  * creates a rogue AP, accepts a raw wireless command or arbitrary
- * tool arguments (§78) — those capabilities do not exist in DSRclone.
+ * tool arguments (§78) — those capabilities do not exist in ZeroSweep.
  */
 @Controller()
 export class WirelessSecurityController {

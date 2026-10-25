@@ -37,7 +37,7 @@ function parse<T>(schema: z.ZodType<T>, body: unknown): T {
  * Finding-scoped validation endpoints (Prompt 16 §78/§58):
  * POST /findings/:id/validate starts the governed workflow for the
  * finding; POST /findings/:id/manual-validation attaches analyst
- * evidence (§32) — DSRclone executes nothing for manual records.
+ * evidence (§32) — ZeroSweep executes nothing for manual records.
  */
 @Controller("findings")
 export class FindingsValidationController {

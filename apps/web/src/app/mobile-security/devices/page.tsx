@@ -7,9 +7,9 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { Badge, Card, EmptyState } from "@dsrclone/ui";
 
 /**
- * Device lab administration (Prompt 17 §98): DSRclone-managed
+ * Device lab administration (Prompt 17 §98): ZeroSweep-managed
  * emulators and dedicated lab devices ONLY — personal devices are
- * never targeted (§55) and the DSRclone CA is never installed on
+ * never targeted (§55) and the ZeroSweep CA is never installed on
  * them (§67). There is deliberately NO remote shell, no arbitrary
  * ADB command box and no arbitrary script runner on this page or
  * anywhere in the product (§59/§75): lab work happens through
@@ -64,7 +64,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Mobile Security" title="Mobile Device Lab" body="DSRclone-managed emulators and dedicated lab devices on an isolated test network." />
+      <PageHeader eyebrow="Mobile Security" title="Mobile Device Lab" body="ZeroSweep-managed emulators and dedicated lab devices on an isolated test network." />
       <Link href="/mobile-security" className="text-sm text-indigo-300 hover:underline">← Mobile Security</Link>
       {notice && <p className="text-sm text-amber-300">{notice}</p>}
       {state === "error" && <p className="text-sm text-red-400">{error}</p>}

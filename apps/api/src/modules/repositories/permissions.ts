@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Source-security permissions (Prompt 12 §98). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place. Raw
+ * role mapping is ZeroSweep policy and lives in exactly one place. Raw
  * source artifact access is the strongest permission in the module
  * (OWNER/ADMIN only) and is always audited (§98/§110).
  */

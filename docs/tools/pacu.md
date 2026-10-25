@@ -1,6 +1,6 @@
 # Pacu
 
-DISABLED by policy (Prompt 14 §34): Pacu is offensive cloud exploitation tooling. DSRclone performs read-only assessment only — no adapter exists, it is never enabled and no stage can select it.
+DISABLED by policy (Prompt 14 §34): Pacu is offensive cloud exploitation tooling. ZeroSweep performs read-only assessment only — no adapter exists, it is never enabled and no stage can select it.
 
 - **Slug:** `pacu`
 - **Category:** CLOUD

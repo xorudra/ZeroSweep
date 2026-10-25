@@ -15,7 +15,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
  * traffic captures, runtime evidence metadata and the cleanup
  * state. There is no control here that attaches to a process, runs
  * a script or opens a shell: those capabilities do not exist in
- * DSRclone (§75–§84/§164).
+ * ZeroSweep (§75–§84/§164).
  */
 interface DynamicSession {
   id: string; applicationId: string; buildId: string; deviceId?: string | null;

@@ -3,7 +3,7 @@
 **Product class:** interactive proxy scanner — `ZapConnector`
 (`packages/security-sdk/src/proxy/`), exposed to the orchestration engine
 through the standard adapter lifecycle. ZAP is driven through its REST
-API; the API is **never** exposed to DSRclone users (§5).
+API; the API is **never** exposed to ZeroSweep users (§5).
 
 ## Modes
 
@@ -47,7 +47,7 @@ API; the API is **never** exposed to DSRclone users (§5).
   coverage and partial results rather than retrying credentials (§23).
 - If no healthy ZAP instance is configured, scans report the connector
   as `NOT_CONFIGURED`/`UNAVAILABLE` and the passive stage is skipped —
-  DSRclone never fakes ZAP output (§66).
+  ZeroSweep never fakes ZAP output (§66).
 
 ## API surface used
 

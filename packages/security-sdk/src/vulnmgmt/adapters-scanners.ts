@@ -206,7 +206,7 @@ function vulnScannerMeta(partial: Partial<ToolMetadata> & Pick<ToolMetadata, "id
 export function greenboneMetadata(): ToolMetadata {
   return vulnScannerMeta({
     id: "greenbone-openvas", slug: "greenbone-openvas", name: "Greenbone / OpenVAS",
-    description: "Open-source network vulnerability scanner via an administrator-managed Greenbone/OpenVAS deployment (Prompt 11 §3): DSRclone creates governed scan tasks over scope-derived targets with administrator-approved profiles and imports normalized results. Feed status is part of health (§5).",
+    description: "Open-source network vulnerability scanner via an administrator-managed Greenbone/OpenVAS deployment (Prompt 11 §3): ZeroSweep creates governed scan tasks over scope-derived targets with administrator-approved profiles and imports normalized results. Feed status is part of health (§5).",
     homepage: "https://www.greenbone.net", licenseType: "OPEN_SOURCE",
   });
 }

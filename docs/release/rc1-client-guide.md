@@ -1,6 +1,6 @@
 # RC1 Client Guide (Prompt 39 §310)
 
-Welcome — this guide explains what you see in the DSRclone client
+Welcome — this guide explains what you see in the ZeroSweep client
 portal during your security assessment.
 
 ## What you see (and don't)

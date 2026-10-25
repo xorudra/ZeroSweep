@@ -13,7 +13,7 @@ import { BinarySecurityService } from "./binary-security.service";
  * the only writes; everything else is a tenant-scoped read. There is
  * NO endpoint that executes, loads, debugs or emulates a binary,
  * accepts a raw shell/GDB/Python/Ghidra/r2 command, or returns a raw
- * secret value — those capabilities do not exist in DSRclone
+ * secret value — those capabilities do not exist in ZeroSweep
  * (§93/§114/§123).
  */
 @Controller()

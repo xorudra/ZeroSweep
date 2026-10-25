@@ -1,6 +1,6 @@
 # Defensive Attack-Path Analysis (Prompt 15 §34–§37)
 
-Attack paths in DSRclone are **computed models over collected
+Attack paths in ZeroSweep are **computed models over collected
 directory data** — nothing more. They answer the defender's question
 "which principals can reach high-value targets through recorded
 privilege relationships, and what should we fix first?"

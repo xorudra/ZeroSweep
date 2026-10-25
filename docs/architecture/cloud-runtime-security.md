@@ -1,7 +1,7 @@
 # Runtime Security — Falco (Prompt 34 §91–§96)
 
 Falco is a DETECTION and SOC signal source (§92). It is never
-enforcement: DSRclone does not kill, delete or restart workloads in
+enforcement: ZeroSweep does not kill, delete or restart workloads in
 response to an event (§96), and it operates no admission webhook.
 
 ## Event model (§93)

@@ -1,6 +1,6 @@
 # GDB
 
-DISABLED outside LAB registration (Prompt 18 §65/§66): GDB exists in DSRclone only as a governed debug-session descriptor — typed approved operations inside an approved, isolated, kill-switched LAB session. No executing adapter exists in this build; unrestricted GDB/Python is never accepted (§68/§93).
+DISABLED outside LAB registration (Prompt 18 §65/§66): GDB exists in ZeroSweep only as a governed debug-session descriptor — typed approved operations inside an approved, isolated, kill-switched LAB session. No executing adapter exists in this build; unrestricted GDB/Python is never accepted (§68/§93).
 
 - **Slug:** `gdb`
 - **Category:** BINARY

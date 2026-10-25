@@ -5,7 +5,7 @@ so payload construction is allowlist-based:
 
 - Only safe fields are composed: severity, priority, a coarse asset
   reference (host/endpoint), CVE/CWE identifiers, the risk summary,
-  a *safe* remediation summary, the due date and the DSRclone case
+  a *safe* remediation summary, the due date and the ZeroSweep case
   reference.
 - The composed title and body then pass secret-pattern scrubbing
   (cloud keys, tokens, private keys, connection strings); every

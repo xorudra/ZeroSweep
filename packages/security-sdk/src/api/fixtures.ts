@@ -37,7 +37,7 @@ export const FIXTURE_JWT_LONG_LIVED = makeFakeJwt(
 
 export const FIXTURE_OPENAPI = {
   openapi: "3.0.3",
-  info: { title: "DSRclone Fixture API", version: "1.2.0", description: "Controlled local test API (fixtures only)." },
+  info: { title: "ZeroSweep Fixture API", version: "1.2.0", description: "Controlled local test API (fixtures only)." },
   servers: [{ url: "https://api.example.com/v1" }],
   security: [{ BearerAuth: [] }],
   components: {
@@ -135,7 +135,7 @@ export const FIXTURE_HOSTILE_OPENAPI_JSON = JSON.stringify({
 });
 
 export const FIXTURE_POSTMAN_COLLECTION = JSON.stringify({
-  info: { name: "DSRclone Fixture Collection", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+  info: { name: "ZeroSweep Fixture Collection", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
   auth: { type: "bearer" },
   variable: [
     { key: "baseUrl", value: "https://api.example.com" },

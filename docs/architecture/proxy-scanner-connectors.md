@@ -2,7 +2,7 @@
 
 Interactive scanners (ZAP, Burp, Caido) do not fit the CLI adapter
 model: they are long-lived services with sessions, contexts and
-traffic state. DSRclone models them with a dedicated abstraction,
+traffic state. ZeroSweep models them with a dedicated abstraction,
 `InteractiveScannerConnector`
 (`packages/security-sdk/src/proxy/connector.ts`), and adapts it into the
 existing `SecurityToolAdapter` lifecycle so orchestration, policy,

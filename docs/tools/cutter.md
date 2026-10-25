@@ -1,6 +1,6 @@
 # Cutter
 
-ANALYST_TOOL registration (Prompt 18 §35): Cutter is an analyst-workstation GUI for radare2 — it is registered for inventory/health only and NEVER executes in the DSRclone pipeline.
+ANALYST_TOOL registration (Prompt 18 §35): Cutter is an analyst-workstation GUI for radare2 — it is registered for inventory/health only and NEVER executes in the ZeroSweep pipeline.
 
 - **Slug:** `cutter`
 - **Category:** BINARY

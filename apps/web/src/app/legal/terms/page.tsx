@@ -9,12 +9,12 @@ import { Card } from "@dsrclone/ui";
 export default function Page() {
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Legal" title="Terms of Service" body="The terms that govern use of this DSRclone deployment. By creating an account or using the service you agree to them." />
+      <PageHeader eyebrow="Legal" title="Terms of Service" body="The terms that govern use of this ZeroSweep deployment. By creating an account or using the service you agree to them." />
       <Card>
         <div className="space-y-5 text-sm leading-relaxed text-slate-300">
           <section>
             <h3 className="mb-1 font-semibold text-white">1. The service</h3>
-            <p>DSRclone is an authorized vulnerability assessment and penetration-testing (VAPT) orchestration platform. It lets authorized users register targets, verify ownership, define scope, run governed security assessments, and generate reports. The service is provided by the deployment operator (&quot;we&quot;, &quot;us&quot;).</p>
+            <p>ZeroSweep is an authorized vulnerability assessment and penetration-testing (VAPT) orchestration platform. It lets authorized users register targets, verify ownership, define scope, run governed security assessments, and generate reports. The service is provided by the deployment operator (&quot;we&quot;, &quot;us&quot;).</p>
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">2. Authorized use only</h3>

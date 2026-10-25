@@ -1,6 +1,6 @@
 # Recon Pipeline Architecture (Prompt 5)
 
-How DSRclone turns an authorized target into a trustworthy asset inventory —
+How ZeroSweep turns an authorized target into a trustworthy asset inventory —
 and the guarantees that keep reconnaissance from ever becoming unauthorized
 scanning.
 

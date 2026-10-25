@@ -2,7 +2,7 @@
 
 ## Wiring
 
-Falco runs on the cluster (outside DSRclone). Events reach the
+Falco runs on the cluster (outside ZeroSweep). Events reach the
 platform through the governed ingestion path into
 `RuntimeSecurityEvent` (the Prompt 13 Falco connector contract:
 rule, priority, namespace, pod, container, host, output fields).
@@ -11,7 +11,7 @@ CRITICAL, ERROR, WARNING, NOTICE, INFORMATIONAL, DEBUG.
 
 ## Operating rules
 
-- Falco is DETECTION. DSRclone never kills/restarts workloads and
+- Falco is DETECTION. ZeroSweep never kills/restarts workloads and
   runs no admission webhook in response (§96).
 - Correlation (Kubernetes Security page → Correlate) links the event
   to workload/image/findings and, for HIGH-confidence

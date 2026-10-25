@@ -4,7 +4,7 @@
 `PORT_DISCOVERY`. Risk: LOW. Worker: `NETWORK_EXTERNAL`.
 
 Fast port discovery with controlled batch/timeout settings; output is
-parsed from RustScan's greppable format by DSRclone itself.
+parsed from RustScan's greppable format by ZeroSweep itself.
 
 ## Governance
 

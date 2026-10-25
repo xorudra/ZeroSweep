@@ -2,7 +2,7 @@
 
 Container images are first-class assets (`CONTAINER_IMAGE` targets plus a
 `ContainerImage` inventory). The governing rule is §9: **images are never
-executed**. No code path in DSRclone runs an image, invokes its ENTRYPOINT
+executed**. No code path in ZeroSweep runs an image, invokes its ENTRYPOINT
 or CMD, executes a script from it, or mounts a Docker socket to reach it.
 Analysis is static: image configuration, layer metadata, package
 inventories and scanner databases, all read by governed adapters on the
@@ -44,7 +44,7 @@ CORRELATION → RISK_ANALYSIS → QUALITY_GATE → REPORT_GENERATION. The
 container quality gate (§75) fails on KEV-listed image CVEs (from the
 Prompt 11 governed dataset only), critical image CVEs, verified image
 secrets and privileged-container misconfigurations; the deployment gate
-(§76) reports a verdict — DSRclone itself never deploys or blocks a
+(§76) reports a verdict — ZeroSweep itself never deploys or blocks a
 production system.
 
 ## Docker host posture (§27–§31)

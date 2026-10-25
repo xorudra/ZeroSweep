@@ -85,7 +85,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Kubernetes Security" title="Kubernetes" body="Read-only posture assessment over inventory metadata. DSRclone never applies manifests, never execs into pods, and never retrieves secret values." />
+      <PageHeader eyebrow="Kubernetes Security" title="Kubernetes" body="Read-only posture assessment over inventory metadata. ZeroSweep never applies manifests, never execs into pods, and never retrieves secret values." />
       {error && <p className="rounded bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>}
       {notice && <p className="rounded bg-emerald-950/60 px-3 py-2 text-sm text-emerald-300">{notice}</p>}
 
@@ -108,7 +108,7 @@ export default function Page() {
             </select>
           </label>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Least privilege by design: the registered service account is read-only and never cluster-admin. Example: Rudra registers <span className="font-mono">prod-eu</span> with credential reference <span className="font-mono">prod-eu-kubeconfig</span> — the credential itself never enters DSRclone.</p>
+        <p className="mt-2 text-xs text-slate-500">Least privilege by design: the registered service account is read-only and never cluster-admin. Example: Rudra registers <span className="font-mono">prod-eu</span> with credential reference <span className="font-mono">prod-eu-kubeconfig</span> — the credential itself never enters ZeroSweep.</p>
       </Card>
 
       <Card>

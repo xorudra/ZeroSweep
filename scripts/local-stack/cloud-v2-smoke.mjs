@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 34 live Cloud & Container Security V2 smoke.
+ * ZeroSweep Prompt 34 live Cloud & Container Security V2 smoke.
  * Runs the REAL governed flow against the running stack: register ->
  * cloud account (credential REFERENCE only) -> connection test
  * (honest UNREACHABLE: transport NOT_CONFIGURED) -> assess BLOCKED

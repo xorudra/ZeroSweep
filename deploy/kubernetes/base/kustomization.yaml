@@ -1,4 +1,4 @@
-# DSRclone Kubernetes base — the CANONICAL deployment path (Prompt 25
+# ZeroSweep Kubernetes base — the CANONICAL deployment path (Prompt 25
 # §24–§26). The Helm chart under deploy/helm renders an equivalent subset
 # for Helm-native shops; semantics live HERE. scan-job.yaml is a template
 # reference for the worker controller and is intentionally NOT a resource.

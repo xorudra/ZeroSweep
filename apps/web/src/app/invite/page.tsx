@@ -56,7 +56,7 @@ function InviteForm() {
           <div style={{ background: "#111", width: 44, height: 44, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "1.15rem", marginBottom: "0.75rem", border: "1px solid #333" }}>DS</div>
           <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em" }}>Accept your invitation</h1>
           <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
-            DSRclone is invite-only. Paste the invitation token you were given, choose a password, and your account is created.
+            ZeroSweep is invite-only. Paste the invitation token you were given, choose a password, and your account is created.
           </p>
           {done ? (
             <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>

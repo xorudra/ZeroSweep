@@ -1,4 +1,4 @@
-# DSRclone v1.0 — Launch Checklist (Prompt 40 §264–§266)
+# ZeroSweep v1.0 — Launch Checklist (Prompt 40 §264–§266)
 
 Every item needs recorded evidence. "Unchecked" means not done —
 there is no placeholder success (§297).

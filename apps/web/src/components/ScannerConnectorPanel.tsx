@@ -68,7 +68,7 @@ export function ScannerConnectorPanel({ slug }: { slug: string }) {
     <Card title="Interactive scanner connector (Prompt 8)">
       <p className="text-sm text-slate-400">
         This product integrates as a <strong className="text-slate-200">connector</strong>, not a command-line tool:
-        DSRclone talks to an administrator-registered scanner instance over its API, inside an isolated
+        ZeroSweep talks to an administrator-registered scanner instance over its API, inside an isolated
         per-assessment context locked to the approved scope. Passive analysis and issue/endpoint import are the
         default; <strong className="text-slate-200">active scanning is INTRUSIVE, disabled by default</strong>, and
         requires a separate, expiring approval (verified target + approved scope + approved assessment + budget).
@@ -123,7 +123,7 @@ export function ScannerConnectorPanel({ slug }: { slug: string }) {
       <p className="mt-3 text-xs text-slate-500">
         Scanner endpoints are resolved from server configuration by reference name — the API never accepts a
         scanner URL from a client, which keeps this surface SSRF-safe. Burp Suite is commercial: the administrator
-        supplies the licensed environment; DSRclone never redistributes it.
+        supplies the licensed environment; ZeroSweep never redistributes it.
       </p>
     </Card>
   );

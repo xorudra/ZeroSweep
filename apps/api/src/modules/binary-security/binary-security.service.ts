@@ -411,7 +411,7 @@ export class BinarySecurityService {
         health: health[d.slug]?.status ?? "NOT_CONFIGURED",
         detail: health[d.slug]?.detail ?? null,
       })),
-      prohibitedAutomationNote: "Exploit generation, weaponized proof-of-concepts, shellcode, ROP chains, malware creation, payload injection, credential dumping, process injection, persistence, privilege escalation, sandbox escape and AV/EDR evasion are PROHIBITED AUTOMATION (§78/§123) — never implemented. Binaries are never executed by DSRclone.",
+      prohibitedAutomationNote: "Exploit generation, weaponized proof-of-concepts, shellcode, ROP chains, malware creation, payload injection, credential dumping, process injection, persistence, privilege escalation, sandbox escape and AV/EDR evasion are PROHIBITED AUTOMATION (§78/§123) — never implemented. Binaries are never executed by ZeroSweep.",
     };
   }
 

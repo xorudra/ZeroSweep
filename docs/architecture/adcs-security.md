@@ -1,6 +1,6 @@
 # AD Certificate Services Posture (Prompt 15 §47–§50)
 
-AD CS assessment in DSRclone is **configuration posture only**. The
+AD CS assessment in ZeroSweep is **configuration posture only**. The
 capability split is enforced in code (`CERTIPY_CAPABILITY_SPLIT`):
 
 - **Defensive (implemented):** CA and template inventory, template

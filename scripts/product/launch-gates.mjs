@@ -84,7 +84,7 @@ if (!evidencePath) { console.error("Usage: launch-gates.mjs --evidence <evidence
 const evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
 const { results, status, blocked } = evaluate(evidence);
 
-console.log(`DSRclone v1.0 launch gates — evaluated ${new Date().toISOString()}`);
+console.log(`ZeroSweep v1.0 launch gates — evaluated ${new Date().toISOString()}`);
 for (const g of GATES) {
   const r = results.find((x) => x.gate === g.key);
   console.log(`  [${r.status.padEnd(14)}] ${g.key} — ${g.name} (${r.evidence})`);

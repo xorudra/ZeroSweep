@@ -1,4 +1,4 @@
-# PCI DSS 4.0 in DSRclone (Prompt 26)
+# PCI DSS 4.0 in ZeroSweep (Prompt 26)
 
 Shipped catalog version: PCI_DSS 4.0 (Requirements 1–12).
 Requirement IDs/titles are the published reference structure.
@@ -18,6 +18,6 @@ Mapping notes (technical strengths):
 - Req 9/12 are administrative/physical — manual evidence only.
 
 PCI DSS compliance is assessed by a QSA/ASV against the
-organization's cardholder data environment. DSRclone provides
+organization's cardholder data environment. ZeroSweep provides
 evidence and gap tracking; **it is not a QSA and does not attest
 PCI DSS compliance.**

@@ -1,6 +1,6 @@
 # Frida (Prompt 17 §69–§72)
 
-**DISABLED registration.** Frida exists in DSRclone only as
+**DISABLED registration.** Frida exists in ZeroSweep only as
 administrator-reviewed, versioned instrumentation **modules** under
 the MobileInstrumentationPolicy (module, version, hash, capability,
 risk). There is no executing adapter by default, and **arbitrary

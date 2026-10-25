@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone live EASM smoke (Prompt 29).
+ * ZeroSweep live EASM smoke (Prompt 29).
  * Exercises the EASM layer end-to-end against the running API + live
  * PostgreSQL: register -> login -> program -> root asset -> passive
  * fixture discovery (candidate lands NOT_AUTHORIZED, active payload

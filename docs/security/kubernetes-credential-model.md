@@ -1,6 +1,6 @@
 # Kubernetes Credential Model (Prompt 13 §32/§33)
 
-DSRclone stores **references, never credentials**, for clusters:
+ZeroSweep stores **references, never credentials**, for clusters:
 
 - A cluster registration carries an API-server *reference* (a name the
   deployment maps to an endpoint out of band) and a credential
@@ -15,7 +15,7 @@ DSRclone stores **references, never credentials**, for clusters:
 - The registered service account is **read-only and least-privilege**
   (get/list/watch on inventory resources). Cluster-admin is never the
   default; posture checks that detect cluster-admin bindings flag them
-  as CRITICAL findings — including DSRclone's own service account if
+  as CRITICAL findings — including ZeroSweep's own service account if
   it were ever over-privileged.
 - Service-account tokens are never retrieved or used by posture code
   (§67): automount configuration is assessed from workload metadata,

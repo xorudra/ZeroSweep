@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | SAFE | Allowed | repeat HTTP request, verify header, confirm TLS, check exposed service, version evidence, approved Nuclei detection repeat, public cloud config confirm, K8s posture confirm, SAST rule repeat, dependency presence check |
 | LOW_IMPACT | Approval in production | slightly heavier observations within strict budgets |
-| REVIEW_REQUIRED | Always approval | anything DSRclone cannot prove is safe by construction (incl. every unknown technique name) |
+| REVIEW_REQUIRED | Always approval | anything ZeroSweep cannot prove is safe by construction (incl. every unknown technique name) |
 | INTRUSIVE | Denied by default | only the §63 LAB architecture: explicit authorization + specific scope + named approver + short expiry + isolated environment. **No dangerous exploit modules are implemented.** |
 | PROHIBITED_AUTOMATION | Always denied | §97 list — never planned, never approved, never executed |
 

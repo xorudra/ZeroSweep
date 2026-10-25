@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone live SOC smoke (Prompt 28).
+ * ZeroSweep live SOC smoke (Prompt 28).
  * Exercises the SOC layer end-to-end against the running API + live
  * PostgreSQL: register -> login -> telemetry source -> seed + activate
  * a detection template -> ingest fixture auth-failure telemetry ->

@@ -11,7 +11,7 @@ import type { CreateControlInput, CreateMappingInput, UpdateControlInput } from 
 /**
  * Control library (Prompt 26 §7–§18). Workspace controls are seeded
  * from the SDK catalog on first use; the catalog distinguishes what
- * DSRclone can technically validate from what requires human evidence
+ * ZeroSweep can technically validate from what requires human evidence
  * (administrative controls carry MANUAL tests with automation NONE).
  */
 @Injectable()

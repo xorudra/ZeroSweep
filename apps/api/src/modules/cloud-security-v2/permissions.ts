@@ -4,7 +4,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Cloud Security V2 permissions (Prompt 34 §139). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * RUN_CLOUD_ASSESSMENT is the V2 name for starting an orchestrated
  * assessment; Prompt 14's RUN_CLOUD_SCAN remains the scan permission.
  */

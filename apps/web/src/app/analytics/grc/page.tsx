@@ -13,7 +13,7 @@ interface Grc {
   highResidualRisks: number; expiringRiskAcceptances: number; openAuditFindings: number;
 }
 
-const DISCLAIMER = "DSRclone provides technical evidence, control monitoring, assessment support, risk tracking and audit preparation. It does not certify or attest compliance.";
+const DISCLAIMER = "ZeroSweep provides technical evidence, control monitoring, assessment support, risk tracking and audit preparation. It does not certify or attest compliance.";
 
 export default function Page() {
   const [data, setData] = useState<Grc | null>(null);

@@ -179,7 +179,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
             <ShieldIcon width="16" height="16" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold leading-tight text-[#131416]">DSRclone</span>
+            <span className="block truncate text-[13px] font-semibold leading-tight text-[#131416]">ZeroSweep</span>
             <span className="block text-[11px] leading-tight text-[#5d5f60]">VAPT Console</span>
           </span>
           {drawer ? null : (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#5d5f60" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>)}
@@ -362,7 +362,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <ShieldIcon width="15" height="15" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">DSRclone</span>
+              <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">ZeroSweep</span>
               <span className="block text-[11px] leading-tight text-[#8A8A8A]">Legal documents</span>
             </span>
             <Link href="/login" className="shrink-0 rounded-lg bg-[#262626] px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333]">Sign in</Link>
@@ -405,7 +405,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <ShieldIcon width="15" height="15" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-semibold leading-tight text-[#131416]">DSRclone</span>
+            <span className="block truncate text-[13.5px] font-semibold leading-tight text-[#131416]">ZeroSweep</span>
             <span className="block truncate text-[11px] leading-tight text-[#5d5f60]">{me?.name ?? "VAPT Console"}</span>
           </span>
           {canAdmin ? (

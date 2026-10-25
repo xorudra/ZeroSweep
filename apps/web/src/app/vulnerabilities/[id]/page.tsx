@@ -101,7 +101,7 @@ export default function Page() {
             <Field label="Remediation group" value={typeof vuln.remediationGroup === "object" && vuln.remediationGroup ? String((vuln.remediationGroup as { label?: string }).label ?? "") : "—"} />
           </dl>
           <h3 className="mt-6 text-sm font-semibold text-slate-200">Remediation guidance</h3>
-          <p className="mt-1 text-sm text-slate-400">{String(vuln.remediation ?? "No tool- or analyst-provided remediation recorded — DSRclone never fabricates fixes (§52).")}</p>
+          <p className="mt-1 text-sm text-slate-400">{String(vuln.remediation ?? "No tool- or analyst-provided remediation recorded — ZeroSweep never fabricates fixes (§52).")}</p>
           {vuln.riskAcceptance ? (
             <p className="mt-3 rounded-lg border border-amber-800 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
               Risk accepted by {vuln.riskAcceptance.acceptedBy ?? "—"} until {vuln.riskAcceptance.expiresAt ? new Date(vuln.riskAcceptance.expiresAt).toLocaleDateString() : "—"}: {vuln.riskAcceptance.reason}

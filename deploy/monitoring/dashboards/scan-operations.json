@@ -1,6 +1,6 @@
 {
   "uid": "dsrclone-scan-operations",
-  "title": "DSRclone \u2014 Scan Operations",
+  "title": "ZeroSweep \u2014 Scan Operations",
   "description": "Prompt 38 \u00a7101 scan lifecycle by profile/worker class (never target labels, \u00a7107). Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,

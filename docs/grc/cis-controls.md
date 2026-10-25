@@ -1,4 +1,4 @@
-# CIS Critical Security Controls v8 in DSRclone (Prompt 26)
+# CIS Critical Security Controls v8 in ZeroSweep (Prompt 26)
 
 Shipped catalog version: CIS_CONTROLS 8.0 (Controls 1–18 safeguard
 structure). Safeguard IDs/titles are the published reference

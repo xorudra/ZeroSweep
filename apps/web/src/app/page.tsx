@@ -22,7 +22,7 @@ const STEPS = [
   },
   {
     n: 3, title: "Run the scan", href: "/scans", cta: "See scans",
-    body: "Start the approved check and watch its progress. Only safe, approved tests are used — DSRclone never attacks the systems it protects.",
+    body: "Start the approved check and watch its progress. Only safe, approved tests are used — ZeroSweep never attacks the systems it protects.",
   },
   {
     n: 4, title: "Read findings", href: "/findings", cta: "Read findings",
@@ -97,7 +97,7 @@ export default function OverviewPage() {
           <EmptyState title="No assets yet" body="Add a target, verify ownership, define scope and run an approved assessment. Discovered assets will appear here." />
         </Card>
         <Card eyebrow="Recent" title="Recent findings">
-          <EmptyState title="See the findings overview above" body="Findings come only from real, authorized scans — DSRclone never shows placeholder vulnerabilities. Open the Findings page for the full filterable dashboard." />
+          <EmptyState title="See the findings overview above" body="Findings come only from real, authorized scans — ZeroSweep never shows placeholder vulnerabilities. Open the Findings page for the full filterable dashboard." />
         </Card>
       </div>
       <div className="mt-12">

@@ -22,7 +22,7 @@ export default function Page() {
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">Honest limits</h3>
-            <p>DSRclone does not claim PCI DSS, SOC 2, ISO 27001, GDPR, or HIPAA certification, and no page in this section should be read as such a claim.</p>
+            <p>ZeroSweep does not claim PCI DSS, SOC 2, ISO 27001, GDPR, or HIPAA certification, and no page in this section should be read as such a claim.</p>
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">Reporting a vulnerability</h3>

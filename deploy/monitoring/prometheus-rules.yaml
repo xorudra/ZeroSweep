@@ -120,7 +120,7 @@ spec:
           for: 0m
           labels: { severity: critical }
           annotations:
-            summary: "A privileged workload exists in a DSRclone namespace — admission should have rejected it"
+            summary: "A privileged workload exists in a ZeroSweep namespace — admission should have rejected it"
             runbook: "docs/security/kubernetes-production-hardening.md"
         - alert: DsrcloneScannerCapabilityViolation
           expr: sum(increase(dsrclone_scanner_capability_violation_total[5m])) > 0

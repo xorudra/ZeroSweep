@@ -22,7 +22,7 @@ export default function AppError({
         <p className="text-sm font-semibold uppercase tracking-widest text-slate-400">Something went wrong</p>
         <h1 className="mt-3 text-3xl font-bold">This screen hit an error</h1>
         <p className="mt-3 text-sm leading-6 text-slate-400">
-          The rest of DSRclone is unaffected, and no data was changed.
+          The rest of ZeroSweep is unaffected, and no data was changed.
           Try showing this screen again — that keeps you signed in. If it
           keeps failing, the dashboard button reloads the app and will
           ask you to sign in again.

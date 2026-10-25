@@ -14,8 +14,8 @@ import { ValidationWorkflowService } from "../workflows/validation-workflow.serv
 /**
  * Manual validation (Prompt 16 §32). Authorized analysts attach their
  * own evidence — description, sanitized screenshots/logs/request-
- * response excerpts, notes — for validations DSRclone must not
- * automate (RCE-class findings, §21, are manual-only). DSRclone
+ * response excerpts, notes — for validations ZeroSweep must not
+ * automate (RCE-class findings, §21, are manual-only). ZeroSweep
  * executes NOTHING for these records. Attachments are sanitized before
  * storage (§34); an analyst's VERIFIED attestation updates the finding
  * through the same confidence path as automated validation (§36).

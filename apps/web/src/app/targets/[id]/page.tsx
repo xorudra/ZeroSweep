@@ -50,7 +50,7 @@ const METHODS: { value: string; label: string; hint: string }[] = [
 const DECLARATION_GUIDELINES = [
   { title: "You may declare only if", body: "You own this target, or the owner gave you written permission to test it, or it is listed in scope of a public bug-bounty program that allows the testing you plan." },
   { title: "You must NOT declare for", body: "Any site you do not own and have no permission for — including famous sites, your college or company site, or a client's site without their say-so." },
-  { title: "The legal note", body: "Testing a system without permission can be illegal — in India under the IT Act, in the US under the CFAA, and under similar laws elsewhere. You are responsible for your scans, not DSRclone." },
+  { title: "The legal note", body: "Testing a system without permission can be illegal — in India under the IT Act, in the US under the CFAA, and under similar laws elsewhere. You are responsible for your scans, not ZeroSweep." },
   { title: "If you declare falsely", body: "Your declaration is recorded with your account, the time, and the network address it came from. Your account can be blocked, your scans stopped, and the record shown to the target owner if they complain." },
 ];
 
@@ -184,7 +184,7 @@ export default function Page() {
         </Card>
       ) : (
         <Card eyebrow="Step 2" title="Verify it's yours">
-          <p className="text-sm text-slate-300">Pick how to prove you own this target. DSRclone really checks — nothing is marked verified until the proof is found.</p>
+          <p className="text-sm text-slate-300">Pick how to prove you own this target. ZeroSweep really checks — nothing is marked verified until the proof is found.</p>
           {showGuidelines ? (
             <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900 p-4">
               <p className="text-sm font-semibold text-slate-100">Before you declare — read this</p>

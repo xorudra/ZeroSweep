@@ -1,4 +1,4 @@
-# DSRclone RC1 — Release Checklist (§321/§322)
+# ZeroSweep RC1 — Release Checklist (§321/§322)
 
 ## Product
 - [x] Every subsystem from Prompts 1–38 is present (audit inventory, `docs/release/rc1-audit.md`).

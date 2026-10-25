@@ -14,7 +14,7 @@ administrator-managed connector (`greenbone-openvas`).
   COMPREHENSIVE. The mapping to real Greenbone scan-config ids lives in
   administrator instance configuration. Unmapped profile → scan creation
   is refused.
-- **Targets** (§6): generated server-side from verified DSRclone scope
+- **Targets** (§6): generated server-side from verified ZeroSweep scope
   (include hosts/CIDRs, exclusions win, wildcards rejected, bounded).
   Raw target lists from clients are never forwarded.
 - **Tasks**: create → poll (bounded, cancellable) → fetch report →

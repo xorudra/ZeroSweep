@@ -10,7 +10,7 @@ it unchanged:
   field caps, sanitization) into NormalizedVulnFindings, then V2
   normalization adds plugin provenance (NVT OID, family, feed context)
   and network correlation keys.
-- **Profiles**: DSRclone profiles map to administrator-configured
+- **Profiles**: ZeroSweep profiles map to administrator-configured
   Greenbone scan configurations via logical profiles (BASELINE /
   STANDARD / COMPREHENSIVE). Arbitrary scanner settings are never
   exposed through the platform.

@@ -1,11 +1,11 @@
-# DSRclone RC1 — Release Notes (§300)
+# ZeroSweep RC1 — Release Notes (§300)
 
-**Release:** DSRclone RC1 · **Version:** 1.0.0-rc.1 · **Date:**
+**Release:** ZeroSweep RC1 · **Version:** 1.0.0-rc.1 · **Date:**
 2026-10-08 · **Status:** Release Candidate — audited, hardened and
 verified end-to-end (Prompt 39). This is the RC freeze of Prompts
 1–38, not yet the v1.0 launch (Prompt 40).
 
-## What DSRclone is
+## What ZeroSweep is
 
 A GUI-first platform for **authorized** security assessments: VAPT
 orchestration across 100+ governed tools, continuous monitoring,

@@ -181,7 +181,7 @@ export class JadxAdapter extends MobileAdapterBase {
 export class ApktoolAdapter extends MobileAdapterBase {
   readonly metadata = mobileMeta({
     id: "apktool", slug: "apktool", name: "apktool",
-    description: "apktool APK resource analysis (§18): manifest + resource extraction in the tool's safe workspace. DSRclone consumes the decoded manifest text and file inventory — extracted binaries are never executed (§8).",
+    description: "apktool APK resource analysis (§18): manifest + resource extraction in the tool's safe workspace. ZeroSweep consumes the decoded manifest text and file inventory — extracted binaries are never executed (§8).",
     homepage: "https://apktool.org", licenseType: "OPEN_SOURCE",
     capabilities: ["APK_RESOURCE_ANALYSIS", "MANIFEST_EXTRACTION", "RESOURCE_EXTRACTION"],
   });
@@ -236,7 +236,7 @@ export class GhidraAdapter extends MobileAdapterBase {
 export class AdbLabAdapter extends BaseSecurityToolAdapter {
   readonly metadata = mobileMeta({
     id: "adb", slug: "adb", name: "ADB (device lab)",
-    description: "ADB device-lab adapter (§53–§61): governed operations on DSRclone-managed approved lab devices ONLY — install the authorized build (hash verified first, §60), collect logs, reset the device. There is NO generic adb shell operation anywhere (§59/§75). Personal devices are never targeted (§55).",
+    description: "ADB device-lab adapter (§53–§61): governed operations on ZeroSweep-managed approved lab devices ONLY — install the authorized build (hash verified first, §60), collect logs, reset the device. There is NO generic adb shell operation anywhere (§59/§75). Personal devices are never targeted (§55).",
     homepage: "https://developer.android.com/tools/adb", licenseType: "OPEN_SOURCE",
     executionMode: "EXTERNAL_API",
     riskLevel: "MODERATE",

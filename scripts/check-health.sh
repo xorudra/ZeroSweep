@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quick local health check for all DSRclone services.
+# Quick local health check for all ZeroSweep services.
 set -u
 API_PORT="${API_PORT:-4000}"
 AI_PORT="${AI_PORT:-8000}"

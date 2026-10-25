@@ -1,7 +1,7 @@
 import type { ControlMappingData, MappingConfidence, SecurityControlData } from "./types";
 
 /**
- * Internal normalized control library (Prompt 26 §7). A DSRclone
+ * Internal normalized control library (Prompt 26 §7). A ZeroSweep
  * control states what the PLATFORM can evidence. Technical controls
  * carry the signal keys they are evaluated from; administrative
  * controls have no automated test (§18 — automation NONE) and can
@@ -49,7 +49,7 @@ export const CONTROL_LIBRARY: SecurityControlData[] = [
  */
 const M = (controlCode: string, frameworkKey: ControlMappingData["frameworkKey"], frameworkVersion: string,
   requirementId: string, mappingType: ControlMappingData["mappingType"], coverage: number, notes: string): ControlMappingData =>
-  ({ controlCode, frameworkKey, frameworkVersion, requirementId, mappingType, coverage, notes, source: "DSRclone control library v1" });
+  ({ controlCode, frameworkKey, frameworkVersion, requirementId, mappingType, coverage, notes, source: "ZeroSweep control library v1" });
 
 export const CONTROL_MAPPINGS: ControlMappingData[] = [
   M("MFA-ENFORCEMENT", "ISO_27001", "2022", "A.8.5", "DIRECT", 0.8, "Secure authentication technology; policy and lifecycle aspects remain organizational."),

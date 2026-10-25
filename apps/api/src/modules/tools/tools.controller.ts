@@ -185,7 +185,7 @@ export class ToolsController {
     if (tool.slug === "pacu") {
       return {
         slug: tool.slug, healthStatus: "DISABLED", installed: false,
-        detail: "Pacu (CLOUD_OFFENSIVE_TESTING, INTRUSIVE/HIGH) is disabled by policy: DSRclone performs read-only assessment only (§7/§34) — no adapter exists and it can never execute",
+        detail: "Pacu (CLOUD_OFFENSIVE_TESTING, INTRUSIVE/HIGH) is disabled by policy: ZeroSweep performs read-only assessment only (§7/§34) — no adapter exists and it can never execute",
         source: "governed tool policy (Prompt 14 §34)",
       };
     }

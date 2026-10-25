@@ -1,6 +1,6 @@
 # First Authorized Scan (Prompt 40 §154)
 
-DSRclone tests **only** what you own or are explicitly authorized to
+ZeroSweep tests **only** what you own or are explicitly authorized to
 test (§168):
 
 1. Complete the onboarding **Security Scope** step — the authorization

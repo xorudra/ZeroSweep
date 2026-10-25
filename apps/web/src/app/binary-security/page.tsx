@@ -10,7 +10,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
  * Binary Security dashboard (Prompt 18 §85). Registered artifacts,
  * formats, hardening posture, findings and tool health at a glance.
  * Binaries are hostile content: they are PARSED statically and are
- * NEVER executed, loaded, debugged or emulated by DSRclone (§8).
+ * NEVER executed, loaded, debugged or emulated by ZeroSweep (§8).
  * Exploit generation, shellcode, ROP chains, malware creation,
  * payload injection, credential dumping, process injection,
  * persistence, privilege escalation, sandbox escape and AV/EDR

@@ -106,7 +106,7 @@ function finalize(data: Omit<NormalizedWirelessData, "source">, source: string, 
 
 /**
  * Kismet device-export parser. Input: a JSON array of device records
- * (the normalized Kismet export subset DSRclone consumes). AP records
+ * (the normalized Kismet export subset ZeroSweep consumes). AP records
  * carry dot11 beacon metadata; client records become pseudonymized
  * station observations. Fields a hostile record plants for credential
  * material ("key", "psk", "eapol", "password" anywhere in the record)

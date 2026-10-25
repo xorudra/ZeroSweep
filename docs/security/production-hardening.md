@@ -1,4 +1,4 @@
-# Production Hardening — DSRclone (§134)
+# Production Hardening — ZeroSweep (§134)
 
 ## Configuration & secrets
 

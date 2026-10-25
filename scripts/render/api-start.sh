@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render start script for the DSRclone API service.
+# Render start script for the ZeroSweep API service.
 # Applies database migrations and the (idempotent) seed, then starts the API.
 # Mirrors scripts/local-stack/start.sh so the Render demo and the local
 # stack boot the same way.

@@ -1,4 +1,4 @@
-# DSRclone — production Docker Compose (Prompt 25 §20–§23).
+# ZeroSweep — production Docker Compose (Prompt 25 §20–§23).
 #
 # Rules for this file:
 # - NO real credentials live here or anywhere in the repo. Every secret comes

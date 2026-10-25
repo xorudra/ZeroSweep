@@ -32,7 +32,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Settings" title="Billing" body="Billing status, provider events and invoice references for your organization. DSRclone never stores card data (§26)." />
+      <PageHeader eyebrow="Settings" title="Billing" body="Billing status, provider events and invoice references for your organization. ZeroSweep never stores card data (§26)." />
       {error && <Card><p className="text-sm text-red-300">{error}</p></Card>}
       {!view && !error && <EmptyState title="Loading billing…" body="Fetching billing state." />}
       {view && view.status.status === "NOT_CONFIGURED" && (

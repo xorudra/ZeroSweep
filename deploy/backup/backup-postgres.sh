@@ -1,5 +1,5 @@
 #!/bin/sh
-# DSRclone PostgreSQL backup (Prompt 25 §115–§123).
+# ZeroSweep PostgreSQL backup (Prompt 25 §115–§123).
 # - pg_dump in custom format from a DEDICATED backup credential
 #   (BACKUP_DATABASE_URL — read/replication role, separate from the app's).
 # - SHA-256 integrity manifest written beside the dump.

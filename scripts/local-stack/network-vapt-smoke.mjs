@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 33 live Network VAPT V2 smoke.
+ * ZeroSweep Prompt 33 live Network VAPT V2 smoke.
  * Runs the REAL governed flow against the running stack: register ->
  * target -> verify -> scope -> assessment -> approve -> base scan
  * (fixture domain example.com, simulation adapters only) -> asset ->

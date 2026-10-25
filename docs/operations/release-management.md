@@ -1,4 +1,4 @@
-# Release Management — DSRclone (§143–§152)
+# Release Management — ZeroSweep (§143–§152)
 
 ## Versioning & artifacts
 

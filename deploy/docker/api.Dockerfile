@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# DSRclone API — production image (Prompt 25 §6–§19).
+# ZeroSweep API — production image (Prompt 25 §6–§19).
 # Multi-stage: deps -> build -> pruned runtime via pnpm deploy.
 # Non-root runtime, digest-pinned base, OCI labels, immutable inputs.
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS deps
@@ -22,7 +22,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts \
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
 LABEL org.opencontainers.image.title="dsrclone-api" \
-      org.opencontainers.image.description="DSRclone API service" \
+      org.opencontainers.image.description="ZeroSweep API service" \
       org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
       org.opencontainers.image.licenses="UNLICENSED"
 ENV NODE_ENV=production

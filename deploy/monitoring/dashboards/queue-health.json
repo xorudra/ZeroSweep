@@ -1,6 +1,6 @@
 {
   "uid": "dsrclone-queue-health",
-  "title": "DSRclone \u2014 Queue Health",
+  "title": "ZeroSweep \u2014 Queue Health",
   "description": "Prompt 38 \u00a7100 queue depth, retries, oldest job age. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,

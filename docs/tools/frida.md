@@ -1,6 +1,6 @@
 # Frida
 
-DISABLED registration (Prompt 17 §69–§71): Frida instrumentation exists in DSRclone only as administrator-reviewed, versioned modules under the MobileInstrumentationPolicy — default DISABLED for static profiles. No adapter exists, arbitrary user-supplied JavaScript is never accepted (§72/§75), and no stage can select it.
+DISABLED registration (Prompt 17 §69–§71): Frida instrumentation exists in ZeroSweep only as administrator-reviewed, versioned modules under the MobileInstrumentationPolicy — default DISABLED for static profiles. No adapter exists, arbitrary user-supplied JavaScript is never accepted (§72/§75), and no stage can select it.
 
 - **Slug:** `frida`
 - **Category:** MOBILE

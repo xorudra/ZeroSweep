@@ -54,7 +54,7 @@ export function buildSarifLog(input: {
   });
   const rules = [...ruleIds.values()].map((r) => ({
     id: r.id,
-    shortDescription: { text: `DSRclone rule ${r.id}` },
+    shortDescription: { text: `ZeroSweep rule ${r.id}` },
     ...(r.cwe ? { properties: { tags: [r.cwe] } } : {}),
   }));
   return {

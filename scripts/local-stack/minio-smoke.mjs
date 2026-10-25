@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 38 MinIO smoke: the SHIPPED S3ObjectStore (compiled
+ * ZeroSweep Prompt 38 MinIO smoke: the SHIPPED S3ObjectStore (compiled
  * worker code) against the REAL MinIO server provisioned for this
  * stack (official source build — see docs). Verifies bucket creation,
  * PUT/GET round trip, checksum agreement, and a missing-key miss.

@@ -38,7 +38,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="System" title="Status" body="Live component status for this DSRclone deployment. Values are measured from the health endpoint — a component that cannot be measured is shown as unknown, never as healthy." />
+      <PageHeader eyebrow="System" title="Status" body="Live component status for this ZeroSweep deployment. Values are measured from the health endpoint — a component that cannot be measured is shown as unknown, never as healthy." />
       {error && <Card><p className="text-sm text-red-300">{error}</p></Card>}
       {!health && !error && <EmptyState title="Loading status…" body="Checking components." />}
       {health && (

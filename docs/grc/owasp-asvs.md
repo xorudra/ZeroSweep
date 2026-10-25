@@ -1,4 +1,4 @@
-# OWASP ASVS 4.0.3 in DSRclone (Prompt 26)
+# OWASP ASVS 4.0.3 in ZeroSweep (Prompt 26)
 
 Shipped catalog version: OWASP_ASVS 4.0.3 (V1–V14 chapter
 structure). ASVS is open (CC BY-SA); requirement IDs/titles are the
@@ -17,5 +17,5 @@ Mapping notes:
 - V14 (configuration) — security headers/TLS posture PARTIAL.
 
 ASVS verification is a testing discipline performed by assessors;
-DSRclone aggregates scanner and platform evidence toward it. **It
+ZeroSweep aggregates scanner and platform evidence toward it. **It
 does not issue ASVS verification or L1–L3 attestation.**

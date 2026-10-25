@@ -293,7 +293,7 @@ describe("licensing (§28–§37, §215, §216, §233)", () => {
   const pubPem = publicKey.export({ type: "spki", format: "pem" }).toString();
   const privPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   const payload: LicensePayload = {
-    licenseId: "lic-test-1", organization: "Org One", edition: "ENTERPRISE", issuer: "DSRclone Licensing",
+    licenseId: "lic-test-1", organization: "Org One", edition: "ENTERPRISE", issuer: "ZeroSweep Licensing",
     issuedAt: "2026-01-01T00:00:00.000Z", validFrom: "2026-01-01T00:00:00.000Z", expiresAt: "2027-06-01T00:00:00.000Z",
     entitlements: [{ featureKey: "SSO", enabled: true, limit: null }], limits: { ASSETS: 1000 },
   };

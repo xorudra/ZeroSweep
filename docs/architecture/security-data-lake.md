@@ -1,6 +1,6 @@
 # Security Data Lake (Prompt 27)
 
-DSRclone's analytics plane is a **logical data lake over PostgreSQL** — the
+ZeroSweep's analytics plane is a **logical data lake over PostgreSQL** — the
 same governed store as the operational platform, with lake-owned tables that
 are append-only, tenant-scoped and rebuildable.
 

@@ -23,7 +23,7 @@ const outDir = resolve(process.cwd(), "docs/tools");
 mkdirSync(outDir, { recursive: true });
 
 const tools = await prisma.tool.findMany({ orderBy: { slug: "asc" }, include: { adapters: true } });
-const index = ["# Tool Documentation", "", "Generated from the DSRclone Tool Registry (seeded catalog). Regenerate with `node scripts/docs/generate-tool-docs.mjs`.", "", "| Tool | Category | License | Risk | Availability |", "|---|---|---|---|---|"];
+const index = ["# Tool Documentation", "", "Generated from the ZeroSweep Tool Registry (seeded catalog). Regenerate with `node scripts/docs/generate-tool-docs.mjs`.", "", "| Tool | Category | License | Risk | Availability |", "|---|---|---|---|---|"];
 
 for (const tool of tools) {
   const adapter = tool.adapters?.[0];
@@ -37,7 +37,7 @@ for (const tool of tools) {
     "",
     `- **Slug:** \`${tool.slug}\``,
     `- **Category:** ${tool.category}`,
-    `- **License:** ${tool.licenseType}${commercial ? " — customer/administrator-supplied license required; DSRclone never bundles commercial licenses (§122–§126)" : ""}`,
+    `- **License:** ${tool.licenseType}${commercial ? " — customer/administrator-supplied license required; ZeroSweep never bundles commercial licenses (§122–§126)" : ""}`,
     `- **Risk level:** ${tool.riskLevel}`,
     `- **Requires approval:** ${tool.requiresApproval ? "yes" : "no"}`,
     `- **Availability:** ${availability}`,
@@ -45,7 +45,7 @@ for (const tool of tools) {
     "## Installation",
     "",
     commercial
-      ? "Installed and licensed by the customer/administrator in their own environment; DSRclone connects through its governed adapter only when configured."
+      ? "Installed and licensed by the customer/administrator in their own environment; ZeroSweep connects through its governed adapter only when configured."
       : "Provided through the platform's isolated worker images or the governed adapter runtime; a missing binary reports UNAVAILABLE honestly.",
     "",
     "## Worker requirement",

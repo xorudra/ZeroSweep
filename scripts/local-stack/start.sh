@@ -1,5 +1,5 @@
 #!/bin/bash
-# DSRclone Docker-less local stack (Prompt 25 provisioning).
+# ZeroSweep Docker-less local stack (Prompt 25 provisioning).
 # PostgreSQL via pgserver's bundled binaries (run as user `nobody` — PG
 # refuses root), Redis from the official source tarball, then migrations,
 # seed, and the API/worker/AI processes from this repo.

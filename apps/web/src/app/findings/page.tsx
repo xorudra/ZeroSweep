@@ -73,7 +73,7 @@ function FindingsDashboard() {
       <ResourceList
         path={path}
         emptyTitle="No findings yet"
-        emptyBody="Findings appear only after real authorized scans run the safe vulnerability detection stage. DSRclone never displays placeholder vulnerabilities."
+        emptyBody="Findings appear only after real authorized scans run the safe vulnerability detection stage. ZeroSweep never displays placeholder vulnerabilities."
         columns={["Severity", "Finding", "Asset", "Endpoint", "Confidence", "Sources", "Status", "First Seen", "Last Seen"]}
         renderRow={(item: Record<string, unknown>, i: number) => (
           <Row key={i} cells={[

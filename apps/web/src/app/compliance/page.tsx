@@ -8,7 +8,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
 /**
  * Compliance posture (Prompt 13 §88): control assessments from the CIS
  * Docker / CIS Kubernetes / NSA-CISA catalogs. These are posture
- * evidence from governed checks — DSRclone never presents them as a
+ * evidence from governed checks — ZeroSweep never presents them as a
  * compliance certification, and this page carries that line verbatim.
  */
 interface AssessmentRow {

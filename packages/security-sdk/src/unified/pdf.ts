@@ -77,7 +77,7 @@ export function renderPdf(input: PdfDocumentInput): Buffer {
   });
 
   const infoId = 4 + pages.length * 2;
-  objects[infoId] = `<< /Title (${pdfEscape(input.title)}) /Creator (${pdfEscape(input.creator)}) /Producer (DSRclone ReportingEngine) >>`;
+  objects[infoId] = `<< /Title (${pdfEscape(input.title)}) /Creator (${pdfEscape(input.creator)}) /Producer (ZeroSweep ReportingEngine) >>`;
 
   let pdf = "%PDF-1.4\n";
   const offsets: number[] = [0];

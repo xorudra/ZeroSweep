@@ -335,7 +335,7 @@ export interface PingCastleRule {
 export interface PingCastleParseResult {
   domainName?: string;
   /** The PingCastle global score, preserved SEPARATELY from the
-   *  DSRclone risk score (§39) — products never overwrite each other. */
+   *  ZeroSweep risk score (§39) — products never overwrite each other. */
   pingcastleScore?: number;
   rules: PingCastleRule[];
   findings: NormalizedFinding[];
@@ -445,7 +445,7 @@ export function parsePingCastleReport(xml: string, ctx: DirectoryParseContext): 
       ...(ctx.domainId ? { directoryDomainId: ctx.domainId } : {}),
       evidence: sanitizeDirectoryText(
         `PingCastle rule ${rule.model} (category: ${rule.category}) scored ${rule.points} points. ` +
-        `PingCastle score is preserved separately from the DSRclone risk score (§39). ${rule.technicalExplanation}`.trim(), 1000),
+        `PingCastle score is preserved separately from the ZeroSweep risk score (§39). ${rule.technicalExplanation}`.trim(), 1000),
       ...(rule.remediation ? { remediation: sanitizeDirectoryText(rule.remediation, 1000) } : {}),
     } satisfies NormalizedFinding;
   });

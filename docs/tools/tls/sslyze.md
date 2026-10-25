@@ -5,7 +5,7 @@
 ## Purpose
 
 A second, independent implementation of TLS analysis whose primary job in
-DSRclone is **corroboration**: when SSLyze and testssl.sh agree that a
+ZeroSweep is **corroboration**: when SSLyze and testssl.sh agree that a
 service offers TLS 1.0, the merged canonical finding's confidence rises —
 because two independent codebases observed the same fact, not because
 one signature was copied twice.

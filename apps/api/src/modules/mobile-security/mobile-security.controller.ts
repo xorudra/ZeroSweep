@@ -23,7 +23,7 @@ const dynamicSessionBodySchema = createMobileDynamicSessionSchema.extend({
  * There is NO endpoint that installs or runs an app, opens a device
  * shell, accepts a Frida script or Objection command, installs a CA,
  * or returns a raw secret value or traffic body — those capabilities
- * do not exist in DSRclone (§59/§67/§72/§75/§119).
+ * do not exist in ZeroSweep (§59/§67/§72/§75/§119).
  */
 @Controller()
 export class MobileSecurityController {

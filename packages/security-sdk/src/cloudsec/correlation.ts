@@ -186,5 +186,5 @@ export function cloudRemediationGuidance(input: { ruleId: string; provider: stri
     "iam-wildcard-actions": { guidance: "Reduce IAM privilege: enumerate the specific actions and resources instead of wildcard grants (§71)." },
     "mfa-not-enabled": { guidance: "Require MFA for the human identity — enforce it with a condition/policy, do not just enroll (§71)." },
   };
-  return table[input.ruleId] ?? { guidance: "Remediate per the provider and tool guidance recorded on the finding; changes are reviewed and applied outside DSRclone (§71)." };
+  return table[input.ruleId] ?? { guidance: "Remediate per the provider and tool guidance recorded on the finding; changes are reviewed and applied outside ZeroSweep (§71)." };
 }

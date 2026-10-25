@@ -11,7 +11,7 @@ The worker executor refuses the adapter unless the worker holds the
 `PRIVILEGED_HOST`-type workers that declare it); on any other worker
 the stage degrades with `UNAVAILABLE_FOR_WORKER`. Results normalize to
 CIS Docker control assessments — PASS is evidence only, WARN/FAIL raise
-findings (§31). DSRclone never mounts a Docker socket to run it
+findings (§31). ZeroSweep never mounts a Docker socket to run it
 (§30/§106).
 
 ## Health

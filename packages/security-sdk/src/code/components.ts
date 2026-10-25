@@ -318,7 +318,7 @@ export function buildCycloneDxSbom(components: Component[], meta: SbomMetadata):
     metadata: {
       timestamp: meta.timestamp,
       component: { type: "application", name: meta.repositoryName, "bom-ref": `pkg:generic/${meta.repositoryName}@snapshot-${meta.snapshotHash.slice(0, 12)}` },
-      tools: [{ vendor: "DSRclone", name: "DSRclone Source Code Security Engine", version: "1.0.0" }],
+      tools: [{ vendor: "ZeroSweep", name: "ZeroSweep Source Code Security Engine", version: "1.0.0" }],
     },
     components: components.map((c) => ({
       type: "library",
@@ -351,7 +351,7 @@ export function buildSpdxSbom(components: Component[], meta: SbomMetadata): { do
     "DataLicense: CC0-1.0",
     `DocumentName: ${meta.repositoryName}-sbom`,
     `DocumentNamespace: https://dsrclone.local/sbom/${meta.snapshotHash}`,
-    "Creator: Tool: DSRclone-1.0.0",
+    "Creator: Tool: ZeroSweep-1.0.0",
     `Created: ${meta.timestamp.replace(/\.\d+Z$/, "Z")}`,
     "",
   ];

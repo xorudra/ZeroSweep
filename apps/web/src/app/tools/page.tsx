@@ -63,7 +63,7 @@ export default function Page() {
 
   return (
     <>
-      <PageHeader eyebrow="Tool Registry" title="Tools" body="Every tool is integrated through a standard adapter with category, risk level, capabilities and health. Tools are never run from this page and there is no command box anywhere in DSRclone — execution happens only through authorized assessment workflows." />
+      <PageHeader eyebrow="Tool Registry" title="Tools" body="Every tool is integrated through a standard adapter with category, risk level, capabilities and health. Tools are never run from this page and there is no command box anywhere in ZeroSweep — execution happens only through authorized assessment workflows." />
       <div className="mb-4 flex flex-wrap gap-2">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tools…" className={`${selectCls} min-w-52`} />
         <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>

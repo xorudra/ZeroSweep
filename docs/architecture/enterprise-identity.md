@@ -1,6 +1,6 @@
 # Enterprise Identity Architecture (Prompt 23)
 
-DSRclone's identity engine layers enterprise authentication ON TOP of the
+ZeroSweep's identity engine layers enterprise authentication ON TOP of the
 existing local auth (Phase 1) — it never replaces it. Local accounts keep
 working in every configuration; enterprise features activate per
 organization.

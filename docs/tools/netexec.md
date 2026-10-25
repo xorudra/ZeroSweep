@@ -1,6 +1,6 @@
 # NetExec
 
-DISABLED by policy (Prompt 15 §51): NetExec performs offensive remote operations and credential attacks. DSRclone performs defensive read-only assessment only — no adapter exists, it is never enabled and no stage can select it.
+DISABLED by policy (Prompt 15 §51): NetExec performs offensive remote operations and credential attacks. ZeroSweep performs defensive read-only assessment only — no adapter exists, it is never enabled and no stage can select it.
 
 - **Slug:** `netexec`
 - **Category:** ACTIVE_DIRECTORY

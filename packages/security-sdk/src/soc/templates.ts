@@ -2,7 +2,7 @@ import type { DetectionRuleDefinition } from "./dsl";
 
 /**
  * Detection rule templates (Prompt 28 §25/§26). Defensive patterns
- * over DSRclone's own telemetry. ATT&CK mappings are CLASSIFICATION
+ * over ZeroSweep's own telemetry. ATT&CK mappings are CLASSIFICATION
  * CONTEXT ONLY (§27): they label what a detection resembles; they
  * never drive any automated action.
  */

@@ -1,4 +1,4 @@
-# Scanner Worker Runbook — DSRclone
+# Scanner Worker Runbook — ZeroSweep
 
 ## Pool model
 

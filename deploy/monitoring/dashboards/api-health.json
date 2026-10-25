@@ -1,6 +1,6 @@
 {
   "uid": "dsrclone-api-health",
-  "title": "DSRclone \u2014 API Health",
+  "title": "ZeroSweep \u2014 API Health",
   "description": "Prompt 38 \u00a799 HTTP metrics by method/status class/route template. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,

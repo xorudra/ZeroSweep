@@ -177,12 +177,12 @@ export class GitHubConnector extends BaseConnector implements SourceControlProvi
         method: "POST",
         path: `/repos/${check.externalRepoId}/check-runs`,
         body: {
-          name: "DSRclone Security Gate",
+          name: "ZeroSweep Security Gate",
           head_sha: check.commitSha,
           status: "completed",
           conclusion: check.status === "PASS" ? "success" : check.status === "FAIL" ? "failure" : check.status === "WARN" ? "neutral" : "skipped",
           output: {
-            title: `DSRclone security gate: ${check.status}`,
+            title: `ZeroSweep security gate: ${check.status}`,
             summary: `${check.summary}\nNew: ${check.counts.newTotal} (critical ${check.counts.newCritical}, high ${check.counts.newHigh}) · Resolved: ${check.counts.resolved} · ${check.dsrcloneReference}`,
           },
         },
@@ -361,7 +361,7 @@ export class BitbucketConnector extends BaseConnector implements SourceControlPr
         body: {
           key: "dsrclone-security-gate",
           state: check.status === "PASS" ? "SUCCESSFUL" : check.status === "FAIL" ? "FAILED" : "STOPPED",
-          name: "DSRclone Security Gate",
+          name: "ZeroSweep Security Gate",
           description: `${check.summary} · New: ${check.counts.newTotal} · ${check.dsrcloneReference}`.slice(0, 255),
         },
       });

@@ -273,7 +273,7 @@ describe("SARIF export (§43–§45, §119)", () => {
   it("produces SARIF 2.1.0 with redacted messages and repo-relative locations", () => {
     const secret = "AKIAIOSFODNN7EXAMPLE";
     const { sarif } = buildSarifLog({
-      toolName: "DSRclone",
+      toolName: "ZeroSweep",
       findings: [{ ...finding({ title: `AWS key ${secret} in config` }), ruleId: "secrets/aws-key", cwe: "CWE-798" }],
     });
     const s = sarif as { version: string; runs: Array<{ results: Array<{ level: string; locations: unknown[] }> }> };
@@ -296,9 +296,9 @@ describe("event bus, SIEM and delivery reliability (§62–§80, §130–§132)"
       eventType: "CRITICAL_FINDING", severity: "CRITICAL", status: "OPEN",
       findingId: "f-1", riskScore: 9.1, cve: "CVE-2021-44228", cwe: "CWE-89",
     });
-    expect(formatCef(ev)).toContain("CEF:0|DSRclone|DSRclone|1.0|CRITICAL_FINDING|");
+    expect(formatCef(ev)).toContain("CEF:0|ZeroSweep|ZeroSweep|1.0|CRITICAL_FINDING|");
     expect(formatCef(ev)).toContain("externalId=evt-1");
-    expect(formatLeef(ev)).toContain("LEEF:2.0|DSRclone|");
+    expect(formatLeef(ev)).toContain("LEEF:2.0|ZeroSweep|");
     expect(JSON.stringify(ev)).not.toContain("secret");
   });
   it("bounds retries and dead-letters (§72, §131)", () => {

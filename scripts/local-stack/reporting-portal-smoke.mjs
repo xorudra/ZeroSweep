@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 37 live reporting + client-portal smoke.
+ * ZeroSweep Prompt 37 live reporting + client-portal smoke.
  * Exercises the REAL V2 surface against the running stack: register ->
  * governed chain (target -> verify -> scope -> assessment -> approve
  * -> scan) -> triage queue + decision -> comments (INTERNAL/CLIENT)

@@ -31,5 +31,5 @@ fingerprint + redacted preview; raw values never stored).
 ## Mapping
 
 Findings map to the versioned OWASP Mobile Top 10 (2024) taxonomy
-and MASVS v2.1 controls where reliable. DSRclone makes **no formal
+and MASVS v2.1 controls where reliable. ZeroSweep makes **no formal
 MASVS certification claims** (§48).

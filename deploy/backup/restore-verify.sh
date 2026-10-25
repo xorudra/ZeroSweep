@@ -1,5 +1,5 @@
 #!/bin/sh
-# DSRclone automated restore verification (Prompt 25 §125–§127).
+# ZeroSweep automated restore verification (Prompt 25 §125–§127).
 # Restores the newest backup from BACKUP_DEST into an ISOLATED throwaway
 # database (never production), then proves integrity:
 #   1. SHA-256 of the artifact matches its manifest.

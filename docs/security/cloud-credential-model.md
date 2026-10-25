@@ -1,6 +1,6 @@
 # Cloud Credential Model (Prompt 14 §6/§9/§11)
 
-Cloud credentials exist in DSRclone **only as secret references** —
+Cloud credentials exist in ZeroSweep **only as secret references** —
 the same model as Phase 8 scanner instances and Phase 13 cluster
 connections, extended to cloud accounts.
 

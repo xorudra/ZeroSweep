@@ -2,7 +2,7 @@
 
 Wifite is an automated **active** wireless auditing tool (deauthentication,
 handshake capture, WPS attacks, key cracking). It is registered in the
-DSRclone catalog as a **DISABLED descriptor only**:
+ZeroSweep catalog as a **DISABLED descriptor only**:
 
 - No executing adapter exists; no plan can select it.
 - Baseline profiles are asserted (planner + policy tests, §64) to never

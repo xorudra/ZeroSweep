@@ -1,6 +1,6 @@
 # EASM v2 — Enterprise External Attack Surface Management
 
-Prompt 29 adds an EASM workspace on top of the existing DSRclone
+Prompt 29 adds an EASM workspace on top of the existing ZeroSweep
 platform: EASM programs own root assets (seed domains, organizations,
 cloud accounts, IP ranges) and run governed discovery that produces
 **candidates**, never scope.

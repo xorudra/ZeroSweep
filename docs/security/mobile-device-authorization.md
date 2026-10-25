@@ -5,7 +5,7 @@ A dynamic session may only ever touch a device that is:
 1. registered in the SAME workspace (`MobileTestDevice`),
 2. of a supported type (ANDROID_EMULATOR, ANDROID_TEST_DEVICE,
    IOS_SIMULATOR, IOS_TEST_DEVICE),
-3. DSRclone-managed or organization-owned, and
+3. ZeroSweep-managed or organization-owned, and
 4. marked `authorizationStatus = AUTHORIZED`.
 
 Registration is not authorization. The Prompt 35 API checks the

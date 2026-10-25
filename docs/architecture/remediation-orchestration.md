@@ -1,6 +1,6 @@
 # Remediation Orchestration (Prompt 31)
 
-DSRclone Prompt 31 turns findings into finished work: every canonical
+ZeroSweep Prompt 31 turns findings into finished work: every canonical
 finding gets at most one ACTIVE `RemediationCase`, and the case — not
 the ticket, not the scanner, not the AI — is where remediation state
 lives. The pipeline is:

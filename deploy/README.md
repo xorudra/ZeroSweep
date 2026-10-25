@@ -1,4 +1,4 @@
-# DSRclone deployment (Prompt 25)
+# ZeroSweep deployment (Prompt 25)
 
 ## Canonical path (§24–§26)
 

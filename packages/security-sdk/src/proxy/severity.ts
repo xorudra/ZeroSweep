@@ -5,9 +5,9 @@ import type { Severity } from "@dsrclone/types";
  *
  * Each product speaks its own dialect. These tables are EXPLICIT and
  * per-product on purpose: "Burp High", "ZAP High" and "Nuclei High" are
- * NOT assumed equivalent — each is first mapped to the DSRclone severity
+ * NOT assumed equivalent — each is first mapped to the ZeroSweep severity
  * scale by its own table, and the final risk is computed afterwards by
- * the DSRclone RiskEngine from the normalized record (never by copying a
+ * the ZeroSweep RiskEngine from the normalized record (never by copying a
  * vendor's implied risk across).
  *
  * Confidence (§35): scanner confidence is preserved as the finding's

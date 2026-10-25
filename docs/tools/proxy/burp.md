@@ -1,8 +1,8 @@
 # Burp Suite Professional connector
 
 **Product class:** commercial, **ADMIN_PROVIDED** — `BurpConnector`.
-DSRclone never bundles, downloads or redistributes Burp. The
-administrator supplies a licensed Burp environment; DSRclone integrates
+ZeroSweep never bundles, downloads or redistributes Burp. The
+administrator supplies a licensed Burp environment; ZeroSweep integrates
 with what that environment exposes (§9–§12).
 
 ## How the integration actually works (honest design)
@@ -18,7 +18,7 @@ otherwise. Two real channels are used:
    - **Manual import**: API `POST /scanners/import` with
      `format: "burp-xml"` (Owner/Admin/Security Engineer), or
    - **The bridge** (below) for automated sync.
-2. **The DSRclone bridge contract** — the administrator runs a small
+2. **The ZeroSweep bridge contract** — the administrator runs a small
    bridge **inside their licensed Burp environment** (a Montoya
    extension, or a scheduled export job serving the files) exposing:
    - `GET /dsrclone/health` →

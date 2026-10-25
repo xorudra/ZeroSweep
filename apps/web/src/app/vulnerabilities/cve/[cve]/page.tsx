@@ -137,7 +137,7 @@ export default function Page() {
       {!detail.hasIntelligenceData ? (
         <EmptyState
           title="No local intelligence data for this CVE"
-          body="The governed local dataset holds no CVE / EPSS / KEV record for this identifier yet, so nothing is shown — DSRclone never fills intelligence panels with inferred or live-fetched values. Affected findings in your workspace are still listed below. Sync state: see the intelligence sources on the Vulnerabilities page."
+          body="The governed local dataset holds no CVE / EPSS / KEV record for this identifier yet, so nothing is shown — ZeroSweep never fills intelligence panels with inferred or live-fetched values. Affected findings in your workspace are still listed below. Sync state: see the intelligence sources on the Vulnerabilities page."
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-3">

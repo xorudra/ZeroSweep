@@ -47,7 +47,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Platform Operations" title="Platform Admin" body="Deployment health, release identity, operator controls and measured SLOs for this DSRclone installation. Platform operations require the platform RBAC permissions (§203)." />
+      <PageHeader eyebrow="Platform Operations" title="Platform Admin" body="Deployment health, release identity, operator controls and measured SLOs for this ZeroSweep installation. Platform operations require the platform RBAC permissions (§203)." />
       {error && <p className="rounded bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>}
       <div className="flex gap-3 text-sm">
         <Link className="text-sky-400 underline" href="/admin/platform/queues">Queues</Link>

@@ -36,7 +36,7 @@ export const PRODUCT_CAPABILITIES: Record<ScannerProduct, Capability[]> = {
   NESSUS: ["VULNERABILITY_SCANNING", "NETWORK_VULNERABILITY_ASSESSMENT", "SCAN_RESULT_IMPORT", "VULNERABILITY_DETECTION"],
   // Prompt 12 §23: SonarQube — administrator-managed code security
   // platform reached through the same instance/endpoint/secret-reference
-  // discipline. Result import only; DSRclone never submits builds.
+  // discipline. Result import only; ZeroSweep never submits builds.
   SONARQUBE: ["SAST", "CODE_PATTERN_ANALYSIS", "SCAN_RESULT_IMPORT"],
 };
 
@@ -60,7 +60,7 @@ export const SLUG_PRODUCTS: Record<string, ScannerProduct> = {
 };
 
 /** How the scanner deployment is provided (§9/§55). IMPORT_ONLY instances
- *  never receive network traffic from DSRclone — they exist so imported
+ *  never receive network traffic from ZeroSweep — they exist so imported
  *  exports are attributed to a registered, approved source. */
 export type ScannerDeploymentType = "MANAGED_DAEMON" | "ADMIN_PROVIDED" | "IMPORT_ONLY";
 

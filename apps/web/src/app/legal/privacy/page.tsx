@@ -46,7 +46,7 @@ export default function Page() {
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">Who this is for</h3>
-            <p>DSRclone is a professional security tool and is not directed at children under 18.</p>
+            <p>ZeroSweep is a professional security tool and is not directed at children under 18.</p>
           </section>
           <p className="border-t border-slate-700 pt-4 text-xs text-slate-400">
             Last updated 10 October 2026 · Operator contact: forapikeyonly2008@gmail.com · These documents describe this hosted deployment and are not legal advice.

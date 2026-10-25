@@ -48,8 +48,8 @@ export function buildTicketPayload(input: {
     finding.riskExplanation ? `Risk: ${finding.riskExplanation}` : null,
     finding.remediationSummary ? `Safe remediation summary: ${finding.remediationSummary}` : null,
     input.dueAt ? `Remediation due: ${input.dueAt.toISOString()}` : null,
-    `DSRclone remediation case: ${input.caseId}`,
-    "Note: closing this ticket does not close the vulnerability in DSRclone — the fix is verified independently.",
+    `ZeroSweep remediation case: ${input.caseId}`,
+    "Note: closing this ticket does not close the vulnerability in ZeroSweep — the fix is verified independently.",
   ].filter((l): l is string => l !== null);
   const rawTitle = `[${finding.severity}] ${finding.title}`;
   const title = scrubSecretPatterns(rawTitle);

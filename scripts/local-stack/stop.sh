@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stop the DSRclone local stack (app processes, Redis, PostgreSQL).
+# Stop the ZeroSweep local stack (app processes, Redis, PostgreSQL).
 STACK="$HOME/workspace/dsrclone-local-stack"
 pkill -f "apps/api/dist/main.js" 2>/dev/null && echo "[stack] api stopped" || true
 pkill -f "apps/worker/dist/index.js" 2>/dev/null && echo "[stack] worker stopped" || true

@@ -96,7 +96,7 @@ export default function Page() {
               </>
             ) : t.healthStatus}
           </Field>
-          <Field label="License model">{t.licenseType}{t.licenseType === "ADMIN_PROVIDED" ? " — supplied by the administrator; DSRclone does not redistribute it" : ""}</Field>
+          <Field label="License model">{t.licenseType}{t.licenseType === "ADMIN_PROVIDED" ? " — supplied by the administrator; ZeroSweep does not redistribute it" : ""}</Field>
           <Field label="Configuration status">{a?.enabled ? "Adapter enabled" : "Catalog entry — adapter not yet implemented (metadata only)"}</Field>
           <Field label="Supported target types">{(a?.supportedTargets ?? []).join(", ") || "—"}</Field>
           <Field label="Capabilities">{(a?.capabilities ?? []).join(", ") || "—"}</Field>
@@ -106,7 +106,7 @@ export default function Page() {
           <Field label="Network policy">{a?.networkPolicy ?? "—"}</Field>
           <Field label="Credential requirements">{credRefs.length ? credRefs.join(", ") + " (reference names only — values live in the vault)" : "None"}</Field>
         </div>
-        <p className="mt-4 text-xs text-slate-500">Tools in DSRclone run only through authorized, scope-checked, approved assessment workflows in isolated workers. This page intentionally has no run or command control.</p>
+        <p className="mt-4 text-xs text-slate-500">Tools in ZeroSweep run only through authorized, scope-checked, approved assessment workflows in isolated workers. This page intentionally has no run or command control.</p>
       </Card>
       {t.slug === "nuclei" ? <TemplatePolicyPanel /> : null}
       {PROXY_SLUGS.includes(t.slug) ? <div className="mt-4"><ScannerConnectorPanel slug={t.slug} /></div> : null}

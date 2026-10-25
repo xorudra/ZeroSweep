@@ -1,5 +1,5 @@
 #!/bin/sh
-# DSRclone controlled migration runner (Prompt 25 §36–§39).
+# ZeroSweep controlled migration runner (Prompt 25 §36–§39).
 # Preflight -> migrate deploy -> post-verification. Exits non-zero on any
 # failure so orchestrators (compose depends_on, K8s Job) block the rollout.
 # NEVER prints DATABASE_URL or any credential value.

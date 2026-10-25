@@ -93,7 +93,7 @@ export function isFeatureKey(value: string): value is FeatureKey {
 /**
  * Commercial tools (Prompt 39 tool-registry licensing, §122–§126). These
  * products are NEVER bundled and no license key for them ships with
- * DSRclone (§124). Customers supply their own license/configuration
+ * ZeroSweep (§124). Customers supply their own license/configuration
  * (§125); until then the tool reports LICENSE_REQUIRED / NOT_CONFIGURED
  * and is never presented as operational (§227).
  */

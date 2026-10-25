@@ -1,4 +1,4 @@
-# DSRclone E2E suite (Prompt 39 §198)
+# ZeroSweep E2E suite (Prompt 39 §198)
 
 Browser/API end-to-end tests for the release candidate. The suite drives
 the **live local stack** over HTTP — real API, real worker, real

@@ -2,7 +2,7 @@
 
 Wireshark is registered as an **ANALYST_TOOL**: a GUI application for
 human analysts on their own workstations. It never executes in the
-DSRclone pipeline, has no adapter, and appears in tool health only with
+ZeroSweep pipeline, has no adapter, and appears in tool health only with
 its governed non-executing state.
 
 Backend automation for capture analysis uses **tshark** with a fixed

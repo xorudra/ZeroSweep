@@ -3,7 +3,7 @@
 **Component:** `FalcoConnector`, connector (no executable), capability
 `RUNTIME_SECURITY_EVENTS`. Classification: CONNECTOR (§57).
 
-Falco is a runtime sensor that runs outside DSRclone; DSRclone never
+Falco is a runtime sensor that runs outside ZeroSweep; ZeroSweep never
 deploys or configures it. Detections arrive through the trusted
 ingestion path, are validated and sanitized (§60 — escapes, control
 characters, forged log lines, secret-shaped substrings), and persist as

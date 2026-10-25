@@ -47,7 +47,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="GRC · Controls" title="Control Library" body="DSRclone's normalized controls. A control with no current evidence evaluates INCONCLUSIVE — never a pass by default." />
+      <PageHeader eyebrow="GRC · Controls" title="Control Library" body="ZeroSweep's normalized controls. A control with no current evidence evaluates INCONCLUSIVE — never a pass by default." />
       {error && <p className="rounded bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>}
       <Card>
         {items.length === 0 ? (

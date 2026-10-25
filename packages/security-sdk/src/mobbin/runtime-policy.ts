@@ -38,7 +38,7 @@ export interface AdbPolicyVerdict {
 export function evaluateAdbOperation(operation: string): AdbPolicyVerdict {
   const normalized = operation.trim().toUpperCase().replace(/[\s-]+/g, "_");
   const reasons: string[] = [];
-  if (normalized.includes("SHELL")) reasons.push("ARBITRARY_ADB_SHELL: no generic adb shell exists in DSRclone (§59/§75/§77)");
+  if (normalized.includes("SHELL")) reasons.push("ARBITRARY_ADB_SHELL: no generic adb shell exists in ZeroSweep (§59/§75/§77)");
   if (!(ADB_ALLOWED_OPERATIONS as readonly string[]).includes(normalized)) {
     reasons.push(`OPERATION_NOT_ALLOWLISTED: '${operation}' is not one of the approved ADB operations (§75)`);
   }

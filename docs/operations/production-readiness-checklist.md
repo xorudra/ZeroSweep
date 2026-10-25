@@ -1,4 +1,4 @@
-# Production Readiness Checklist — DSRclone (§185)
+# Production Readiness Checklist — ZeroSweep (§185)
 
 Do not promote to production until every item is verifiably true.
 

@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Remediation orchestration permissions (Prompt 31 §121). They layer
  * over the workspace Role — the spec's permission names are the
- * contract; the role mapping is DSRclone policy in exactly one place.
+ * contract; the role mapping is ZeroSweep policy in exactly one place.
  */
 export const REMEDIATION_PERMISSIONS = [
   "VIEW_REMEDIATION",

@@ -3,8 +3,8 @@
 ## Closed catalog (§75/§76)
 
 Response is a closed catalog of nine predefined, platform-internal,
-defensive actions: disable a DSRclone API key, revoke a DSRclone
-session, disable a DSRclone service account, pause an integration,
+defensive actions: disable a ZeroSweep API key, revoke a ZeroSweep
+session, disable a ZeroSweep service account, pause an integration,
 pause scan automation, create a remediation ticket, send a
 notification, request credential rotation, mark an asset for
 review. There is no generic shell, script, remote-command or

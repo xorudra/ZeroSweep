@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
  * Prompt 37 §49–§59: vulnerability-platform sync semantics for
  * DefectDojo, Faraday, Dradis and PlexTrac.
  *
- * DSRclone is canonical for its own finding IDs and lifecycle (§51);
+ * ZeroSweep is canonical for its own finding IDs and lifecycle (§51);
  * external systems are integrations. This module is the pure decision
  * layer the API sync service executes:
  *  - status/severity mapping in both directions (§49/§52–§54);
@@ -24,7 +24,7 @@ export type SyncMode = (typeof SYNC_MODES)[number];
 export const CONFLICT_POLICIES = ["MANUAL", "KEEP_LOCAL", "TAKE_EXTERNAL_METADATA"] as const;
 export type ConflictPolicy = (typeof CONFLICT_POLICIES)[number];
 
-/** Canonical (DSRclone) lifecycle → external status vocabulary (§49). */
+/** Canonical (ZeroSweep) lifecycle → external status vocabulary (§49). */
 const STATUS_TO_EXTERNAL: Record<string, string> = {
   NEW: "Active", TRIAGED: "Active", CONFIRMED: "Active", IN_PROGRESS: "Active",
   REMEDIATED: "Mitigated", RETEST_PENDING: "Mitigated", RESOLVED: "Closed",

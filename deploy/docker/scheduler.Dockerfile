@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# DSRclone scheduler — production image (Prompt 25 §12/§52).
+# ZeroSweep scheduler — production image (Prompt 25 §12/§52).
 # Same build as the API (the scheduler entrypoint ships in the API package),
 # different command: the standalone Prompt 22 scheduler loop, lease-guarded
 # so exactly one scheduler control plane is active platform-wide.
@@ -23,7 +23,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts \
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
 LABEL org.opencontainers.image.title="dsrclone-scheduler" \
-      org.opencontainers.image.description="DSRclone standalone scheduler (Prompt 22 lease)" \
+      org.opencontainers.image.description="ZeroSweep standalone scheduler (Prompt 22 lease)" \
       org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
       org.opencontainers.image.licenses="UNLICENSED"
 ENV NODE_ENV=production

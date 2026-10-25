@@ -4,7 +4,7 @@ Outbound subscriptions are created per workspace with an event-type
 allowlist. Delivery semantics:
 
 - payload = canonical event envelope, JSON;
-- `X-DSRclone-Signature: sha256=<hmac>` with the subscription's
+- `X-ZeroSweep-Signature: sha256=<hmac>` with the subscription's
   secret reference (§69) plus event-id / timestamp headers;
 - destination validated at creation AND at every delivery, including
   every redirect hop (§70 — see

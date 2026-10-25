@@ -26,29 +26,29 @@ export interface ResponseActionDefinition {
 
 export const RESPONSE_ACTION_CATALOG: readonly ResponseActionDefinition[] = [
   {
-    key: "DISABLE_DSRCLONE_API_KEY", title: "Disable DSRclone API key",
-    description: "Revoke an API key inside DSRclone (suspected key compromise).",
+    key: "DISABLE_DSRCLONE_API_KEY", title: "Disable ZeroSweep API key",
+    description: "Revoke an API key inside ZeroSweep (suspected key compromise).",
     targetKind: "API_KEY", approvalMode: "SINGLE_APPROVAL", highImpact: true,
     rollbackAvailable: true, rollbackNote: "The key can be re-enabled by an administrator; the disablement and any re-enable are audited.",
     timeoutSeconds: 60,
   },
   {
-    key: "REVOKE_DSRCLONE_SESSION", title: "Revoke DSRclone session",
-    description: "Terminate one user session inside DSRclone.",
+    key: "REVOKE_DSRCLONE_SESSION", title: "Revoke ZeroSweep session",
+    description: "Terminate one user session inside ZeroSweep.",
     targetKind: "SESSION", approvalMode: "NO_APPROVAL", highImpact: false,
     rollbackAvailable: false, rollbackNote: "Sessions cannot be un-revoked; the user signs in again.",
     timeoutSeconds: 60,
   },
   {
-    key: "DISABLE_DSRCLONE_SERVICE_ACCOUNT", title: "Disable DSRclone service account",
-    description: "Disable a service account and its keys inside DSRclone.",
+    key: "DISABLE_DSRCLONE_SERVICE_ACCOUNT", title: "Disable ZeroSweep service account",
+    description: "Disable a service account and its keys inside ZeroSweep.",
     targetKind: "SERVICE_ACCOUNT", approvalMode: "SINGLE_APPROVAL", highImpact: true,
     rollbackAvailable: true, rollbackNote: "The account can be re-enabled by an administrator; audited.",
     timeoutSeconds: 60,
   },
   {
-    key: "PAUSE_DSRCLONE_INTEGRATION", title: "Pause DSRclone integration",
-    description: "Pause an integration (stops its sync/delivery) inside DSRclone.",
+    key: "PAUSE_DSRCLONE_INTEGRATION", title: "Pause ZeroSweep integration",
+    description: "Pause an integration (stops its sync/delivery) inside ZeroSweep.",
     targetKind: "INTEGRATION", approvalMode: "DUAL_APPROVAL", highImpact: true,
     rollbackAvailable: true, rollbackNote: "The integration can be resumed by an administrator; audited.",
     timeoutSeconds: 60,

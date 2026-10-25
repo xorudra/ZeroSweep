@@ -7,7 +7,7 @@ addComment / close / healthCheck. None is mandatory.
 
 Payloads contain safe fields only (severity, priority, asset
 reference, CVE/CWE, risk summary, safe remediation summary, due date,
-DSRclone reference) and pass through classification, redaction and
+ZeroSweep reference) and pass through classification, redaction and
 secret-pattern scrubbing first — restricted evidence is never copied
 into a ticket, and binary content is never attached.
 

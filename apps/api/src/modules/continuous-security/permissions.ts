@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Continuous-security permissions (Prompt 22 §87). They layer over
  * the workspace Role — the spec's permission names are the contract;
- * the role mapping is DSRclone policy and lives in exactly one place
+ * the role mapping is ZeroSweep policy and lives in exactly one place
  * (mirrors the Prompt 20/21 permissions modules).
  */
 export const CONTINUOUS_PERMISSIONS = [

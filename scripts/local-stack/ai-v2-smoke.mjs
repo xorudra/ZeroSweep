@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 36 live AI Copilot V2 smoke.
+ * ZeroSweep Prompt 36 live AI Copilot V2 smoke.
  * Exercises the REAL V2 surface against the running stack: register ->
  * target -> verify -> scope -> assessment -> approve (so the planner
  * snapshot contains a VERIFIED + APPROVED target) -> router models

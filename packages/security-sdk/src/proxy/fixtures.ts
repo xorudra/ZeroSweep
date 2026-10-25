@@ -200,7 +200,7 @@ export function proxyFixtureRoutes(overrides: FixtureRoute[] = []): FixtureRoute
       },
     },
     { method: "GET", match: "/JSON/core/view/messages/", respond: () => ({ body: ZAP_MESSAGES.map((x) => ({ id: x.id })) }) },
-    // Burp bridge (DSRclone's documented admin-provided bridge contract:
+    // Burp bridge (ZeroSweep's documented admin-provided bridge contract:
     // a Montoya extension / scheduled export in the licensed environment)
     { method: "GET", match: "/dsrclone/health", respond: () => ({ body: { version: "2024.1", licenseState: "Professional — licensed (fixture)" } }) },
     { method: "GET", match: "/dsrclone/issues-export", respond: () => ({ body: BURP_ISSUES_XML }) },

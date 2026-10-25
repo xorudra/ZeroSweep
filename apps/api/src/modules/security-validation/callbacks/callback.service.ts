@@ -15,7 +15,7 @@ import { ValidationPoliciesService } from "../policies/policies.service";
  * stored. A token is NOT authorization (§48): ingestion records
  * minimal metadata (kind, source IP, timestamp) and returns nothing
  * about the tenant. Ingestion is rate-limited per token and per IP.
- * DNS callbacks (§49) use the same token discipline on DSRclone-owned
+ * DNS callbacks (§49) use the same token discipline on ZeroSweep-owned
  * validation domains — the token is the leftmost label; this service
  * is the shared verification core.
  */

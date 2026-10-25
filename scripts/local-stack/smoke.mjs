@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone local-stack end-to-end smoke (Prompt 25).
+ * ZeroSweep local-stack end-to-end smoke (Prompt 25).
  * Exercises the REAL flow against a running API + worker + PostgreSQL +
  * Redis: health -> register -> login -> create target (example.com) ->
  * MANUAL_APPROVAL verification by the org OWNER -> assessment -> approve ->

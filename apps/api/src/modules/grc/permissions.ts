@@ -9,7 +9,7 @@ export type { GrcPermission };
 /**
  * GRC permissions (Prompt 26 §110). They layer over the workspace Role —
  * the spec's permission names are the contract; the role mapping is
- * DSRclone policy and lives in exactly one place (mirrors the Prompt
+ * ZeroSweep policy and lives in exactly one place (mirrors the Prompt
  * 20–24 permissions modules). Restricted evidence (§41) is leads-only;
  * time-limited auditor access (§74/§75) is grant-based and checked in
  * the services, not here.

@@ -1,6 +1,6 @@
 # Web Attack-Surface, Content, Route & Parameter Discovery (Prompt 6)
 
-How DSRclone discovers the parts of a web application that crawling and
+How ZeroSweep discovers the parts of a web application that crawling and
 historical sources miss — unlinked routes, files, directories and parameter
 names — without ever turning discovery into exploitation.
 

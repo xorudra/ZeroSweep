@@ -1,4 +1,4 @@
-# Kubernetes Production Hardening — DSRclone (§135)
+# Kubernetes Production Hardening — ZeroSweep (§135)
 
 ## Pod security
 

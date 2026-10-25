@@ -2,7 +2,7 @@
  * Proxy/scanner budget + rate limits (Prompt 8 §44–§45). Extends the
  * platform budget family (DiscoveryBudget, VulnBudget) with the ceilings
  * interactive connectors must respect. Administrator hard caps win over
- * every profile and over every scanner-vendor default: DSRclone rate
+ * every profile and over every scanner-vendor default: ZeroSweep rate
  * limits apply even when the scanner itself would go faster (§45).
  */
 export interface ProxyBudget {

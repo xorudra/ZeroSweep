@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# DSRclone web console — production image (Prompt 25 §6–§19).
+# ZeroSweep web console — production image (Prompt 25 §6–§19).
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS deps
 WORKDIR /repo
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts \
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
 LABEL org.opencontainers.image.title="dsrclone-web" \
-      org.opencontainers.image.description="DSRclone web console" \
+      org.opencontainers.image.description="ZeroSweep web console" \
       org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
       org.opencontainers.image.licenses="UNLICENSED"
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1

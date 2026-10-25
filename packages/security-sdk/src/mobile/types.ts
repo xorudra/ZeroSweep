@@ -110,7 +110,7 @@ export const MOBILE_DISABLED_REGISTRATIONS: MobileDisabledRegistration[] = [
     name: "Objection (dynamic instrumentation)",
     capabilities: ["DYNAMIC_INSTRUMENTATION"],
     executionState: "APPROVAL_REQUIRED",
-    reason: "Prompt 17 §74: Objection is APPROVAL_REQUIRED and exposes no arbitrary interactive shell through DSRclone. Only governed, pre-approved exploration modules inside an approved lab session (§71–§73). No executing adapter exists in this build.",
+    reason: "Prompt 17 §74: Objection is APPROVAL_REQUIRED and exposes no arbitrary interactive shell through ZeroSweep. Only governed, pre-approved exploration modules inside an approved lab session (§71–§73). No executing adapter exists in this build.",
   },
 ];
 
@@ -183,7 +183,7 @@ export interface MobileConnectorDeps {
     mobsf?: {
       fetchReport(artifactHash: string): Promise<string | undefined>;
     };
-    /** Device lab (§53): governed operations on DSRclone-managed lab
+    /** Device lab (§53): governed operations on ZeroSweep-managed lab
      *  devices ONLY. There is deliberately NO shell method (§59). */
     devices?: {
       listDevices(): Promise<MobileDeviceRecord[]>;

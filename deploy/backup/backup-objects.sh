@@ -1,5 +1,5 @@
 #!/bin/sh
-# DSRclone object-storage backup (Prompt 25 §44/§115): mirrors the artifact
+# ZeroSweep object-storage backup (Prompt 25 §44/§115): mirrors the artifact
 # bucket to the backup bucket with server-side encryption expected on the
 # destination bucket policy. Uses MinIO Client (mc) or AWS CLI depending on
 # OBJECT_BACKUP_TOOL. Bucket versioning + object-lock (WORM) are bucket

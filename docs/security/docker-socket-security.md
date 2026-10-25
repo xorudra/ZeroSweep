@@ -1,7 +1,7 @@
 # Docker Socket Security (Prompt 13 §30/§106)
 
-The Docker socket is root-equivalent on a host. DSRclone's rule is
-absolute: **no DSRclone component mounts or connects to a Docker
+The Docker socket is root-equivalent on a host. ZeroSweep's rule is
+absolute: **no ZeroSweep component mounts or connects to a Docker
 socket** — not the web app, not the API, not general workers, not
 source workers, not container-analysis workers.
 
@@ -14,7 +14,7 @@ source workers, not container-analysis workers.
 - Image content reaches the `CONTAINER_ANALYSIS` worker as a cached,
   content-addressed artifact through platform storage — never through
   a daemon.
-- Docker Bench for Security does not use the socket through DSRclone:
+- Docker Bench for Security does not use the socket through ZeroSweep:
   it runs on a dedicated `PRIVILEGED_HOST` worker against an explicitly
   approved host assessment, executor-gated on the
   `PRIVILEGED_HOST_ASSESSMENT` capability. General workers are refused

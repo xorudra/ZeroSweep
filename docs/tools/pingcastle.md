@@ -4,14 +4,14 @@ Active Directory security posture assessment (Prompt 15 §38–§40): healthchec
 
 - **Slug:** `pingcastle`
 - **Category:** ACTIVE_DIRECTORY
-- **License:** ADMIN_PROVIDED — customer/administrator-supplied license required; DSRclone never bundles commercial licenses (§122–§126)
+- **License:** ADMIN_PROVIDED — customer/administrator-supplied license required; ZeroSweep never bundles commercial licenses (§122–§126)
 - **Risk level:** LOW
 - **Requires approval:** yes
 - **Availability:** NOT_CONFIGURED
 
 ## Installation
 
-Installed and licensed by the customer/administrator in their own environment; DSRclone connects through its governed adapter only when configured.
+Installed and licensed by the customer/administrator in their own environment; ZeroSweep connects through its governed adapter only when configured.
 
 ## Worker requirement
 

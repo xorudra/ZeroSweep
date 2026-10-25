@@ -67,7 +67,7 @@ export class FrameworkService {
     const framework = await this.prisma.complianceFramework.create({
       data: {
         key: input.key, name: input.name, publisher: input.publisher ?? "", version: input.version,
-        description: `${input.name} ${input.version} — reference catalog; DSRclone assessments are evidence, never a certification.`,
+        description: `${input.name} ${input.version} — reference catalog; ZeroSweep assessments are evidence, never a certification.`,
         status: "ACTIVE",
         effectiveDate: input.effectiveDate ? new Date(input.effectiveDate) : null,
         metadata: { source: "IMPORT" },

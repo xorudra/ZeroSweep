@@ -9,7 +9,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
 /**
  * Container security (Prompt 13 §84). Images are inventoried by digest
  * and analyzed STATICALLY — layers and config only. Nothing on this
- * page (or anywhere in DSRclone) runs an image. Registry credentials
+ * page (or anywhere in ZeroSweep) runs an image. Registry credentials
  * are secret-reference names only.
  */
 interface ImageRow {

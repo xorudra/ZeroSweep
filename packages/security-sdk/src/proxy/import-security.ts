@@ -4,7 +4,7 @@
  * a target's responses. Every import path validates before parsing:
  *  - hard size caps (oversized payloads rejected, never truncated-parsed);
  *  - XML: DOCTYPE / ENTITY / external DTD constructs rejected outright
- *    (XXE against DSRclone itself is the attack being prevented), nesting
+ *    (XXE against ZeroSweep itself is the attack being prevented), nesting
  *    depth capped, and the built-in parsers never resolve external refs;
  *  - JSON: parsed with a reviver-free JSON.parse after a size check;
  *  - archives are NOT accepted at all in this phase, which removes the

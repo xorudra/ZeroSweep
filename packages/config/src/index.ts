@@ -189,7 +189,7 @@ export function assertProductionConfig(env: AppEnv): void {
   }
 }
 
-export const APP_NAME = "DSRclone";
+export const APP_NAME = "ZeroSweep";
 export const API_PREFIX = "api/v1";
 export const QUEUES = {
   ORCHESTRATION: "assessment-orchestration",

@@ -1,6 +1,6 @@
-# DSRclone RC1 — Release Audit (Prompt 39 §1–§6)
+# ZeroSweep RC1 — Release Audit (Prompt 39 §1–§6)
 
-Release: **DSRclone RC1** · Version: **1.0.0-rc.1** · Commit: see
+Release: **ZeroSweep RC1** · Version: **1.0.0-rc.1** · Commit: see
 `release/rc1/manifest.json` · Method: full-repository audit of the
 platform built by Prompts 1–38 — code inspection, scripted scans,
 schema analysis, the complete automated test suite, a new dedicated

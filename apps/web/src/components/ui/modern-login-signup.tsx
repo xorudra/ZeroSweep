@@ -1,17 +1,17 @@
 "use client";
 
 // Modern login/signup — integrated 2026-10-09 from the supplied
-// component, adapted to be DSRclone's REAL auth UI:
+// component, adapted to be ZeroSweep's REAL auth UI:
 // - Three.js comes from the `three` npm package (bundled), not the
 //   original's runtime CDN <script> (the app CSP is script-src 'self',
 //   which would block cdnjs; a bundled import is also self-contained).
 // - The forms are wired to the real API (api.login / api.register via
 //   @/lib/api-client) with error + busy states; success stores the
 //   token and lands on the console, exactly like the previous page.
-// - The Google/GitHub/Apple buttons were REMOVED: DSRclone has no
+// - The Google/GitHub/Apple buttons were REMOVED: ZeroSweep has no
 //   social sign-in, so they could only ever be decorative fakes.
 // - Placeholder branding ("JS" logo, "creating a Vercel account"
-//   footer) replaced with DSRclone's own.
+//   footer) replaced with ZeroSweep's own.
 // - The WebGL dot-grid is decorative: if renderer creation fails the
 //   form still works (init is guarded).
 import React, { useEffect, useRef, useState } from "react";
@@ -316,10 +316,10 @@ export default function Component() {
         <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
           {Logo}
           <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em" }}>
-            {isLogin ? "Sign in to DSRclone" : "Sign up for DSRclone"}
+            {isLogin ? "Sign in to ZeroSweep" : "Sign up for ZeroSweep"}
           </h1>
           <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
-            {isLogin ? "Sign in to your account." : "DSRclone is invite-only — it is not open for public sign-up."}
+            {isLogin ? "Sign in to your account." : "ZeroSweep is invite-only — it is not open for public sign-up."}
           </p>
 
           {!isLogin ? (

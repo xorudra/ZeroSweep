@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Active Directory permissions (Prompt 15 §101). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * Raw directory graph / artifact access is OWNER/ADMIN and audited
  * per access (§30); managing connections is administrative.
  */

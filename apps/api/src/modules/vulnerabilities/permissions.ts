@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Vulnerability-management permissions (Prompt 11 §78). They layer over
  * the workspace Role — the spec's permission names are the contract;
- * the role mapping is DSRclone policy and lives in exactly one place.
+ * the role mapping is ZeroSweep policy and lives in exactly one place.
  */
 export const VM_PERMISSIONS = [
   "VIEW_VULNERABILITIES",

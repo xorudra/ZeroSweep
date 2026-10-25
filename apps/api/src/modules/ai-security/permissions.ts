@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * AI copilot permissions (Prompt 21 §116). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place
+ * role mapping is ZeroSweep policy and lives in exactly one place
  * (mirrors the Prompt 20 permissions module).
  */
 export const AI_PERMISSIONS = [

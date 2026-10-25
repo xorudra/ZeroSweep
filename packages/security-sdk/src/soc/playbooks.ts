@@ -68,13 +68,13 @@ function steps(...defs: Array<[string, string, PlaybookStepCategory, string, Par
 export const PLAYBOOK_TEMPLATES: readonly PlaybookTemplate[] = [
   {
     key: "suspected-credential-compromise", title: "Suspected Credential Compromise", version: 1,
-    description: "Triage and contain a suspected compromised credential using predefined DSRclone actions only.",
+    description: "Triage and contain a suspected compromised credential using predefined ZeroSweep actions only.",
     steps: steps(
       ["confirm", "Confirm the signal", "INVESTIGATE", "Review the triggering alerts, events and indicator context."],
       ["scope", "Scope affected identities and assets", "ENRICH", "Pull asset/identity/finding context from the platform graph."],
       ["notify-owner", "Notify the credential owner", "NOTIFY", "Send a notification through the notification router."],
       ["approve-revoke", "Approve session revocation", "REQUEST_APPROVAL", "A second analyst approves containment for high-impact targets."],
-      ["revoke-session", "Revoke the session", "EXECUTE_APPROVED_RESPONSE", "Revoke the DSRclone session via the approved response action.", { responseActionKey: "REVOKE_DSRCLONE_SESSION" }],
+      ["revoke-session", "Revoke the session", "EXECUTE_APPROVED_RESPONSE", "Revoke the ZeroSweep session via the approved response action.", { responseActionKey: "REVOKE_DSRCLONE_SESSION" }],
       ["rotate", "Request credential rotation", "EXECUTE_APPROVED_RESPONSE", "Create a tracked rotation request for the owner.", { responseActionKey: "REQUEST_CREDENTIAL_ROTATION" }],
       ["verify", "Verify containment", "VERIFY", "Confirm no further suspicious events for the identity in the observation window."],
       ["document", "Document outcome", "DOCUMENT", "Record findings and open questions on the incident timeline."],
@@ -109,7 +109,7 @@ export const PLAYBOOK_TEMPLATES: readonly PlaybookTemplate[] = [
       ["confirm", "Confirm the anomaly", "INVESTIGATE", "Review authentication events and identity context."],
       ["enrich", "Enrich with threat intelligence", "ENRICH", "Check source indicators against the workspace intel store."],
       ["approve", "Approve containment", "REQUEST_APPROVAL", "Approval for session revocation on a privileged identity."],
-      ["revoke", "Revoke session", "EXECUTE_APPROVED_RESPONSE", "Revoke the DSRclone session.", { responseActionKey: "REVOKE_DSRCLONE_SESSION" }],
+      ["revoke", "Revoke session", "EXECUTE_APPROVED_RESPONSE", "Revoke the ZeroSweep session.", { responseActionKey: "REVOKE_DSRCLONE_SESSION" }],
       ["verify", "Verify", "VERIFY", "Confirm no continued anomalous access."],
       ["document", "Document outcome", "DOCUMENT", "Record the investigation summary."],
     ),

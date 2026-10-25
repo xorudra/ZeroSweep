@@ -2,7 +2,7 @@
 
 ## Purpose
 
-DSRclone validates findings to increase **confidence** in scanner
+ZeroSweep validates findings to increase **confidence** in scanner
 results:
 
 ```
@@ -75,7 +75,7 @@ PowerView, Metasploit Framework, Pacu) are registered in a **separate
 offensive registry** as metadata only — classification
 `OFFENSIVE_SECURITY_TOOL`, execution `DISABLED`, manual-only. Ordinary
 scan orchestration never invokes them; no adapter exists for any of
-them. Metasploit-class frameworks are never executors in DSRclone.
+them. Metasploit-class frameworks are never executors in ZeroSweep.
 
 ## Confidence model
 

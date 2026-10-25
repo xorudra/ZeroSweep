@@ -7,7 +7,7 @@ import {
 /**
  * The five external vulnerability-platform connectors (Prompt 20
  * §40–§48). Each maps its platform's documented record shape onto the
- * unified model — DSRclone's internal model is never forced to match
+ * unified model — ZeroSweep's internal model is never forced to match
  * the external one (§41). All field access is defensive: external data
  * is untrusted (§51) and passes the sanitization funnel in
  * normalizeExternalRecord before it can be stored.

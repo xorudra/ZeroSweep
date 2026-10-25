@@ -1,6 +1,6 @@
 {
   "uid": "dsrclone-ai-operations",
-  "title": "DSRclone \u2014 AI Operations",
+  "title": "ZeroSweep \u2014 AI Operations",
   "description": "Prompt 38 \u00a7103 AI requests/latency/tokens/errors/policy blocks (Prompt 36 reuse). Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,

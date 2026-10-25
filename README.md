@@ -1,9 +1,9 @@
-# DSRclone — Authorized Automated VAPT Platform
+# ZeroSweep — Authorized Automated VAPT Platform
 
-DSRclone is a **GUI-first** automated VAPT (Vulnerability Assessment & Penetration
+ZeroSweep is a **GUI-first** automated VAPT (Vulnerability Assessment & Penetration
 Testing) and security-assessment orchestration platform. An authorized user registers
 a target, **verifies ownership**, defines **scope**, chooses an assessment profile,
-and DSRclone orchestrates security tools through governed adapters, normalizes and
+and ZeroSweep orchestrates security tools through governed adapters, normalizes and
 deduplicates their findings, scores risk, and generates professional reports.
 
 The user never touches a command line: every workflow is clicks, forms and buttons.
@@ -12,7 +12,7 @@ without verified scope and approval.
 
 ## 🧊 3D Architecture
 
-![DSRclone architecture in 3D](docs/3d/architecture.gif)
+![ZeroSweep architecture in 3D](docs/3d/architecture.gif)
 
 An authorized user comes in through Caddy to the Next.js console. The NestJS API checks scope and approval at the safety gate; only then do isolated Docker workers run the tools — Postgres on Neon holds state, Redis queues the work, Supabase stores the artifacts, and the AI copilot answers through Nexus.
 
@@ -44,10 +44,10 @@ address, and sign-up is invite-only.
 
 | Piece | URL |
 |---|---|
-| Web console | https://dsrclone.dpdns.org |
-| API health | https://dsrclone.dpdns.org/api/v1/health/live |
-| AI copilot service health | https://dsrclone.dpdns.org/ai/health |
-| Worker health | https://dsrclone.dpdns.org/worker-health |
+| Web console | https://zerosweep.dpdns.org |
+| API health | https://zerosweep.dpdns.org/api/v1/health/live |
+| AI copilot service health | https://zerosweep.dpdns.org/ai/health |
+| Worker health | https://zerosweep.dpdns.org/worker-health |
 | Database / storage | Neon Postgres 16 (free plan) + private Supabase Storage bucket |
 
 Verified live 2026-10-12: API health reports **all checks ok** (api /
@@ -57,8 +57,8 @@ the Nexus /v1 API, and invite-only registration refuses public sign-ups
 topology (HA, DR, observability), see `deploy/` instead — this deployment
 is the public demo, not that path.
 
-Uptime is monitored by UptimeRobot (free): **DSRclone Web**, **DSRclone API**
-(`/api/v1/health/live`), **DSRclone AI** (`/ai/health`) and **DSRclone Worker**
+Uptime is monitored by UptimeRobot (free): **ZeroSweep Web**, **ZeroSweep API**
+(`/api/v1/health/live`), **ZeroSweep AI** (`/ai/health`) and **ZeroSweep Worker**
 (`/worker-health`), each checked every 5 minutes with downtime alerts by email.
 
 ## What it does
@@ -291,7 +291,7 @@ verified before the next began:
 
 ## History
 
-DSRclone was built end-to-end on 2026-10-07 → 2026-10-08 as 40 sequential,
+ZeroSweep was built end-to-end on 2026-10-07 → 2026-10-08 as 40 sequential,
 individually verified phases on this single repository — no phase was started
 before the previous one passed its tests and live smoke. The full per-phase
 record is the git history of this repo; release-candidate findings and the

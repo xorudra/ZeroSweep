@@ -6,7 +6,7 @@ finding reaches only an explicitly controlled endpoint. Validation
 must **never** target cloud metadata services, internal
 administration systems, or localhost services; controlled callbacks
 exist so the only reachable "internal-looking" destination is one
-DSRclone itself operates for the assessment.
+ZeroSweep itself operates for the assessment.
 
 ## Token discipline
 
@@ -34,7 +34,7 @@ source IP, timestamp.
 
 ## DNS callbacks
 
-DNS callbacks use validation domains owned and operated by DSRclone
+DNS callbacks use validation domains owned and operated by ZeroSweep
 only; the token is the leftmost label and the same verification core
 applies. Third-party callback/interaction domains are never used.
 

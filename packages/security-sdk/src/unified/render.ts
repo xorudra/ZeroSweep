@@ -79,7 +79,7 @@ export function renderReportCsv(doc: ReportSnapshotDocument): string {
 export function renderReportPdf(doc: ReportSnapshotDocument): Buffer {
   return renderPdf({
     title: doc.title,
-    creator: "DSRclone ReportingEngine",
+    creator: "ZeroSweep ReportingEngine",
     lines: snapshotToTextLines(doc),
     footer: doc.watermark,
   });

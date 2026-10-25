@@ -97,7 +97,7 @@ export function evaluateInstrumentationPolicy(
     reasons.push("ARBITRARY_FRIDA_SCRIPT: user-supplied JavaScript is never accepted through the API (§72/§75)");
   }
   if (request.shellCommand !== undefined && request.shellCommand.length > 0) {
-    reasons.push("ARBITRARY_ADB_SHELL: no generic shell exists in DSRclone (§59/§75)");
+    reasons.push("ARBITRARY_ADB_SHELL: no generic shell exists in ZeroSweep (§59/§75)");
   }
   for (const action of request.requestedActions) {
     if (isProhibitedMobileAction(action)) {

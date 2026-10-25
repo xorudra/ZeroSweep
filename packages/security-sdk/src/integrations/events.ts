@@ -85,7 +85,7 @@ export function formatCef(event: SiemEvent): string {
     event.riskScore != null ? `cn1=${event.riskScore} cn1Label=riskScore` : "",
     `outcome=${cefEscape(event.status)}`,
   ].filter(Boolean).join(" ");
-  return `CEF:0|DSRclone|DSRclone|1.0|${cefEscape(event.eventType)}|${cefEscape(event.eventType)}|${CEF_SEVERITY[event.severity] ?? 5}|${extensions}`;
+  return `CEF:0|ZeroSweep|ZeroSweep|1.0|${cefEscape(event.eventType)}|${cefEscape(event.eventType)}|${CEF_SEVERITY[event.severity] ?? 5}|${extensions}`;
 }
 
 /** §63: LEEF rendering of a SIEM event. */
@@ -97,7 +97,7 @@ export function formatLeef(event: SiemEvent): string {
     event.findingId ? `findingId=${cefEscape(event.findingId)}` : "",
     event.cve ? `cve=${cefEscape(event.cve)}` : "",
   ].filter(Boolean).join("\t");
-  return `LEEF:2.0|DSRclone|DSRclone|1.0|${cefEscape(event.eventType)}|^|${fields}`;
+  return `LEEF:2.0|ZeroSweep|ZeroSweep|1.0|${cefEscape(event.eventType)}|^|${fields}`;
 }
 
 /* ------------------------- delivery reliability ------------------------ */

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DSRclone — 3D Architecture</title>
+<title>ZeroSweep — 3D Architecture</title>
 <style>
   html,body{margin:0;height:100%;background:#131009;overflow:hidden;
     font-family:system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
@@ -19,13 +19,13 @@
 </head>
 <body>
 <div id="c"></div>
-<div class="hud"><h1>DSRclone</h1><p>A GUI-first VAPT platform. Nothing reaches the scanners except through the gate — verified target, approved assessment.</p></div>
+<div class="hud"><h1>ZeroSweep</h1><p>A GUI-first VAPT platform. Nothing reaches the scanners except through the gate — verified target, approved assessment.</p></div>
 <div class="hint">Drag to orbit &middot; scroll to zoom</div>
-<div class="live"><a href="https://dsrclone.dpdns.org">Live: dsrclone.dpdns.org</a></div>
+<div class="live"><a href="https://zerosweep.dpdns.org">Live: zerosweep.dpdns.org</a></div>
 <script src="three.min.js"></script>
 <script src="OrbitControls.js"></script>
 <script>
-const CFG = {"bg":1249289,"ink":"#f3ead9","sub":"#b8a888","accent":16757844,"gridA":3023895,"gridB":1906448,"gridY":-6.2,"edge":15985369,"link":9072461,"cam":[21,15,26.5],"floor":0,"nodes":[{"id":"users","color":5991295,"title":"USERS","sub":"verified orgs · invite-only","x":-13,"y":6.4,"z":2,"w":4.6,"h":2.2,"d":3.4},{"id":"caddy","color":7762282,"title":"CADDY · HTTPS","sub":"dsrclone.dpdns.org","x":0,"y":6.4,"z":-1,"w":4.6,"h":2.2,"d":3.4},{"id":"web","color":4614302,"title":"WEB CONSOLE","sub":"Next.js · the guided road","x":-10.6,"y":0.4,"z":5.6,"w":4.2,"h":2,"d":3},{"id":"api","color":10894634,"title":"API","sub":"NestJS · scope + approval","x":0,"y":0.6,"z":0,"w":6.4,"h":3,"d":4.6,"s":1.25},{"id":"gate","color":15026253,"title":"SAFETY GATE","sub":"verified target + approved","x":10.6,"y":0.4,"z":-5.6,"w":4.2,"h":2,"d":3},{"id":"workers","color":7371400,"title":"WORKERS","sub":"isolated Docker · 100+ tools","x":10.6,"y":0.4,"z":5.6,"w":4.2,"h":2,"d":3},{"id":"ai","color":7166928,"title":"AI COPILOT","sub":"FastAPI · via Nexus /v1","x":-10.6,"y":0.4,"z":-5.6,"w":4.2,"h":2,"d":3},{"id":"pg","color":3368849,"title":"POSTGRES","sub":"Neon","x":-7.2,"y":-5,"z":1.5,"w":4.6,"h":2,"d":3.4},{"id":"store","color":11566379,"title":"REDIS + STORAGE","sub":"queues · Supabase artifacts","x":7.2,"y":-5,"z":1.5,"w":5.6,"h":2,"d":3.4}],"edges":[["users","caddy"],["caddy","web"],["web","api"],["api","gate"],["gate","workers"],["api","ai"],["api","pg"],["workers","store"]],"yOff":-1.3,"labelScale":1};
+const CFG = {"bg":1249289,"ink":"#f3ead9","sub":"#b8a888","accent":16757844,"gridA":3023895,"gridB":1906448,"gridY":-6.2,"edge":15985369,"link":9072461,"cam":[21,15,26.5],"floor":0,"nodes":[{"id":"users","color":5991295,"title":"USERS","sub":"verified orgs · invite-only","x":-13,"y":6.4,"z":2,"w":4.6,"h":2.2,"d":3.4},{"id":"caddy","color":7762282,"title":"CADDY · HTTPS","sub":"zerosweep.dpdns.org","x":0,"y":6.4,"z":-1,"w":4.6,"h":2.2,"d":3.4},{"id":"web","color":4614302,"title":"WEB CONSOLE","sub":"Next.js · the guided road","x":-10.6,"y":0.4,"z":5.6,"w":4.2,"h":2,"d":3},{"id":"api","color":10894634,"title":"API","sub":"NestJS · scope + approval","x":0,"y":0.6,"z":0,"w":6.4,"h":3,"d":4.6,"s":1.25},{"id":"gate","color":15026253,"title":"SAFETY GATE","sub":"verified target + approved","x":10.6,"y":0.4,"z":-5.6,"w":4.2,"h":2,"d":3},{"id":"workers","color":7371400,"title":"WORKERS","sub":"isolated Docker · 100+ tools","x":10.6,"y":0.4,"z":5.6,"w":4.2,"h":2,"d":3},{"id":"ai","color":7166928,"title":"AI COPILOT","sub":"FastAPI · via Nexus /v1","x":-10.6,"y":0.4,"z":-5.6,"w":4.2,"h":2,"d":3},{"id":"pg","color":3368849,"title":"POSTGRES","sub":"Neon","x":-7.2,"y":-5,"z":1.5,"w":4.6,"h":2,"d":3.4},{"id":"store","color":11566379,"title":"REDIS + STORAGE","sub":"queues · Supabase artifacts","x":7.2,"y":-5,"z":1.5,"w":5.6,"h":2,"d":3.4}],"edges":[["users","caddy"],["caddy","web"],["web","api"],["api","gate"],["gate","workers"],["api","ai"],["api","pg"],["workers","store"]],"yOff":-1.3,"labelScale":1};
 const wrap = document.getElementById('c');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(CFG.bg);

@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Mobile & Binary Security V2 permissions (Prompt 35 §134/§135).
  * The spec's permission names are the contract; the role mapping is
- * DSRclone policy in exactly one place. §135: dynamic
+ * ZeroSweep policy in exactly one place. §135: dynamic
  * instrumentation and debugging are SEPARATE high-risk permissions —
  * RUN_APPROVED_RUNTIME_INSTRUMENTATION is administrator-class and
  * never implied by static-analysis rights. The Prompt 17/18

@@ -25,7 +25,7 @@ hashes, kill switches).
 
 ## No generic tools (§81/§82)
 
-If a future model supports tool calls, only typed read-only DSRclone
+If a future model supports tool calls, only typed read-only ZeroSweep
 tools may be exposed (`getFinding`, `getAsset`, `searchCVEs`,
 `getRiskExplanation`, `queryAuthorizedFindings`). Shell, exec,
 terminal, raw SQL, filesystem write and arbitrary HTTP are never

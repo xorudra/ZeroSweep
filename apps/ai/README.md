@@ -1,4 +1,4 @@
-# apps/ai — DSRclone AI analysis service (Python + FastAPI)
+# apps/ai — ZeroSweep AI analysis service (Python + FastAPI)
 
 Foundation only: service structure, configuration, structured logging and
 `GET /health`. **No LLM is connected yet.**

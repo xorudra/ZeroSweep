@@ -95,7 +95,7 @@ export function verifySlackSignature(input: {
 
 /**
  * Outbound webhook signing (§71): the receiver gets
- * `X-DSRclone-Signature: sha256=<hmac>` computed with the secret the
+ * `X-ZeroSweep-Signature: sha256=<hmac>` computed with the secret the
  * REFERENCE resolves to at delivery time. The secret itself never
  * appears in the payload, the delivery record, or any log.
  */

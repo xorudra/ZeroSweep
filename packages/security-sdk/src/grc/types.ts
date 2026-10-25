@@ -7,7 +7,7 @@
  */
 
 export const GRC_DISCLAIMER =
-  "DSRclone provides technical evidence, control monitoring, assessment support, risk tracking and audit preparation. " +
+  "ZeroSweep provides technical evidence, control monitoring, assessment support, risk tracking and audit preparation. " +
   "It does not certify or attest compliance. Certification/attestation remains the responsibility of qualified auditors/assessors and the organization.";
 
 export type FrameworkKey =

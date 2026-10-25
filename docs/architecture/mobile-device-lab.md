@@ -2,9 +2,9 @@
 
 ## Scope
 
-The lab contains **DSRclone-managed emulators and dedicated lab
+The lab contains **ZeroSweep-managed emulators and dedicated lab
 devices only**. Personal devices are never targeted, never
-instrumented and never receive the DSRclone CA (§55/§67). Devices
+instrumented and never receive the ZeroSweep CA (§55/§67). Devices
 sit on an isolated, dedicated test network (§54).
 
 ## Worker separation

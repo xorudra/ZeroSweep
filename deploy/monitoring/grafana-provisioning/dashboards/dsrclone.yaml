@@ -2,7 +2,7 @@ apiVersion: 1
 providers:
   - name: dsrclone
     orgId: 1
-    folder: DSRclone
+    folder: ZeroSweep
     type: file
     disableDeletion: true
     options: { path: /var/lib/grafana/dashboards/dsrclone }

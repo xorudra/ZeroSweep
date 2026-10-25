@@ -4,14 +4,14 @@ API platform — collections import as guarded inventory (Prompt 9 §10/§11): s
 
 - **Slug:** `postman`
 - **Category:** API
-- **License:** COMMERCIAL — customer/administrator-supplied license required; DSRclone never bundles commercial licenses (§122–§126)
+- **License:** COMMERCIAL — customer/administrator-supplied license required; ZeroSweep never bundles commercial licenses (§122–§126)
 - **Risk level:** LOW
 - **Requires approval:** no
 - **Availability:** NOT_CONFIGURED
 
 ## Installation
 
-Installed and licensed by the customer/administrator in their own environment; DSRclone connects through its governed adapter only when configured.
+Installed and licensed by the customer/administrator in their own environment; ZeroSweep connects through its governed adapter only when configured.
 
 ## Worker requirement
 

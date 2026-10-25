@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone live vulnerability-intelligence smoke (Prompt 30).
+ * ZeroSweep live vulnerability-intelligence smoke (Prompt 30).
  *
  * Exercises the P30 layer end-to-end against the running API + live
  * PostgreSQL: register -> login -> provider state (honestly

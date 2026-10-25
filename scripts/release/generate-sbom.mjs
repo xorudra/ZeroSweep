@@ -75,7 +75,7 @@ const sbom = {
   version: 1,
   metadata: {
     timestamp: new Date().toISOString(),
-    tools: [{ vendor: "DSRclone", name: "generate-sbom.mjs (Prompt 39)", version: "1.0.0" }],
+    tools: [{ vendor: "ZeroSweep", name: "generate-sbom.mjs (Prompt 39)", version: "1.0.0" }],
     component: { type: "application", name: "dsrclone", version: "1.0.0-rc.1" },
   },
   components,

@@ -195,7 +195,7 @@ export function parseMobsfReport(text: string, ctx: MobileParserContext): Parsed
 
 /**
  * JADX decompilation summary (§19): JADX runs over the artifact in
- * the sandbox; DSRclone consumes its structured summary (decompiled
+ * the sandbox; ZeroSweep consumes its structured summary (decompiled
  * file inventory + source text of governed interest). Decompiled
  * source is sensitive data (§24) — it is scanned for secrets and
  * patterns here and never returned raw.
@@ -250,7 +250,7 @@ export function parseJadxOutput(text: string, ctx: MobileParserContext): ParsedM
  * extracted file inventory. The manifest goes through the platform
  * manifest analyzer; library files feed the native inventory. The
  * extraction itself happened in the tool's safe workspace (§18) —
- * DSRclone consumes listings + text, never extracted binaries.
+ * ZeroSweep consumes listings + text, never extracted binaries.
  */
 export function parseApktoolOutput(text: string, ctx: MobileParserContext): ParsedMobile {
   const root = mobRec(parseBoundedMobileJson(text, { what: "apktool output" }));

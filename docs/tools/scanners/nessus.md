@@ -1,9 +1,9 @@
 # Nessus Professional (Prompt 11 §10–§16)
 
 Commercial network vulnerability scanner — **COMMERCIAL / ADMIN_PROVIDED /
-LICENSE_REQUIRED**. DSRclone integrates with an administrator-provided
+LICENSE_REQUIRED**. ZeroSweep integrates with an administrator-provided
 licensed Nessus environment only; Nessus is never redistributed,
-bundled or installed by DSRclone.
+bundled or installed by ZeroSweep.
 
 - **NOT_CONFIGURED is a product state** (§85): with no instance
   registered, Nessus reports NOT_CONFIGURED in health, tooling and scan

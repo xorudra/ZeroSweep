@@ -90,7 +90,7 @@ describe("signed licensing (§28–§37, §215/§216)", () => {
   const pubPem = publicKey.export({ type: "spki", format: "pem" }).toString();
   const privPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   const payload: LicensePayload = {
-    licenseId: "lic-1", organization: "org-1", edition: "ENTERPRISE", issuer: "DSRclone Licensing",
+    licenseId: "lic-1", organization: "org-1", edition: "ENTERPRISE", issuer: "ZeroSweep Licensing",
     issuedAt: "2026-01-01T00:00:00.000Z", validFrom: "2026-01-01T00:00:00.000Z", expiresAt: "2027-01-01T00:00:00.000Z",
     entitlements: [{ featureKey: "WEB_VAPT", enabled: true, limit: null }], limits: { ASSETS: 100 },
   };

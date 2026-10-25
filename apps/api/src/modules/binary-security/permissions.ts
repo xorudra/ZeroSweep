@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Binary security permissions (Prompt 18 §94). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * Raw artifact access is sensitive and audited per access (§84);
  * decompilation views are restricted (§89); debug approval is a
  * separate duty from debug request (§67 — separation of duties is

@@ -1,10 +1,10 @@
 # Changelog
 
-All notable changes to DSRclone are recorded here. The project follows
+All notable changes to ZeroSweep are recorded here. The project follows
 semantic versioning; pre-1.0 phase builds (Prompts 1–38) were
 development snapshots on the road to RC1.
 
-## [1.0.0] — DSRclone v1.0 — 2026-10-08
+## [1.0.0] — ZeroSweep v1.0 — 2026-10-08
 
 Prompts 1–40 complete. The RC1 baseline (0 BLOCKER / 0 CRITICAL open)
 plus SaaS productization and launch preparation (Prompt 40).
@@ -52,7 +52,7 @@ plus SaaS productization and launch preparation (Prompt 40).
   the owner's decision (the product's own licensing machinery is the
   Prompt 40 feature above).
 
-## [1.0.0-rc.1] — DSRclone RC1 — 2026-10-08
+## [1.0.0-rc.1] — ZeroSweep RC1 — 2026-10-08
 
 First release candidate. Prompts 1–38 audited, hardened, verified
 end-to-end and frozen (Prompt 39).

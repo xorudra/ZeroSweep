@@ -3,7 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 /**
  * Controlled callback service (Prompt 16 §47–§50). OAST-style safe
  * validation uses callbacks ONLY on infrastructure owned/configured for
- * DSRclone validation. Tokens are unique, random, short-lived, and
+ * ZeroSweep validation. Tokens are unique, random, short-lived, and
  * bound to one tenant + one validation session.
  *
  * §48 is explicit: a callback token is NOT authorization. Presenting a
@@ -11,7 +11,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  * correlation id" — it grants no access, exposes no tenant metadata,
  * and ingestion is rate-limited with minimal metadata stored (§50).
  * DNS callbacks (§49) share the same token discipline: the token is
- * the leftmost DNS label on a DSRclone-owned validation domain.
+ * the leftmost DNS label on a ZeroSweep-owned validation domain.
  */
 
 export interface IssuedCallbackToken {

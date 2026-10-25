@@ -35,7 +35,7 @@ const images = ["api", "web", "ai", "worker", "scheduler", "migrate"].map((name)
 }));
 
 const manifest = {
-  product: "DSRclone",
+  product: "ZeroSweep",
   version: process.env.DSRCLONE_VERSION ?? null,
   gitCommit: git(["rev-parse", "HEAD"]),
   gitBranch: git(["rev-parse", "--abbrev-ref", "HEAD"]),

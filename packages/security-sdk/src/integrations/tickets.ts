@@ -43,13 +43,13 @@ export function buildJiraIssuePayload(
     ? `${finding.filePath}${finding.startLine ? `:${finding.startLine}` : ""}`
     : (finding.assetReference ?? "n/a");
   const description = [
-    `Security finding from DSRclone: ${finding.dsrcloneReference}`,
+    `Security finding from ZeroSweep: ${finding.dsrcloneReference}`,
     `Severity: ${finding.severity}${finding.priority ? ` · Priority: ${finding.priority}` : ""}`,
     `Status: ${finding.lifecycleStatus} · Verification: ${finding.verificationStatus}${finding.kevListed ? " · KEV-listed" : ""}`,
     `Affected asset: ${location}`,
     finding.riskExplanation ? `\nRisk:\n${clean(finding.riskExplanation)}` : "",
     finding.remediation ? `\nRemediation:\n${clean(finding.remediation)}` : "",
-    "\nResolution in DSRclone requires evidence/retest — closing this ticket does not close the finding.",
+    "\nResolution in ZeroSweep requires evidence/retest — closing this ticket does not close the finding.",
   ].filter(Boolean).join("\n");
   return {
     payload: {

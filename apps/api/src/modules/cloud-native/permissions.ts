@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Cloud-native permissions (Prompt 13 §92). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * Managing registry/cluster connections and runtime-event ingestion
  * are administrative; raw artifact access is OWNER/ADMIN and audited.
  */

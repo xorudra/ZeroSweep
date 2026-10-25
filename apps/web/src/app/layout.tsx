@@ -3,7 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Shell } from "@/components/Shell";
 
-export const metadata = { title: "DSRclone — Authorized VAPT Platform", description: "GUI-first automated VAPT and security-assessment orchestration platform." };
+export const metadata = { title: "ZeroSweep — Authorized VAPT Platform", description: "GUI-first automated VAPT and security-assessment orchestration platform." };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

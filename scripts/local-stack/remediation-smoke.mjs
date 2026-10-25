@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 31 live remediation smoke.
+ * ZeroSweep Prompt 31 live remediation smoke.
  * Runs the REAL governed flow against the running stack: register ->
  * target -> verify -> scope -> assessment -> approve -> scan (fixture
  * domain example.com, simulation adapters only) -> take a persisted

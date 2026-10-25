@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Security-validation permissions (Prompt 16 §62). Same pattern as the
  * Prompt 11 VM permissions: the spec's permission names are the
- * contract; the role mapping is DSRclone policy in exactly one place.
+ * contract; the role mapping is ZeroSweep policy in exactly one place.
  * USE_INTRUSIVE_VALIDATION exists as a permission so the §63
  * architecture can name it — no role is granted automated intrusive
  * execution by default, and the engine has no intrusive validator.

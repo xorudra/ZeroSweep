@@ -1,4 +1,4 @@
-"""DSRclone AI copilot — model-facing services (Prompt 21).
+"""ZeroSweep AI copilot — model-facing services (Prompt 21).
 
 This service mirrors the TypeScript copilot contract for model-facing
 work: prompt assembly with explicit instruction/data separation
@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from .config import settings
 
 SYSTEM_POLICY = (
-    "You are the DSRclone AI Security Copilot: an analyst assistant over "
+    "You are the ZeroSweep AI Security Copilot: an analyst assistant over "
     "normalized security data. You explain, summarize and recommend "
     "remediation. You NEVER execute commands, run scanners, write SQL, "
     "launch attacks, or produce exploit code, payloads or bypass "

@@ -188,7 +188,7 @@ export class CicdService {
     const findings = await this.prisma.finding.findMany({ where: { scanId, workspaceId } });
     const views = (findings as Row[]).map((f) => this.toSanitizedView(f));
     const { sarif, redactions } = buildSarifLog({
-      toolName: "DSRclone",
+      toolName: "ZeroSweep",
       findings: views.map((v, i) => ({ ...v, ruleId: (findings[i] as Row).ruleId as string | undefined, cwe: (findings[i] as Row).cwe as string | undefined })),
     });
     return { sarif, redactions };

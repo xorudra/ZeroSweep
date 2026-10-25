@@ -12,7 +12,7 @@ export default function SettingsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card eyebrow="Credentials" title="Credential references">
           <p className="text-sm text-slate-400">
-            DSRclone stores credential <strong className="text-slate-200">metadata and secret references only</strong> —
+            ZeroSweep stores credential <strong className="text-slate-200">metadata and secret references only</strong> —
             never plaintext secrets. Manage them via the API under <code className="text-cyan-300">/api/v1/credentials</code> (Owner/Admin).
           </p>
         </Card>

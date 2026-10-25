@@ -6,7 +6,7 @@ vulnerability manager, Risk Engine V3, the scheduler, the reporting
 engine and the append-only audit log. It creates **no** duplicate
 vulnerability-management or audit-log system.
 
-**DSRclone does not certify.** It provides technical evidence, control
+**ZeroSweep does not certify.** It provides technical evidence, control
 monitoring, assessment support, risk tracking and audit preparation.
 Certification/attestation remains the responsibility of qualified
 auditors/assessors and the organization. Every dashboard and report

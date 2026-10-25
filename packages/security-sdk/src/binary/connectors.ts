@@ -2,7 +2,7 @@
  * Prompt 18 — commercial reverse-engineering connectors (§36–§39).
  *
  * IDA and Binary Ninja are OPTIONAL, separately licensed products.
- * DSRclone never bundles them, never bypasses licensing and never
+ * ZeroSweep never bundles them, never bypasses licensing and never
  * depends on them for baseline coverage (§96): without a transport
  * the connectors report NOT_INSTALLED; with an installation but no
  * license they report LICENSE_UNAVAILABLE; only a licensed,

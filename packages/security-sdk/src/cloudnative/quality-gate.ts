@@ -72,10 +72,10 @@ export function evaluateDeploymentSecurityGate(input: ContainerGateInput & { can
     ...result,
     candidate: input.candidate,
     advisory: result.status === "FAILED"
-      ? "Deployment gate FAILED: remediate the failed rules before promoting this artifact. DSRclone reports this verdict only — it does not deploy or block production systems itself."
+      ? "Deployment gate FAILED: remediate the failed rules before promoting this artifact. ZeroSweep reports this verdict only — it does not deploy or block production systems itself."
       : result.status === "WARNING"
-        ? "Deployment gate WARNING: high-severity findings remain; promotion is a human decision with this report attached. DSRclone reports this verdict only — it does not deploy or block production systems itself."
-        : "Deployment gate PASSED under the container gate policy. DSRclone reports this verdict only — it does not deploy or block production systems itself.",
+        ? "Deployment gate WARNING: high-severity findings remain; promotion is a human decision with this report attached. ZeroSweep reports this verdict only — it does not deploy or block production systems itself."
+        : "Deployment gate PASSED under the container gate policy. ZeroSweep reports this verdict only — it does not deploy or block production systems itself.",
   };
 }
 

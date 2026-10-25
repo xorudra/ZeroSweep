@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone RC1 release gates (Prompt 39 §285–§298).
+ * ZeroSweep RC1 release gates (Prompt 39 §285–§298).
  *
  * Every gate is MANDATORY for an RC_READY verdict. A gate that cannot
  * run (e.g. live stack down) FAILS — it never silently passes. Results
@@ -199,7 +199,7 @@ let testSummary = "";
 }
 
 const verdict = gates.every((g) => g.status === "PASS") ? "RC_READY" : "RC_BLOCKED";
-const summary = { release: "DSRclone RC1", version: "1.0.0-rc.1", generatedAt: new Date().toISOString(), verdict, testSummary, gates };
+const summary = { release: "ZeroSweep RC1", version: "1.0.0-rc.1", generatedAt: new Date().toISOString(), verdict, testSummary, gates };
 writeFileSync(join(ROOT, "release/rc1/test-results/release-gates.json"), JSON.stringify(summary, null, 2));
 console.log(`\nRC1 verdict: ${verdict} (${gates.filter((g) => g.status === "PASS").length}/${gates.length} gates PASS)`);
 process.exit(verdict === "RC_READY" ? 0 : 1);

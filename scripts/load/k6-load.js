@@ -1,4 +1,4 @@
-// Launch Safety Standard G34 — load test for the DSRclone API.
+// Launch Safety Standard G34 — load test for the ZeroSweep API.
 //
 // RUN ONLY AGAINST LOCAL OR STAGING. NEVER PRODUCTION. The script
 // hard-refuses the production API host so a mistyped BASE_URL cannot

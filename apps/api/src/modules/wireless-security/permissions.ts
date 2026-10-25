@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Wireless security permissions (Prompt 19 §79). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * Raw capture access is sensitive and audited per access (§30);
  * station raw addresses are never exposed by ordinary views (§90);
  * lab-validation approval is a separate duty from requesting (§65).

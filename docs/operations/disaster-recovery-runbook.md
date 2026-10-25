@@ -1,4 +1,4 @@
-# Disaster Recovery Runbook — DSRclone
+# Disaster Recovery Runbook — ZeroSweep
 
 Scenarios and RPO/RTO targets: `deploy/disaster-recovery/README.md`.
 Targets are configurable examples, not business commitments (§130).

@@ -136,7 +136,7 @@ export const WIRELESS_DISABLED_REGISTRATIONS: WirelessDisabledRegistration[] = [
     capabilities: ["PCAP_ANALYSIS", "FRAME_ANALYSIS_80211"],
     executionState: "ANALYST_TOOL",
     classification: "ANALYST_TOOL",
-    reason: "Prompt 19 §25: Wireshark is analyst-facing tooling. Backend automation uses tshark (TsharkWirelessAdapter) — DSRclone does not invent a headless Wireshark dependency.",
+    reason: "Prompt 19 §25: Wireshark is analyst-facing tooling. Backend automation uses tshark (TsharkWirelessAdapter) — ZeroSweep does not invent a headless Wireshark dependency.",
   },
 ];
 

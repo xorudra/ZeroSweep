@@ -58,7 +58,7 @@ export default function Page() {
           {cluster.version && <span>Version: {cluster.version}</span>}
           <Badge>secret values exposed: {cluster.secretValuesExposed ? "YES" : "never"}</Badge>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Last assessment: {cluster.lastAssessmentAt ?? "never"}. The worker connects with a least-privilege read-only service account resolved by credential reference — the account name and credential never enter DSRclone.</p>
+        <p className="mt-2 text-xs text-slate-500">Last assessment: {cluster.lastAssessmentAt ?? "never"}. The worker connects with a least-privilege read-only service account resolved by credential reference — the account name and credential never enter ZeroSweep.</p>
       </Card>
 
       <Card>

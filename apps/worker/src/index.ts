@@ -23,7 +23,7 @@ import { recoverStaleExecutions } from "./lifecycle/recovery";
 import { metrics, METRICS } from "./telemetry/metrics";
 
 /**
- * DSRclone worker (Prompt 4 §20–§23, §52): production queue consumer.
+ * ZeroSweep worker (Prompt 4 §20–§23, §52): production queue consumer.
  * Registers a WorkerNode, heartbeats, consumes scan-orchestration jobs and
  * drives each plan's DAG — dispatching stage-execution jobs (IDs only) that
  * re-evaluate authorization/scope/policy before running an adapter.

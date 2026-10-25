@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DSRclone safe self-hosted installer/bootstrap (Prompt 40 §201–§205).
+# ZeroSweep safe self-hosted installer/bootstrap (Prompt 40 §201–§205).
 #
 # Safety contract:
 #  - verifies prerequisites (Node 20+, pnpm, PostgreSQL/Redis reachable)
@@ -17,7 +17,7 @@ cd "$ROOT"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
-echo "== DSRclone installer =="
+echo "== ZeroSweep installer =="
 echo "Repository: $ROOT"
 
 # --- prerequisites (§201) ---

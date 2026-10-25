@@ -23,7 +23,7 @@ metadata:
     app.kubernetes.io/part-of: dsrclone
 data:
   README.md: |
-    # DSRclone Grafana dashboards (Prompt 25 §109)
+    # ZeroSweep Grafana dashboards (Prompt 25 §109)
     Provision these dashboards (JSON in the platform repo's Grafana folder
     in the operations workspace) from the metrics in prometheus-rules.yaml:
     1. Platform overview — request rate/errors/latency, dependency_up,

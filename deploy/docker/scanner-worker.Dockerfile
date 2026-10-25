@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# DSRclone scanner worker — production image (Prompt 38 §7/§47/§50–§52).
+# ZeroSweep scanner worker — production image (Prompt 38 §7/§47/§50–§52).
 #
 # A DEDICATED scanner-pool image derived from the governed worker image:
 # it carries only the tool layer for its pool (selected by the

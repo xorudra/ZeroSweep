@@ -14,4 +14,4 @@ its **sole argument**, which prints the capture's network table
   (§92) and security evidence is normalized (§31).
 
 Aircrack's cracking workflows are PROHIBITED AUTOMATION (§99) in
-DSRclone — the same standing exclusion as credential attacks elsewhere.
+ZeroSweep — the same standing exclusion as credential attacks elsewhere.

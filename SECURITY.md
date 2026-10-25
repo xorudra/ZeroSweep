@@ -4,12 +4,12 @@
 
 | Version | Supported |
 | --- | --- |
-| 1.0.0-rc.1 (DSRclone RC1) | ✅ current release candidate |
+| 1.0.0-rc.1 (ZeroSweep RC1) | ✅ current release candidate |
 | < 1.0.0 (phase builds) | ❌ pre-release development snapshots |
 
 ## Reporting a vulnerability
 
-DSRclone is an authorized security-assessment platform; we take
+ZeroSweep is an authorized security-assessment platform; we take
 reports about the platform itself seriously.
 
 - **Contact:** open a private security advisory on the GitHub
@@ -33,7 +33,7 @@ and will be credited with the reporter's consent.
 
 ## Scope notes
 
-- Findings produced **by** DSRclone about a customer's authorized
+- Findings produced **by** ZeroSweep about a customer's authorized
   targets belong to that customer's engagement, not to this policy.
 - Deliberate design properties (governed offensive-tool descriptors,
   NOT_CONFIGURED transports, fixture-only verification data) are

@@ -378,7 +378,7 @@ export class SharpHoundAdapter extends DirectoryAdapterBase {
 export class PingCastleAdapter extends DirectoryAdapterBase {
   readonly metadata = directoryMeta({
     id: "pingcastle", slug: "pingcastle", name: "PingCastle",
-    description: "PingCastle AD healthcheck import (§38): rule results normalize onto canonical AD rules (merging with native analysis, §109) with category, evidence and remediation. The PingCastle score is preserved SEPARATELY from the DSRclone risk score (§39). Healthcheck mode only.",
+    description: "PingCastle AD healthcheck import (§38): rule results normalize onto canonical AD rules (merging with native analysis, §109) with category, evidence and remediation. The PingCastle score is preserved SEPARATELY from the ZeroSweep risk score (§39). Healthcheck mode only.",
     homepage: "https://www.pingcastle.com", licenseType: "COMMERCIAL",
     capabilities: ["AD_SECURITY_POSTURE", "DOMAIN_CONFIGURATION_REVIEW", "AD_RISK_ASSESSMENT"],
     inputSchema: [

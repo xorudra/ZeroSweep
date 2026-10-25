@@ -82,7 +82,7 @@ export function verifyTotp(secret: Buffer, code: string, atMs: number, lastUsedS
   return { ok: false, matchedStep: null, reason: "MISMATCH" };
 }
 
-export function totpSetupUri(secretBase32: string, account: string, issuer = "DSRclone"): string {
+export function totpSetupUri(secretBase32: string, account: string, issuer = "ZeroSweep"): string {
   const label = encodeURIComponent(`${issuer}:${account}`);
   return `otpauth://totp/${label}?secret=${secretBase32}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }

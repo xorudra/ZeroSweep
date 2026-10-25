@@ -1,4 +1,4 @@
-# DSRclone local infrastructure. Credentials come from .env (see .env.example).
+# ZeroSweep local infrastructure. Credentials come from .env (see .env.example).
 # These defaults are LOCAL DEVELOPMENT ONLY — never use them in production.
 services:
   postgres:

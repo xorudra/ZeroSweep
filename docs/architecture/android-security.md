@@ -29,7 +29,7 @@ From `AndroidManifest.xml` (apktool decode or recorded output):
 `usesCleartextTraffic` and `networkSecurityConfig` domain rules are
 evidence for `MOBILE_CLEARTEXT_ENABLED`; user-added CA trust is
 inventoried; certificate pinning presence is recorded as an
-observation — DSRclone never bypasses pinning automatically.
+observation — ZeroSweep never bypasses pinning automatically.
 
 ## Code analysis (§19/§27/§28)
 

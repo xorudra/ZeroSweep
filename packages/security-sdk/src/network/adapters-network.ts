@@ -208,7 +208,7 @@ export class RustScanAdapter extends NetworkAdapterBase {
   protected readonly parser: NetworkParser = new RustScanParser();
   readonly metadata = meta({
     id: "rustscan", slug: "rustscan", name: "RustScan",
-    description: "Fast port discovery with controlled settings (§18). The downstream-command passthrough separator is NEVER emitted — RustScan output is parsed by DSRclone itself, nothing is handed to another program.",
+    description: "Fast port discovery with controlled settings (§18). The downstream-command passthrough separator is NEVER emitted — RustScan output is parsed by ZeroSweep itself, nothing is handed to another program.",
     homepage: "https://github.com/RustScan/RustScan",
     category: "NETWORK", riskLevel: "LOW",
     capabilities: ["PORT_DISCOVERY"],

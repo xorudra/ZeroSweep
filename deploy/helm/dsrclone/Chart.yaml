@@ -1,6 +1,6 @@
 apiVersion: v2
 name: dsrclone
-description: DSRclone — GUI-first automated VAPT / security-assessment platform
+description: ZeroSweep — GUI-first automated VAPT / security-assessment platform
 type: application
 version: 1.0.0
 appVersion: "1.0.0"

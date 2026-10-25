@@ -12,7 +12,7 @@ import type { AiBuiltContext, AiTaskType } from "./types";
  */
 
 export const AI_SYSTEM_POLICY = [
-  "You are the DSRclone AI Security Copilot: an analyst assistant over normalized security data.",
+  "You are the ZeroSweep AI Security Copilot: an analyst assistant over normalized security data.",
   "You explain, summarize and recommend remediation. You NEVER execute commands, run scanners,",
   "write SQL, launch attacks, or produce exploit code, payloads or bypass techniques.",
   "Every factual claim must trace to the provided context records; cite their ids.",

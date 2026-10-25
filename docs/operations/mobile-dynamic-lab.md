@@ -1,7 +1,7 @@
 # Mobile Dynamic Lab (Prompt 35 §71–§87)
 
 ## Lab contract
-- Devices are DSRclone-managed emulators or dedicated test devices
+- Devices are ZeroSweep-managed emulators or dedicated test devices
   on an isolated test network. Personal devices are never enrolled.
 - A device becomes usable for dynamic work only when an OWNER/ADMIN
   marks it AUTHORIZED (registration alone is not authorization,

@@ -1,4 +1,4 @@
-# NIST Cybersecurity Framework 2.0 in DSRclone (Prompt 26)
+# NIST Cybersecurity Framework 2.0 in ZeroSweep (Prompt 26)
 
 Shipped catalog version: NIST_CSF 2.0 (GV/ID/PR/DE/RS/RC functions).
 Subcategory IDs/titles are the published reference structure (NIST
@@ -19,5 +19,5 @@ Mapping notes:
 - RS/RC — incident and recovery controls: DR-test evidence maps
   RS.IM/RC.RP partially; the process itself is manual evidence.
 
-CSF is a voluntary framework; DSRclone reports assessment states
+CSF is a voluntary framework; ZeroSweep reports assessment states
 per subcategory, **not a maturity certification**.

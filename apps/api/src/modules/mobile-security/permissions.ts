@@ -5,7 +5,7 @@ import type { RequestUser } from "../../common/decorators/auth.decorators";
 /**
  * Mobile security permissions (Prompt 17 §101). They layer over the
  * workspace Role — the spec's permission names are the contract; the
- * role mapping is DSRclone policy and lives in exactly one place.
+ * role mapping is ZeroSweep policy and lives in exactly one place.
  * Decompiled-source artifacts are sensitive (§24): OWNER/ADMIN/
  * SECURITY_ENGINEER only, audited per access (§116). Instrumentation
  * approval is administrator-class (§71). Device-lab management is

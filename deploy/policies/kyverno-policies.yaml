@@ -8,7 +8,7 @@ kind: ClusterPolicy
 metadata:
   name: dsrclone-baseline
   annotations:
-    policies.kyverno.io/title: "DSRclone production baseline"
+    policies.kyverno.io/title: "ZeroSweep production baseline"
 spec:
   validationFailureAction: Enforce
   background: true
@@ -20,7 +20,7 @@ spec:
               kinds: ["Pod"]
               namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
       validate:
-        message: "Privileged containers, host namespaces and hostPath are forbidden in DSRclone namespaces."
+        message: "Privileged containers, host namespaces and hostPath are forbidden in ZeroSweep namespaces."
         pattern:
           spec:
             hostNetwork: false

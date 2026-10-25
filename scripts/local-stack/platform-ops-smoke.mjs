@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 38 live platform-operations smoke.
+ * ZeroSweep Prompt 38 live platform-operations smoke.
  * Exercises the REAL V2 operations surface against the running stack:
  * health incl. MinIO -> register -> platform overview/config/queues/
  * workers -> kill switch without confirmation (refused) -> with

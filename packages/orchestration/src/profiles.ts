@@ -251,7 +251,7 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
   },
   GRAPH_COLLECTION: S("GRAPH_COLLECTION", "Identity Graph Collection", "Build the identity graph from the collected, evidence-backed relationships and resolve nested group membership with cycle/depth protection (Prompt 15 §32/§33/§65/§108). Platform stage over persisted inventory.", [], ["DIRECTORY_INVENTORY"], 6, 900, "FAIL_STAGE_CONTINUE"),
   PINGCASTLE_POSTURE: {
-    ...S("PINGCASTLE_POSTURE", "PingCastle Posture", "PingCastle healthcheck posture (Prompt 15 §38/§39): rule results normalize onto canonical AD rules and merge with native analysis; the PingCastle score is preserved separately from the DSRclone risk score.", ["AD_SECURITY_POSTURE"], ["DIRECTORY_INVENTORY"], 8, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
+    ...S("PINGCASTLE_POSTURE", "PingCastle Posture", "PingCastle healthcheck posture (Prompt 15 §38/§39): rule results normalize onto canonical AD rules and merge with native analysis; the PingCastle score is preserved separately from the ZeroSweep risk score.", ["AD_SECURITY_POSTURE"], ["DIRECTORY_INVENTORY"], 8, 1200, "CONTINUE_WITH_PARTIAL_DATA", true),
     capabilityGroups: [["AD_SECURITY_POSTURE", "DOMAIN_CONFIGURATION_REVIEW", "AD_RISK_ASSESSMENT"]],
     adapterAllowlist: ["pingcastle"],
     simulationFallback: false,
@@ -287,7 +287,7 @@ export const STAGE_LIBRARY: Record<StageType, StageDefinition> = {
     simulationFallback: false,
   },
   MOBILE_DYNAMIC_SESSION: {
-    ...S("MOBILE_DYNAMIC_SESSION", "Mobile Dynamic Session (Lab)", "Controlled device-lab session (Prompt 17 §53–§61): install the authorized build (hash verified, §60) on an approved DSRclone-managed device and collect governed observations. Runs only on MOBILE_DYNAMIC_ANALYSIS workers with an approved session; personal devices are never targeted (§55). No generic shell exists (§59).", ["DEVICE_MANAGEMENT"], ["MOBILE_STATIC_ANALYSIS"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
+    ...S("MOBILE_DYNAMIC_SESSION", "Mobile Dynamic Session (Lab)", "Controlled device-lab session (Prompt 17 §53–§61): install the authorized build (hash verified, §60) on an approved ZeroSweep-managed device and collect governed observations. Runs only on MOBILE_DYNAMIC_ANALYSIS workers with an approved session; personal devices are never targeted (§55). No generic shell exists (§59).", ["DEVICE_MANAGEMENT"], ["MOBILE_STATIC_ANALYSIS"], 10, 1800, "CONTINUE_WITH_PARTIAL_DATA"),
     capabilityGroups: [["DEVICE_MANAGEMENT", "APP_INSTALLATION", "LOG_COLLECTION", "CONTROLLED_APP_INTERACTION"]],
     adapterAllowlist: ["adb"],
     simulationFallback: false,

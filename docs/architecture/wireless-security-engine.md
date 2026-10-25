@@ -1,7 +1,7 @@
 # Wireless Security Engine (Prompt 19)
 
 The wireless engine assesses wireless posture from **passive observation and
-offline capture analysis only**. Nothing in DSRclone transmits on any wireless
+offline capture analysis only**. Nothing in ZeroSweep transmits on any wireless
 interface: no association, no probing, no deauthentication, no handshake
 triggering, no key recovery.
 
@@ -32,7 +32,7 @@ QUALITY_GATE → REPORT_GENERATION`
 
 Scans start only through the gated orchestration path: the environment's
 registration target must be VERIFIED and the assessment APPROVED, exactly
-like every other DSRclone target type. The executor re-checks stage,
+like every other ZeroSweep target type. The executor re-checks stage,
 worker capability and store-resolved context immediately before running
 any wireless adapter. Baseline profiles can never select Wifite or
 hcxdumptool — asserted at plan time and at policy time (§64).

@@ -3,7 +3,7 @@ import type { FrameworkData } from "./types";
 /**
  * Versioned framework reference catalog (Prompt 26 §3/§4). Requirement
  * IDs and titles are the frameworks' own published identifiers (facts,
- * not DSRclone inventions). Only a representative, mapping-relevant
+ * not ZeroSweep inventions). Only a representative, mapping-relevant
  * subset ships as seed reference data; organizations import fuller
  * licensed texts through the framework-import path. Versions are
  * immutable once published — a new edition is a NEW catalog entry (§4).

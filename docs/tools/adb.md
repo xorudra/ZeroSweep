@@ -1,6 +1,6 @@
 # ADB (lab devices)
 
-ADB lab adapter (Prompt 17 §59): governed operations on APPROVED DSRclone-managed lab devices only — device inventory, install of the authorized build (hash verified, §60), launch, logs, reset. There is NO generic adb shell endpoint anywhere (§59/§75); personal devices are never targeted (§55).
+ADB lab adapter (Prompt 17 §59): governed operations on APPROVED ZeroSweep-managed lab devices only — device inventory, install of the authorized build (hash verified, §60), launch, logs, reset. There is NO generic adb shell endpoint anywhere (§59/§75); personal devices are never targeted (§55).
 
 - **Slug:** `adb`
 - **Category:** MOBILE

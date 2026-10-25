@@ -369,7 +369,7 @@ export class MobileSecurityService {
       where: { workspaceId: workspace.id }, orderBy: { createdAt: "desc" }, take: 200,
     });
     return {
-      // §55/§98: DSRclone-managed lab devices only. There is no
+      // §55/§98: ZeroSweep-managed lab devices only. There is no
       // remote-shell affordance anywhere in this view or API.
       items: (rows as unknown as Row[]).map((d) => ({
         id: d.id, name: d.name, platform: d.platform, deviceKind: d.deviceKind,
@@ -491,7 +491,7 @@ export class MobileSecurityService {
 
   /** Signing metadata (§31): certificate facts only. Any key naming
    *  key material is dropped by construction — private keys never
-   *  exist in DSRclone. */
+   *  exist in ZeroSweep. */
   private sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(record)) {

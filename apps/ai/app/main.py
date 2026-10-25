@@ -1,4 +1,4 @@
-"""DSRclone AI service — model-facing copilot services (Prompt 21).
+"""ZeroSweep AI service — model-facing copilot services (Prompt 21).
 
 Responsibilities: finding explanation, remediation drafting,
 executive/technical summaries and risk interpretation over NORMALIZED
@@ -19,7 +19,7 @@ from .copilot import build_prompt, copilot_status, get_provider, llm_connected, 
 from .logging_config import get_logger
 
 logger = get_logger()
-app = FastAPI(title="DSRclone AI Service", version="0.1.0")
+app = FastAPI(title="ZeroSweep AI Service", version="0.1.0")
 
 
 @app.get("/")

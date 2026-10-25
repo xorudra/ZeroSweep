@@ -1,6 +1,6 @@
 {
   "uid": "dsrclone-redis",
-  "title": "DSRclone \u2014 Redis",
+  "title": "ZeroSweep \u2014 Redis",
   "description": "Prompt 38 \u00a7105 connections, latency, memory. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,

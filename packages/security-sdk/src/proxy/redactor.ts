@@ -118,7 +118,7 @@ export class HttpEvidenceRedactor {
       // headers; part bodies are represented, never passed through raw.
       let redacted = false;
       const out = body.replace(/(content-disposition:[^\n]*name=")([^"]+)(")/gi, (m, pre: string, name: string, post: string) => {
-        if (this.isSensitiveField(name)) { redacted = true; return `${pre}${name}${post}\nX-DSRclone-Redacted: part body withheld (${REDACTION})`; }
+        if (this.isSensitiveField(name)) { redacted = true; return `${pre}${name}${post}\nX-ZeroSweep-Redacted: part body withheld (${REDACTION})`; }
         return m;
       });
       return { text: out, redacted };

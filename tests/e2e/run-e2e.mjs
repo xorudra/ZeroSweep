@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone RC1 end-to-end suite (Prompt 39 §198–§223).
+ * ZeroSweep RC1 end-to-end suite (Prompt 39 §198–§223).
  *
  * Runs against a LIVE local stack (API + worker + PostgreSQL + Redis +
  * MinIO). Fixtures are synthetic and local only: two organizations

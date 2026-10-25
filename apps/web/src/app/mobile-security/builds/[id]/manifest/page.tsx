@@ -13,7 +13,7 @@ import { Card } from "@dsrclone/ui";
  * ARTIFACTS and every access is audited (MOBILE_ARTIFACT_ACCESSED,
  * §116). All strings render as inert text — hostile manifest or
  * plist content can never execute or inject markup here (§108).
- * Decompiled source is never executed anywhere in DSRclone (§19).
+ * Decompiled source is never executed anywhere in ZeroSweep (§19).
  */
 interface ArtifactsData {
   buildId: string; artifactHash: string;

@@ -1,4 +1,4 @@
-# SOC 2 (AICPA Trust Services Criteria) in DSRclone (Prompt 26)
+# SOC 2 (AICPA Trust Services Criteria) in ZeroSweep (Prompt 26)
 
 Shipped catalog version: SOC_2 2017 (CC1–CC9 + Availability A,
 Processing Integrity PI, Confidentiality C, Privacy P series).
@@ -20,5 +20,5 @@ Mapping notes:
 - P-series privacy criteria are manual-evidence by default.
 
 A SOC 2 report is issued by a licensed CPA firm after an observation
-period. DSRclone prepares and organizes evidence; **it does not and
+period. ZeroSweep prepares and organizes evidence; **it does not and
 cannot issue SOC 2 reports or opinions.**

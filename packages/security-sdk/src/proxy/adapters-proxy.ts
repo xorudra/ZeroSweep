@@ -297,12 +297,12 @@ export class BurpConnector extends ProductConnector {
   private lastExport: ParsedProxy = emptyParsedProxy();
 
   protected async probe(instance: ScannerInstanceRecord, _baseUrl: string, _approvedInternal?: boolean) {
-    // Burp is administrator-provided (§9): DSRclone never assumes an API.
-    // The probe talks to the DSRclone Burp bridge the administrator runs
+    // Burp is administrator-provided (§9): ZeroSweep never assumes an API.
+    // The probe talks to the ZeroSweep Burp bridge the administrator runs
     // inside the licensed environment (documented in docs/tools/proxy/
     // burp.md) — if it does not answer, the connector is UNAVAILABLE,
     // never "probably fine" (§66).
-    const res = await this.call(instance, { method: "GET", path: "/dsrclone/health" }, "X-DSRclone-Bridge-Key");
+    const res = await this.call(instance, { method: "GET", path: "/dsrclone/health" }, "X-ZeroSweep-Bridge-Key");
     if (res.status !== 200) throw new Error(`Burp bridge health returned HTTP ${res.status}`);
     const parsed = JSON.parse(res.body) as { version?: string; licenseState?: string };
     return { version: parsed.version, licenseState: parsed.licenseState, latencyMs: res.latencyMs };
@@ -311,7 +311,7 @@ export class BurpConnector extends ProductConnector {
   async importEndpoints(contextId: string): Promise<{ endpoints: NormalizedEndpoint[]; transactions: NormalizedHttpTransaction[]; webSockets: NormalizedWebSocket[] }> {
     const context = this.contextById(contextId);
     const instance = await this.instanceFor(context);
-    const res = await this.call(instance, { method: "GET", path: "/dsrclone/site-map" }, "X-DSRclone-Bridge-Key");
+    const res = await this.call(instance, { method: "GET", path: "/dsrclone/site-map" }, "X-ZeroSweep-Bridge-Key");
     const entries = JSON.parse(res.body) as Array<{ url?: string; method?: string; statusCode?: number }>;
     const endpoints: NormalizedEndpoint[] = [];
     for (const e of entries.slice(0, this.budget.maxImportedEndpoints)) {
@@ -323,8 +323,8 @@ export class BurpConnector extends ProductConnector {
 
   async startPassiveAnalysis(_contextId: string): Promise<void> {
     // Burp's passive analysis runs continuously inside the administrator's
-    // Burp instance over proxied traffic; there is nothing for DSRclone to
-    // start — and DSRclone never drives Burp interactively beyond the
+    // Burp instance over proxied traffic; there is nothing for ZeroSweep to
+    // start — and ZeroSweep never drives Burp interactively beyond the
     // documented bridge contract (§10/§11).
   }
 
@@ -336,7 +336,7 @@ export class BurpConnector extends ProductConnector {
   async getIssues(contextId: string): Promise<NormalizedVulnFinding[]> {
     const context = this.contextById(contextId);
     const instance = await this.instanceFor(context);
-    const res = await this.call(instance, { method: "GET", path: "/dsrclone/issues-export" }, "X-DSRclone-Bridge-Key");
+    const res = await this.call(instance, { method: "GET", path: "/dsrclone/issues-export" }, "X-ZeroSweep-Bridge-Key");
     if (res.status !== 200) throw new AdapterUnavailableError(`burp-suite-professional: issues export returned HTTP ${res.status}`);
     const parsed = this.parser.parse(res.body);
     this.lastExport = parsed;
@@ -634,7 +634,7 @@ export function zapMetadata(): ToolMetadata {
 export function burpMetadata(): ToolMetadata {
   return connectorMeta({
     id: "burp-suite-professional", slug: "burp-suite-professional", name: "Burp Suite Professional",
-    description: "Commercial web proxy/scanner — ADMIN_PROVIDED licensed environment (DSRclone never redistributes Burp, §9). Passive site-map + issue import through the administrator's bridge; active scanning INTRUSIVE and approval-gated (§12). Unconfigured deployments report NOT_CONFIGURED (§66).",
+    description: "Commercial web proxy/scanner — ADMIN_PROVIDED licensed environment (ZeroSweep never redistributes Burp, §9). Passive site-map + issue import through the administrator's bridge; active scanning INTRUSIVE and approval-gated (§12). Unconfigured deployments report NOT_CONFIGURED (§66).",
     homepage: "https://portswigger.net/burp",
     executionMode: "ADMIN_PROVIDED", licenseType: "ADMIN_PROVIDED", riskLevel: "MODERATE", requiresApproval: true,
     // Pipeline capabilities only (see zapMetadata): Burp's crawl/scan

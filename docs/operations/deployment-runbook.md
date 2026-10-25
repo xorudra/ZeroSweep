@@ -1,4 +1,4 @@
-# Deployment Runbook — DSRclone
+# Deployment Runbook — ZeroSweep
 
 Canonical path: **Kustomize** (`deploy/kubernetes/base` + overlays). Helm
 (`deploy/helm/dsrclone`) renders an equivalent subset. Compose production

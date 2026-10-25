@@ -1,5 +1,5 @@
 #!/bin/bash
-# DSRclone controlled resilience tests — LOCAL STACK SUBSET (Prompt 25
+# ZeroSweep controlled resilience tests — LOCAL STACK SUBSET (Prompt 25
 # §153–§172). The Kubernetes-only items (pod kills, NetworkPolicy and
 # admission-policy rejections, metadata SSRF block) are validated by
 # manifest inspection + policy tests on a cluster; this script exercises

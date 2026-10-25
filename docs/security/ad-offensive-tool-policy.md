@@ -1,6 +1,6 @@
 # AD Offensive-Tool Policy (Prompt 15 §51–§56, §112, §120)
 
-DSRclone's AD capability is defensive. The following are **never**
+ZeroSweep's AD capability is defensive. The following are **never**
 implemented, at any tier, behind any flag:
 
 - Password spraying, brute force or credential guessing of any kind

@@ -6,7 +6,7 @@
  * no inference beyond the evidence. Every finding carries the rule id,
  * the affected directory object and sanitized evidence; the identity
  * and computer risk scores are explainable factor sums (§77/§78), and
- * the DSRclone severity is independent of any tool's own score (§39).
+ * the ZeroSweep severity is independent of any tool's own score (§39).
  */
 import type { NormalizedFinding } from "../findings/finding.types";
 import type { NormalizedControlAssessment } from "../findings/finding.types";

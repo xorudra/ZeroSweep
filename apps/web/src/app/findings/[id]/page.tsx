@@ -118,7 +118,7 @@ export default function Page() {
         body: JSON.stringify({ description: manualDescription, outcome: manualOutcome }),
       });
       setManualDescription("");
-      setValidationNotice("Manual validation recorded. DSRclone executed nothing — the analyst's evidence was sanitized and attached (§32).");
+      setValidationNotice("Manual validation recorded. ZeroSweep executed nothing — the analyst's evidence was sanitized and attached (§32).");
       await loadValidations();
       await load();
     } catch (e) {
@@ -338,7 +338,7 @@ export default function Page() {
               Validate finding
             </button>
             <div className="border-t border-slate-800 pt-3">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Manual validation (§32) — analyst evidence, DSRclone executes nothing</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Manual validation (§32) — analyst evidence, ZeroSweep executes nothing</p>
               <textarea
                 className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200"
                 rows={2} value={manualDescription} onChange={(e) => setManualDescription(e.target.value)}

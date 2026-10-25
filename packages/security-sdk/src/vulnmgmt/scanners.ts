@@ -266,7 +266,7 @@ export interface ScannerTargetGeneration {
 }
 
 /**
- * Generate a scanner target list from TRUSTED DSRclone scope only (§6/§13).
+ * Generate a scanner target list from TRUSTED ZeroSweep scope only (§6/§13).
  * The input is the persisted scope snapshot — never request data. Hosts and
  * CIDRs come from include rules; exclusions win; expansion is bounded by
  * the caller's maxTargets so a huge CIDR cannot flood a scanner.

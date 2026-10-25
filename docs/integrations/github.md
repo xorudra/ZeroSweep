@@ -14,7 +14,7 @@ never values.
   with diff-aware classification and the policy's gate preset
   (§19/§20).
 - **Decoration (§22)**: commit statuses / check runs carry counts and
-  a DSRclone reference only; publishing requires a live transport —
+  a ZeroSweep reference only; publishing requires a live transport —
   without one the result is recorded NOT_CONFIGURED.
 - **Repository sync**: installations' repositories imported as
   metadata into staging rows + links (§13).

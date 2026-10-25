@@ -1,6 +1,6 @@
 # Falco
 
-Runtime security sensor — events arrive through the trusted ingestion path; DSRclone never deploys the sensor (Prompt 13 §57–§63).
+Runtime security sensor — events arrive through the trusted ingestion path; ZeroSweep never deploys the sensor (Prompt 13 §57–§63).
 
 - **Slug:** `falco`
 - **Category:** CONTAINER

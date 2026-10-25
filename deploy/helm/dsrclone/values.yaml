@@ -1,4 +1,4 @@
-# DSRclone Helm values. Secrets are NEVER set here — the chart consumes an
+# ZeroSweep Helm values. Secrets are NEVER set here — the chart consumes an
 # EXISTING Secret (default name: dsrclone-secrets) created by your secret
 # manager, plus a ConfigMap rendered from `config` below (non-secret only).
 global:

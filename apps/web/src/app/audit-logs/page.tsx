@@ -11,7 +11,7 @@ export default function Page() {
       <ResourceList
         path="/audit-logs"
         emptyTitle="No audit entries yet"
-        emptyBody="Audit entries are written automatically as your organization uses DSRclone."
+        emptyBody="Audit entries are written automatically as your organization uses ZeroSweep."
         columns={['Action','Resource','When']}
         renderRow={(item: Record<string, unknown>, i: number) => (
           <Row key={i} cells={[String(item.action ?? ""), String(item.resourceType ?? ""), String(item.createdAt ?? "")]} />

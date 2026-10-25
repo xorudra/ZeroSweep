@@ -39,5 +39,5 @@ certificate-pinning bypass in any profile (§23/§71).
 ## Lab-only
 
 Instrumentation targets only the authorized build, on a
-DSRclone-managed lab device, inside an approved session, with a
+ZeroSweep-managed lab device, inside an approved session, with a
 timeout and a recorded cleanup/reset (§57/§73).

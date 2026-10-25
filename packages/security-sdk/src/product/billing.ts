@@ -7,7 +7,7 @@
  * configured the platform reports billing NOT_CONFIGURED and never
  * simulates a successful payment (§21/§268).
  *
- * DSRclone never stores raw card numbers, CVVs or full payment
+ * ZeroSweep never stores raw card numbers, CVVs or full payment
  * credentials (§26) — payment data stays with the provider's hosted /
  * tokenized flow.
  */

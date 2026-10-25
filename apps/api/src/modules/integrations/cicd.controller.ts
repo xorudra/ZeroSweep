@@ -23,7 +23,7 @@ export class CicdController {
 
   private async principal(authorization: string | undefined, scope: string) {
     const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
-    if (!token.startsWith("dsr_live_")) throw new UnauthorizedException("CI endpoints require a DSRclone API key (§35)");
+    if (!token.startsWith("dsr_live_")) throw new UnauthorizedException("CI endpoints require a ZeroSweep API key (§35)");
     const auth = await this.keys.authenticateApiKey(token, scope);
     if (!auth.ok) throw new UnauthorizedException(`API key rejected: ${auth.reason}`);
     return auth;

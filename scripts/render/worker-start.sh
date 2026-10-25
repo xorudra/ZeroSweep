@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render start script for the DSRclone worker.
+# Render start script for the ZeroSweep worker.
 # Render has no free background-worker tier, so the worker runs as a free
 # web service: a tiny HTTP listener satisfies Render's port check while
 # the real worker process runs in the foreground of this script.

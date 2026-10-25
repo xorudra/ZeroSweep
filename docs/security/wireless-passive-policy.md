@@ -1,6 +1,6 @@
 # Wireless Passive Policy (Prompt 19 §1/§99)
 
-DSRclone's wireless work is **passive only**. The following are
+ZeroSweep's wireless work is **passive only**. The following are
 PROHIBITED AUTOMATION — not implemented anywhere in the codebase, and
 not expressible through any API, plan, adapter configuration or lab
 workflow:

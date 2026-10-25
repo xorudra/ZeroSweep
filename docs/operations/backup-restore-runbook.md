@@ -1,4 +1,4 @@
-# Backup & Restore Runbook — DSRclone
+# Backup & Restore Runbook — ZeroSweep
 
 Tooling: `deploy/backup/`. Architecture & retention: `deploy/backup/README.md`.
 

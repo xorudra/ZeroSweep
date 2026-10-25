@@ -52,7 +52,7 @@ export function composeGrcAnswer(input: {
 
   if (isCertificationQuestion(input.question) && !hasCertificationRecord) {
     return {
-      text: `DSRclone holds no approved certification record for this organization, so no certification can be claimed. ${GRC_DISCLAIMER} Current DSRclone assessment data can be reviewed in the compliance dashboard.`,
+      text: `ZeroSweep holds no approved certification record for this organization, so no certification can be claimed. ${GRC_DISCLAIMER} Current ZeroSweep assessment data can be reviewed in the compliance dashboard.`,
       citations: [],
       insufficientEvidence: false,
       certificationClaimBlocked: true,
@@ -74,7 +74,7 @@ export function composeGrcAnswer(input: {
   let text = input.draft;
   let blocked = false;
   if (!hasCertificationRecord && containsCertificationClaim(text)) {
-    text = text.replace(CERTIFICATION_CLAIM, "assessed in DSRclone (not a certification)");
+    text = text.replace(CERTIFICATION_CLAIM, "assessed in ZeroSweep (not a certification)");
     blocked = true;
   }
   // Citations only for records that exist in the authorized context (§89).

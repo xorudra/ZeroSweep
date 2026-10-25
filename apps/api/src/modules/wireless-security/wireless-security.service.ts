@@ -493,7 +493,7 @@ export class WirelessSecurityService {
         health: health[d.slug]?.status ?? "NOT_CONFIGURED",
         detail: health[d.slug]?.detail ?? null,
       })),
-      prohibitedAutomationNote: "Deauthentication/disassociation, handshake triggering, key or handshake cracking, rogue-AP creation, jamming and client connection attempts are PROHIBITED AUTOMATION (§99) — never implemented. DSRclone wireless work is passive observation and offline capture analysis only.",
+      prohibitedAutomationNote: "Deauthentication/disassociation, handshake triggering, key or handshake cracking, rogue-AP creation, jamming and client connection attempts are PROHIBITED AUTOMATION (§99) — never implemented. ZeroSweep wireless work is passive observation and offline capture analysis only.",
     };
   }
 

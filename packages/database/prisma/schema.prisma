@@ -1,4 +1,4 @@
-// DSRclone — single Prisma schema (packages/database owns it; no competing schemas).
+// ZeroSweep — single Prisma schema (packages/database owns it; no competing schemas).
 generator client {
   provider = "prisma-client-js"
 }
@@ -4493,7 +4493,7 @@ model ValidationEvidence {
   @@index([workspaceId])
 }
 
-// Analyst-attached manual validation (§32): DSRclone executes NOTHING for
+// Analyst-attached manual validation (§32): ZeroSweep executes NOTHING for
 // these records — they document validation performed by an authorized
 // human outside the automated engine (the only path for RCE-class
 // findings, §21). Attachments are sanitized before storage (§34).
@@ -4768,7 +4768,7 @@ model MobileNativeLibrary {
   @@index([binaryArtifactId])
 }
 
-// The controlled device lab (§53/§54). Devices are DSRclone-managed
+// The controlled device lab (§53/§54). Devices are ZeroSweep-managed
 // emulators or dedicated test devices — NEVER personal devices. No
 // unnecessary personal device identifiers are stored (§54).
 model MobileTestDevice {
@@ -5816,7 +5816,7 @@ model ExternalFindingReference {
   @@index([findingId])
 }
 
-// §43: a sync disagreement between DSRclone and an external platform.
+// §43: a sync disagreement between ZeroSweep and an external platform.
 // Conflicts are surfaced and resolved explicitly — never by silently
 // overwriting the local analyst decision.
 model IntegrationConflict {
@@ -7606,7 +7606,7 @@ model IntegrationSyncCheckpoint {
 }
 
 // ------------------------------- Prompt 26: GRC Engine -------------------------------
-// Governance, Risk & Compliance. DSRclone provides evidence, control
+// Governance, Risk & Compliance. ZeroSweep provides evidence, control
 // monitoring, assessment support, risk tracking and audit preparation —
 // it NEVER certifies (§143). A control/requirement without evidence is
 // NOT_EVALUATED / NOT_ASSESSED, never compliant by default. Framework
@@ -7632,7 +7632,7 @@ model ComplianceRequirement {
   @@index([frameworkId])
 }
 
-// §7: DSRclone's internal normalized control library entry, per workspace
+// §7: ZeroSweep's internal normalized control library entry, per workspace
 // (seeded from the SDK catalog; workspaces may add their own controls).
 model SecurityControl {
   id                   String   @id @default(uuid())

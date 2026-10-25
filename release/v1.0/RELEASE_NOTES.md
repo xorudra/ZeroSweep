@@ -1,11 +1,11 @@
-# DSRclone v1.0.0 — Release Notes
+# ZeroSweep v1.0.0 — Release Notes
 
 **Release train:** Prompts 1–40 complete. Baseline: RC1 (Phase 39,
 RC_READY, 0 BLOCKER / 0 CRITICAL open).
 
 ## What v1.0 is
 
-DSRclone is an authorized automated VAPT / security-assessment
+ZeroSweep is an authorized automated VAPT / security-assessment
 orchestration platform: verified targets and scope only, 100+ tools
 via a governed Tool Adapter SDK, isolated workers, normalized
 findings with deduplication/correlation, a deterministic risk engine,

@@ -32,7 +32,7 @@ the API:
 Each stored artifact carries: a **SHA-256 checksum of the sanitized
 artifact**, timestamp, source tool, and links to its session and
 finding. Because the checksum is computed *after* redaction, anyone can
-verify the stored evidence is byte-identical to what DSRclone recorded
+verify the stored evidence is byte-identical to what ZeroSweep recorded
 without the checksum ever covering a secret.
 
 ## Access

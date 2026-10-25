@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 35 live Mobile & Binary Security V2 smoke.
+ * ZeroSweep Prompt 35 live Mobile & Binary Security V2 smoke.
  * Runs the REAL governed flow against the running stack: register ->
  * mobile app -> verify its target -> upload two artifact builds via
  * the §133 V2 route (SHA-256 identity) -> coverage snapshot (honest

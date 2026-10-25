@@ -1,6 +1,6 @@
 # Active Directory Security Assessment (Prompt 15)
 
-DSRclone's Active Directory capability is a **defensive posture
+ZeroSweep's Active Directory capability is a **defensive posture
 assessment** for authorized internal engagements. It inventories a
 registered domain, builds an evidence-backed identity graph, computes
 posture findings from the collected data, models attack paths as

@@ -1,4 +1,4 @@
-# DSRclone — Render Blueprint (free-tier demo deployment)
+# ZeroSweep — Render Blueprint (free-tier demo deployment)
 # Deploys the full platform from this repo: API + worker + web console + AI
 # service, backed by a free Render Postgres and a free Render Key Value
 # (Redis-compatible) instance.

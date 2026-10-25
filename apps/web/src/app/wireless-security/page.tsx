@@ -9,7 +9,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
 /**
  * Wireless Security dashboard (Prompt 19 §71). Environments,
  * posture counts, tool health and the passive-only contract at a
- * glance. DSRclone wireless work is PASSIVE OBSERVATION + OFFLINE
+ * glance. ZeroSweep wireless work is PASSIVE OBSERVATION + OFFLINE
  * capture analysis ONLY: deauthentication, handshake triggering,
  * key/handshake cracking, rogue-AP creation, jamming and client
  * connection attempts are PROHIBITED AUTOMATION (§99) that does not
@@ -85,7 +85,7 @@ export default function Page() {
       <PageHeader eyebrow="Wireless Security" title="Wireless Security" body="Passive wireless inventory & posture assessment — observed data only, nothing is ever transmitted." />
       <Card>
         <p className="text-sm text-slate-300">
-          <strong className="text-slate-100">Passive only.</strong> DSRclone observes beacons, probe
+          <strong className="text-slate-100">Passive only.</strong> ZeroSweep observes beacons, probe
           responses and uploaded captures. It never deauthenticates clients, never triggers
           handshakes, never cracks keys, never creates rogue APs and never connects to a network.
           Rogue-AP results are defensive indicators (SUSPICIOUS is <em>not</em> a confirmed evil

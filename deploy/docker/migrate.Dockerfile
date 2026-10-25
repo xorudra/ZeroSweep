@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# DSRclone database migration runner (Prompt 25 §36–§39).
+# ZeroSweep database migration runner (Prompt 25 §36–§39).
 # A dedicated one-shot image: the ONLY production artifact that carries the
 # Prisma CLI and the migration files. Application images never run DDL.
 # The entrypoint performs preflight checks, then `prisma migrate deploy`
@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts --filter @dsrclone/database.
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
 LABEL org.opencontainers.image.title="dsrclone-migrate" \
-      org.opencontainers.image.description="DSRclone controlled database migration runner (one-shot)" \
+      org.opencontainers.image.description="ZeroSweep controlled database migration runner (one-shot)" \
       org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
       org.opencontainers.image.licenses="UNLICENSED"
 ENV NODE_ENV=production

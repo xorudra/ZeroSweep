@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DSRclone Prompt 40 live productization smoke.
+ * ZeroSweep Prompt 40 live productization smoke.
  * Exercises the REAL product surface against the running stack:
  * signup (provisioning transaction) -> email verification ->
  * onboarding (attestation) -> product state (plan/entitlements/usage)

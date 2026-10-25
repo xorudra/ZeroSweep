@@ -1,4 +1,4 @@
-# DSRclone RC1 — Release Findings (Prompt 39 §278–§284)
+# ZeroSweep RC1 — Release Findings (Prompt 39 §278–§284)
 
 Severity scale (§279): BLOCKER / CRITICAL / HIGH / MEDIUM / LOW / INFO.
 Policy: every BLOCKER fixed before RC (§281); every CRITICAL fixed or

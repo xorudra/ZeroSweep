@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# DSRclone worker — production image (Prompt 25 §6–§19, §53–§60).
+# ZeroSweep worker — production image (Prompt 25 §6–§19, §53–§60).
 # One image per worker POOL via the DSRCLONE_WORKER_TYPE build arg; scanner
 # tool layers belong in derived per-pool images so a pool only carries the
 # tools its ScannerCapabilityPolicy allows. The worker NEVER runs privileged
@@ -24,7 +24,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts \
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
 LABEL org.opencontainers.image.title="dsrclone-worker" \
-      org.opencontainers.image.description="DSRclone scan worker (pool selected by DSRCLONE_WORKER_TYPE)" \
+      org.opencontainers.image.description="ZeroSweep scan worker (pool selected by DSRCLONE_WORKER_TYPE)" \
       org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
       org.opencontainers.image.licenses="UNLICENSED"
 ARG DSRCLONE_WORKER_TYPE=GENERAL_WEB

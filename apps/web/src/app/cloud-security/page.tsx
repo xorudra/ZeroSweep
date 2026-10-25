@@ -114,7 +114,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader eyebrow="Multi-Cloud Security" title="Cloud Security" body="Read-only security assessment for AWS, Azure and GCP (Prompt 14). DSRclone never creates, modifies or deletes a cloud resource and never stores a credential value — accounts are referenced by secret-manager reference names only." />
+      <PageHeader eyebrow="Multi-Cloud Security" title="Cloud Security" body="Read-only security assessment for AWS, Azure and GCP (Prompt 14). ZeroSweep never creates, modifies or deletes a cloud resource and never stores a credential value — accounts are referenced by secret-manager reference names only." />
       {error && <p className="rounded bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>}
       {notice && <p className="rounded bg-emerald-950/60 px-3 py-2 text-sm text-emerald-300">{notice}</p>}
 
@@ -164,7 +164,7 @@ export default function Page() {
             </select>
           </label>
         </div>
-        <p className="mt-2 text-xs text-slate-500">The credential itself never enters DSRclone: the worker resolves the reference under a job-scoped lease and requests read-only access only. Example: Rudra registers <span className="font-mono">prod-aws</span> with reference <span className="font-mono">vault:prod/aws/assessment-role</span>.</p>
+        <p className="mt-2 text-xs text-slate-500">The credential itself never enters ZeroSweep: the worker resolves the reference under a job-scoped lease and requests read-only access only. Example: Rudra registers <span className="font-mono">prod-aws</span> with reference <span className="font-mono">vault:prod/aws/assessment-role</span>.</p>
       </Card>
 
       <Card>

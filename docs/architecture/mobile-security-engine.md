@@ -1,6 +1,6 @@
 # Mobile Security Engine (Prompt 17)
 
-DSRclone's mobile application VAPT engine assesses Android and iOS
+ZeroSweep's mobile application VAPT engine assesses Android and iOS
 applications for applications the workspace **owns or is authorized
 to assess**. Static analysis is the default; dynamic analysis is a
 separately governed capability that runs only in the controlled

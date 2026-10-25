@@ -360,7 +360,7 @@ export class GrypeAdapter extends CodeAdapterBase {
 // ── SonarQube connector (§23–§27) ─────────────────────────────────────
 
 /**
- * SonarQube is an administrator-managed SERVICE (§23): DSRclone reads
+ * SonarQube is an administrator-managed SERVICE (§23): ZeroSweep reads
  * analysis results from the registered instance — it never submits
  * builds (the sonar-scanner flow needs target builds, §24/§29, which
  * the execution policy forbids). Unconfigured it reports NOT_CONFIGURED

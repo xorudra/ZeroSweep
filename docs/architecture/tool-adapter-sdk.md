@@ -1,7 +1,7 @@
 # Tool Adapter SDK (Prompt 3)
 
 The Universal Security Tool Adapter SDK (`packages/security-sdk`) is how
-DSRclone integrates 100+ security tools without hardcoding any scanner into
+ZeroSweep integrates 100+ security tools without hardcoding any scanner into
 the API or the orchestration engine. The orchestrator only ever talks to the
 `SecurityToolAdapter` contract; everything tool-specific lives behind it.
 
@@ -99,7 +99,7 @@ secrets or request bodies.
 Health: `UNKNOWN | HEALTHY | DEGRADED | UNAVAILABLE | MISCONFIGURED` — a
 health failure is never a finding. Commercial tools (Burp Suite Pro, Nessus,
 IDA, Binary Ninja, PlexTrac) are `ADMIN_PROVIDED` connectors: the
-administrator supplies installation/license/API access; DSRclone does not
+administrator supplies installation/license/API access; ZeroSweep does not
 redistribute them. Credentials are declared as *requirement references*
 (e.g. `SHODAN_API_KEY`) and resolved only inside the worker boundary.
 

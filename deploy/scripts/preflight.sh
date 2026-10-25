@@ -1,5 +1,5 @@
 #!/bin/sh
-# DSRclone production preflight (Prompt 25 §30/§165/§185).
+# ZeroSweep production preflight (Prompt 25 §30/§165/§185).
 # Verifies the OPERATOR side of a deployment without printing any secret:
 # required variable NAMES present, placeholder values rejected, tooling
 # present, and the production compose file parses. Values are never echoed.

@@ -3,9 +3,9 @@
 Source of truth at runtime: `GET /product/commercial-tools`, computed
 from the tool registry. Rules:
 
-- DSRclone **never bundles or redistributes commercial licenses**
+- ZeroSweep **never bundles or redistributes commercial licenses**
   (§123). Commercial tools are customer-supplied (§124): the customer
-  installs and licenses the tool; DSRclone connects via its governed
+  installs and licenses the tool; ZeroSweep connects via its governed
   adapter.
 - Credential handling for commercial tools uses secret references only
   (§125) — never plaintext in plan/license/usage data.

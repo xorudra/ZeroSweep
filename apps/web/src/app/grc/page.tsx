@@ -8,7 +8,7 @@ import { Badge, Card, EmptyState } from "@dsrclone/ui";
 
 /**
  * Compliance dashboard (Prompt 26 §76/§82). The headline metric is
- * "Assessment Coverage / Control Status" — DSRclone provides evidence
+ * "Assessment Coverage / Control Status" — ZeroSweep provides evidence
  * and assessment support; it never certifies an organization.
  */
 interface Coverage {
@@ -46,7 +46,7 @@ export default function Page() {
   return (
     <div className="space-y-6 p-6">
       <PageHeader eyebrow="GRC" title="Compliance" body="Frameworks, control status, evidence freshness and assessment coverage — computed from live platform evidence. Assessment states are not certification claims." />
-      <p className="rounded bg-amber-950/60 px-3 py-2 text-sm text-amber-200">{data?.disclaimer || "DSRclone provides technical evidence, control monitoring, assessment support, risk tracking and audit preparation. It does not certify or attest compliance."}</p>
+      <p className="rounded bg-amber-950/60 px-3 py-2 text-sm text-amber-200">{data?.disclaimer || "ZeroSweep provides technical evidence, control monitoring, assessment support, risk tracking and audit preparation. It does not certify or attest compliance."}</p>
       {error && <p className="rounded bg-red-950/60 px-3 py-2 text-sm text-red-300">{error}</p>}
       <nav className="flex flex-wrap gap-2 text-sm">
         <Link className="rounded border border-slate-700 px-3 py-1" href="/grc/controls">Controls</Link>

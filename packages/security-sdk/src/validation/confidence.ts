@@ -69,7 +69,7 @@ export function confidenceUpdateForOutcome(
 /** §32/§21: manual analyst validation is the ONLY path for classes the
  *  automated engine must not touch (e.g. RCE). An authorized analyst's
  *  attestation — with their own sanitized evidence — can verify a
- *  finding; DSRclone executes nothing for it. */
+ *  finding; ZeroSweep executes nothing for it. */
 export function confidenceUpdateForManualValidation(
   outcome: "VERIFIED" | "NOT_REPRODUCED" | "INCONCLUSIVE",
   now: Date = new Date(),

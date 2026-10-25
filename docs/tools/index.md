@@ -1,6 +1,6 @@
 # Tool Documentation
 
-Generated from the DSRclone Tool Registry (seeded catalog). Regenerate with `node scripts/docs/generate-tool-docs.mjs`.
+Generated from the ZeroSweep Tool Registry (seeded catalog). Regenerate with `node scripts/docs/generate-tool-docs.mjs`.
 
 | Tool | Category | License | Risk | Availability |
 |---|---|---|---|---|

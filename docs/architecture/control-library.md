@@ -1,6 +1,6 @@
 # Control Library (Prompt 26 §7–§18)
 
-A `SecurityControl` is DSRclone's internal normalized control. The
+A `SecurityControl` is ZeroSweep's internal normalized control. The
 shipped library (SDK `CONTROL_LIBRARY`) holds ~30 controls, each with:
 
 - `code` (stable, e.g. `MFA-ENFORCEMENT`), title, description

@@ -34,7 +34,7 @@ export default function Page() {
           </section>
           <section>
             <h3 className="mb-1 font-semibold text-white">Scope of this list</h3>
-            <p>This list describes the hosted demo deployment. Anyone self-hosting DSRclone chooses their own providers, and this page places no obligations on them.</p>
+            <p>This list describes the hosted demo deployment. Anyone self-hosting ZeroSweep chooses their own providers, and this page places no obligations on them.</p>
           </section>
           <p className="border-t border-slate-700 pt-4 text-xs text-slate-400">
             Last updated 10 October 2026 · Operator contact: forapikeyonly2008@gmail.com · These documents describe this hosted deployment and are not legal advice.

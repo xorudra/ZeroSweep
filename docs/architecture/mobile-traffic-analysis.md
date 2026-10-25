@@ -2,7 +2,7 @@
 
 ## Where traffic exists
 
-Only inside the device lab: DSRclone-managed devices on the isolated
+Only inside the device lab: ZeroSweep-managed devices on the isolated
 test network, during an approved dynamic session. mitmproxy is the
 lab proxy; Burp Suite is reused through the Prompt 8 connector with
 the `MOBILE_PROXY_ANALYSIS` capability — there is no unrestricted
@@ -28,7 +28,7 @@ metadata only — no sensitive bodies. Access requires
 
 Interception is permitted only in the lab, with a **temporary** CA
 installed on the lab device for the session and removed afterwards.
-The DSRclone CA is never installed on personal devices. Capture size
+The ZeroSweep CA is never installed on personal devices. Capture size
 and request counts are budget-bound (§91).
 
 ## Prompt 35 V2 (§88–§93)

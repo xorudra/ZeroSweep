@@ -123,7 +123,7 @@ function VulnerabilitiesPage() {
       <ResourceList
         path={path}
         emptyTitle="No vulnerabilities yet"
-        emptyBody="Vulnerabilities appear after authorized scans detect them (or governed scanner reports are imported). DSRclone never displays placeholder vulnerabilities."
+        emptyBody="Vulnerabilities appear after authorized scans detect them (or governed scanner reports are imported). ZeroSweep never displays placeholder vulnerabilities."
         columns={["Priority", "Severity", "Vulnerability", "Asset", "CVE", "EPSS", "KEV", "Status", "Owner", "SLA", "First Seen", "Last Seen"]}
         renderRow={(item: Record<string, unknown>, i: number) => (
           <Row key={i} cells={[

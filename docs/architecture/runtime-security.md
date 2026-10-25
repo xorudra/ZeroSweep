@@ -2,7 +2,7 @@
 
 Runtime detections (Falco-class sensors) use a **separate ingestion
 path** — they are not scan results and never pass through scan workers.
-The sensor runs outside DSRclone (DSRclone never deploys it); events
+The sensor runs outside ZeroSweep (ZeroSweep never deploys it); events
 arrive as JSON lines through the trusted ingestion endpoint or the
 Falco connector.
 

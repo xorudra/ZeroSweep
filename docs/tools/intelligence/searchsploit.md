@@ -6,7 +6,7 @@ explicitly NOT exploit execution.
 - It answers one question: "does a public exploit reference exist for
   this already-identified CVE/product?" (§19: CVE correlation preferred,
   then product/version).
-- DSRclone **never executes, downloads, compiles or launches exploit
+- ZeroSweep **never executes, downloads, compiles or launches exploit
   code** through SearchSploit. There is no such code path (§18/§103).
 - An `ExploitReference` record (finding, source, EDB-ID, title,
   reference, platform/type, verified metadata) means "public exploit
