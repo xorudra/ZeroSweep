@@ -145,7 +145,7 @@ architecture, object storage, authorization boundaries and the GUI page map.
 ## Monorepo structure
 
 ```
-dsrclone/
+zerosweep/
 ├── apps/
 │   ├── web/        Next.js dashboard (GUI)
 │   ├── api/        NestJS API (/api/v1) — never executes tools

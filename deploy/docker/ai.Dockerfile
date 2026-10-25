@@ -9,7 +9,7 @@ RUN /venv/bin/pip install --no-cache-dir -r requirements.txt
 FROM python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f AS runtime
 LABEL org.opencontainers.image.title="dsrclone-ai" \
       org.opencontainers.image.description="ZeroSweep AI copilot service (analyst assistant; no execution surface)" \
-      org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
+      org.opencontainers.image.source="https://github.com/xorudra/zerosweep" \
       org.opencontainers.image.licenses="UNLICENSED"
 ENV PYTHONUNBUFFERED=1 PATH="/venv/bin:$PATH" NODE_ENV=production
 RUN groupadd -r dsrclone && useradd -r -g dsrclone -d /app dsrclone

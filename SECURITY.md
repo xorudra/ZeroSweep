@@ -13,7 +13,7 @@ ZeroSweep is an authorized security-assessment platform; we take
 reports about the platform itself seriously.
 
 - **Contact:** open a private security advisory on the GitHub
-  repository (`github.com/xorudra/dsrclone/security/advisories`), or
+  repository (`github.com/xorudra/zerosweep/security/advisories`), or
   email the maintainer at the address listed on the repository
   owner's GitHub profile. (Placeholder by design — replace with the
   operating organization's security contact before public launch.)

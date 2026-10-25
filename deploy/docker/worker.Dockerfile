@@ -25,7 +25,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts \
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
 LABEL org.opencontainers.image.title="dsrclone-worker" \
       org.opencontainers.image.description="ZeroSweep scan worker (pool selected by DSRCLONE_WORKER_TYPE)" \
-      org.opencontainers.image.source="https://github.com/xorudra/dsrclone" \
+      org.opencontainers.image.source="https://github.com/xorudra/zerosweep" \
       org.opencontainers.image.licenses="UNLICENSED"
 ARG DSRCLONE_WORKER_TYPE=GENERAL_WEB
 ENV NODE_ENV=production \
