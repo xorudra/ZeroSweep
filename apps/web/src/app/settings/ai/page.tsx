@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface ProviderRow { id: string; name: string; providerType: string; enabled: boolean; credentialConfigured: boolean; approvedClassifications: string[]; sourceCodeAllowance: string }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Backup admin (Prompt 38 §200): backup history, status, retention and
@@ -23,7 +23,7 @@ interface RestoreRow { id: string; status: string; targetDatabase: string; isRes
 export default function Page() {
   const [items, setItems] = useState<BackupRow[]>([]);
   const [restores, setRestores] = useState<Record<string, RestoreRow[]>>({});
-  const [target, setTarget] = useState("dsrclone_restore");
+  const [target, setTarget] = useState("zerosweep_restore");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");

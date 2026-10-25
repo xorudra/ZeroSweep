@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { createHmac } from "node:crypto";
 import {
   USAGE_METRIC_DEFINITIONS, isUsageMetric, periodStart, type UsageMetric,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

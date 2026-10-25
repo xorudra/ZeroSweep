@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   buildReportSnapshot, reportFindingsFixture, type ReportSnapshotDocument,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { InMemoryObjectStore } from "./artifacts/object-store";
 import {
   ReportExportRunner, type ReportExportJob, type ReportJobStore, type ReportSnapshotRecord,

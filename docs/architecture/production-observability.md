@@ -3,7 +3,7 @@
 Three signals, one discipline: **nothing sensitive is ever emitted.**
 
 - **Metrics.** Prometheus exposition at `GET /api/v1/metrics`
-  (loopback/monitoring-namespace only). The `dsrclone_` prefix is
+  (loopback/monitoring-namespace only). The `zerosweep_` prefix is
   mandatory (§98); the SDK validates metric names and rejects
   forbidden labels (§107: no tenant/user ids, emails, URLs, IPs,
   findings, credentials). HTTP metrics carry method, status class and
@@ -11,7 +11,7 @@ Three signals, one discipline: **nothing sensitive is ever emitted.**
   dashboards for all ten §118 boards live in
   `deploy/monitoring/dashboards/`; a series no exporter emits renders
   as "No data" — never as a fabricated value.
-- **Logs (§108–§112).** Structured JSON via `@dsrclone/logger` with
+- **Logs (§108–§112).** Structured JSON via `@zerosweep/logger` with
   secret redaction on keys AND value patterns (authorization headers,
   cookies, bearer/JWT/API-key shapes). Correlation ids link API,
   worker and AI records (§96).

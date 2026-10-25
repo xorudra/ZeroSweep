@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, UnauthorizedException } from "
 import * as bcrypt from "bcryptjs";
 import {
   GENERIC_AUTH_ERROR, GENERIC_RESET_MESSAGE, randomToken, sha256Hex,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import { AuthService } from "../auth/auth.service";

@@ -26,7 +26,7 @@ app = FastAPI(title="ZeroSweep AI Service", version="0.1.0")
 async def root() -> dict:
     """Root info route: the bare service URL returns a small descriptor
     pointing at the real endpoints instead of a bare 404."""
-    return {"service": "dsrclone-ai", "status": "ok", "health": "/health"}
+    return {"service": "zerosweep-ai", "status": "ok", "health": "/health"}
 
 
 @app.on_event("startup")

@@ -4,7 +4,7 @@
 # reference for the worker controller and is intentionally NOT a resource.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: dsrclone-production
+namespace: zerosweep-production
 resources:
   - namespace.yaml
   - configmap.yaml
@@ -23,17 +23,17 @@ labels:
     pairs:
       app.kubernetes.io/managed-by: kustomize
 commonAnnotations:
-  dsrclone.io/release-channel: "base"
+  zerosweep.io/release-channel: "base"
 images:
-  - name: ghcr.io/xorudra/dsrclone-api
+  - name: ghcr.io/xorudra/zerosweep-api
     newTag: "25.0.0"
-  - name: ghcr.io/xorudra/dsrclone-web
+  - name: ghcr.io/xorudra/zerosweep-web
     newTag: "25.0.0"
-  - name: ghcr.io/xorudra/dsrclone-ai
+  - name: ghcr.io/xorudra/zerosweep-ai
     newTag: "25.0.0"
-  - name: ghcr.io/xorudra/dsrclone-worker
+  - name: ghcr.io/xorudra/zerosweep-worker
     newTag: "25.0.0"
-  - name: ghcr.io/xorudra/dsrclone-scheduler
+  - name: ghcr.io/xorudra/zerosweep-scheduler
     newTag: "25.0.0"
-  - name: ghcr.io/xorudra/dsrclone-migrate
+  - name: ghcr.io/xorudra/zerosweep-migrate
     newTag: "25.0.0"

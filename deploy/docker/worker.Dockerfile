@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ZeroSweep worker — production image (Prompt 25 §6–§19, §53–§60).
-# One image per worker POOL via the DSRCLONE_WORKER_TYPE build arg; scanner
+# One image per worker POOL via the ZEROSWEEP_WORKER_TYPE build arg; scanner
 # tool layers belong in derived per-pool images so a pool only carries the
 # tools its ScannerCapabilityPolicy allows. The worker NEVER runs privileged
 # and NEVER receives a Docker socket or host mounts.
@@ -18,19 +18,19 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY . .
 COPY --from=deps /repo/node_modules ./node_modules
 RUN pnpm install --frozen-lockfile --ignore-scripts \
- && pnpm --filter @dsrclone/worker... build \
- && pnpm --filter @dsrclone/worker deploy --prod /out \
+ && pnpm --filter @zerosweep/worker... build \
+ && pnpm --filter @zerosweep/worker deploy --prod /out \
  && cp -r apps/worker/dist /out/dist
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
-LABEL org.opencontainers.image.title="dsrclone-worker" \
-      org.opencontainers.image.description="ZeroSweep scan worker (pool selected by DSRCLONE_WORKER_TYPE)" \
+LABEL org.opencontainers.image.title="zerosweep-worker" \
+      org.opencontainers.image.description="ZeroSweep scan worker (pool selected by ZEROSWEEP_WORKER_TYPE)" \
       org.opencontainers.image.source="https://github.com/xorudra/zerosweep" \
       org.opencontainers.image.licenses="UNLICENSED"
-ARG DSRCLONE_WORKER_TYPE=GENERAL_WEB
+ARG ZEROSWEEP_WORKER_TYPE=GENERAL_WEB
 ENV NODE_ENV=production \
-    DSRCLONE_WORKER_TYPE=${DSRCLONE_WORKER_TYPE} \
-    WORKER_HEARTBEAT_FILE=/tmp/dsrclone-worker-heartbeat.json
+    ZEROSWEEP_WORKER_TYPE=${ZEROSWEEP_WORKER_TYPE} \
+    WORKER_HEARTBEAT_FILE=/tmp/zerosweep-worker-heartbeat.json
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 USER node

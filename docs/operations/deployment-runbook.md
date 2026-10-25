@@ -1,7 +1,7 @@
 # Deployment Runbook — ZeroSweep
 
 Canonical path: **Kustomize** (`deploy/kubernetes/base` + overlays). Helm
-(`deploy/helm/dsrclone`) renders an equivalent subset. Compose production
+(`deploy/helm/zerosweep`) renders an equivalent subset. Compose production
 profile: `deploy/compose/docker-compose.production.yml`.
 
 ## Release flow

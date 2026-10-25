@@ -26,25 +26,25 @@ importers:
 
   apps/api:
     dependencies:
-      '@dsrclone/config':
+      '@zerosweep/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@dsrclone/database':
+      '@zerosweep/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@dsrclone/logger':
+      '@zerosweep/logger':
         specifier: workspace:*
         version: link:../../packages/logger
-      '@dsrclone/orchestration':
+      '@zerosweep/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
-      '@dsrclone/security-sdk':
+      '@zerosweep/security-sdk':
         specifier: workspace:*
         version: link:../../packages/security-sdk
-      '@dsrclone/types':
+      '@zerosweep/types':
         specifier: workspace:*
         version: link:../../packages/types
-      '@dsrclone/validation':
+      '@zerosweep/validation':
         specifier: workspace:*
         version: link:../../packages/validation
       '@nestjs/common':
@@ -120,10 +120,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@dsrclone/types':
+      '@zerosweep/types':
         specifier: workspace:*
         version: link:../../packages/types
-      '@dsrclone/ui':
+      '@zerosweep/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       clsx:
@@ -172,25 +172,25 @@ importers:
 
   apps/worker:
     dependencies:
-      '@dsrclone/config':
+      '@zerosweep/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@dsrclone/database':
+      '@zerosweep/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@dsrclone/logger':
+      '@zerosweep/logger':
         specifier: workspace:*
         version: link:../../packages/logger
-      '@dsrclone/orchestration':
+      '@zerosweep/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
-      '@dsrclone/security-sdk':
+      '@zerosweep/security-sdk':
         specifier: workspace:*
         version: link:../../packages/security-sdk
-      '@dsrclone/types':
+      '@zerosweep/types':
         specifier: workspace:*
         version: link:../../packages/types
-      '@dsrclone/validation':
+      '@zerosweep/validation':
         specifier: workspace:*
         version: link:../../packages/validation
       bullmq:
@@ -225,7 +225,7 @@ importers:
 
   packages/database:
     dependencies:
-      '@dsrclone/security-sdk':
+      '@zerosweep/security-sdk':
         specifier: workspace:*
         version: link:../security-sdk
       '@prisma/client':
@@ -259,13 +259,13 @@ importers:
 
   packages/orchestration:
     dependencies:
-      '@dsrclone/security-sdk':
+      '@zerosweep/security-sdk':
         specifier: workspace:*
         version: link:../security-sdk
-      '@dsrclone/types':
+      '@zerosweep/types':
         specifier: workspace:*
         version: link:../types
-      '@dsrclone/validation':
+      '@zerosweep/validation':
         specifier: workspace:*
         version: link:../validation
     devDependencies:
@@ -281,10 +281,10 @@ importers:
 
   packages/security-sdk:
     dependencies:
-      '@dsrclone/types':
+      '@zerosweep/types':
         specifier: workspace:*
         version: link:../types
-      '@dsrclone/validation':
+      '@zerosweep/validation':
         specifier: workspace:*
         version: link:../validation
       js-yaml:
@@ -327,7 +327,7 @@ importers:
 
   packages/validation:
     dependencies:
-      '@dsrclone/types':
+      '@zerosweep/types':
         specifier: workspace:*
         version: link:../types
       zod:

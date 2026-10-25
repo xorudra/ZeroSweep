@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-worker-health",
+  "uid": "zerosweep-worker-health",
   "title": "ZeroSweep \u2014 Worker Health",
-  "description": "Prompt 38 \u00a7106 heartbeats, capacity, tool availability. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a7106 heartbeats, capacity, tool availability. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_worker_heartbeat_age_ms / 1000",
+          "expr": "zerosweep_worker_heartbeat_age_ms / 1000",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (pool) (dsrclone_worker_busy_slots)",
+          "expr": "sum by (pool) (zerosweep_worker_busy_slots)",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_worker_tool_available",
+          "expr": "zerosweep_worker_tool_available",
           "refId": "A"
         }
       ],

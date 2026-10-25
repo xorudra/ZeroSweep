@@ -11,8 +11,8 @@ import {
   type KillSwitchRecord,
   type SanitizedEvidence,
   type ValidationOutcome,
-} from "@dsrclone/security-sdk";
-import type { ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import type { ScopeRules } from "@zerosweep/validation";
 import {
   ValidationRunner,
   type PreparedValidation,

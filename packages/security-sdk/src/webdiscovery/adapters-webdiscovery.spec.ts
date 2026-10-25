@@ -84,7 +84,7 @@ describe("execution plans: argument arrays, registered wordlists, hard caps (§3
     const content = await adapter.buildExecutionPlan(WEBAPP, { template: "CONTENT", urls: ["https://example.com/search"] });
     expect(content.arguments[content.arguments.length - 1]).toBe("https://example.com/search/FUZZ");
     const param = await adapter.buildExecutionPlan(WEBAPP, { template: "PARAMETER", urls: ["https://example.com/search"] });
-    expect(param.arguments[param.arguments.length - 1]).toBe("https://example.com/search/?FUZZ=dsrclone");
+    expect(param.arguments[param.arguments.length - 1]).toBe("https://example.com/search/?FUZZ=zerosweep");
     expect(param.arguments[param.arguments.indexOf("-z") + 1]).toBe("file,/wordlists/builtin/parameter-names.txt");
   });
 

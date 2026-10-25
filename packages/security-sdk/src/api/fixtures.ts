@@ -22,7 +22,7 @@ const NOW = Math.floor(Date.now() / 1000);
 /** Well-configured token: RS256, 1h lifetime, no sensitive claims. */
 export const FIXTURE_JWT_GOOD = makeFakeJwt(
   { alg: "RS256", typ: "JWT", kid: "test-key-1" },
-  { sub: "test-user-a", iss: "https://auth.example.com", aud: "dsrclone-test-api", iat: NOW - 60, exp: NOW + 3600, scope: "read:users" },
+  { sub: "test-user-a", iss: "https://auth.example.com", aud: "zerosweep-test-api", iat: NOW - 60, exp: NOW + 3600, scope: "read:users" },
 );
 /** 'none' algorithm + sensitive claim + no expiry: three findings. */
 export const FIXTURE_JWT_BAD = makeFakeJwt(

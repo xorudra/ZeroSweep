@@ -2,7 +2,7 @@ import { createHash, createSign, generateKeyPairSync } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 import {
   base32Decode, buildSignedResponse, sha256Hex, totp,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 
 /** Minimal CBOR encoder for WebAuthn fixtures (mirrors the SDK spec). */
 function cborEncode(value: unknown): Buffer {
@@ -508,14 +508,14 @@ describe("SAML SSO (§127, §128)", () => {
     const admin = await seedUser("org-a", "admin@example.com", "OWNER");
     const provider = await w.sso.createProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), {
       type: "SAML", name: "Fixture SAML", idpEntityId: "https://idp.example.com", ssoUrl: "https://idp.example.com/sso",
-      spEntityId: "dsrclone-sp", certificate: idpCert, jitEnabled: true, acsUrl: "https://app.example.com/acs",
+      spEntityId: "zerosweep-sp", certificate: idpCert, jitEnabled: true, acsUrl: "https://app.example.com/acs",
     }) as { id: string };
     await w.sso.enrollBreakGlass(asUser(admin.id, admin.email, "org-a", "OWNER"), admin.id);
     await w.sso.updateProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), provider.id, { enabled: true });
     return provider.id;
   }
   const fixtureFor = (requestId: string, overrides: Record<string, unknown> = {}) => buildSignedResponse({
-    idpEntityId: "https://idp.example.com", spEntityId: "dsrclone-sp", acsUrl: "https://app.example.com/acs",
+    idpEntityId: "https://idp.example.com", spEntityId: "zerosweep-sp", acsUrl: "https://app.example.com/acs",
     inResponseTo: requestId, nameId: "rudra@example.com", attributes: { email: ["rudra@example.com"], displayName: ["Rudra"] },
     nowMs: Date.now(), privateKeyPem: idpPem, ...overrides,
   } as never);
@@ -552,7 +552,7 @@ describe("SAML SSO (§127, §128)", () => {
     void existing;
     const provider = await w.sso.createProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), {
       type: "SAML", name: "No-JIT SAML", idpEntityId: "https://idp.example.com", ssoUrl: "https://idp.example.com/sso",
-      spEntityId: "dsrclone-sp", certificate: idpCert, jitEnabled: false, acsUrl: "https://app.example.com/acs",
+      spEntityId: "zerosweep-sp", certificate: idpCert, jitEnabled: false, acsUrl: "https://app.example.com/acs",
     }) as { id: string };
     await w.sso.enrollBreakGlass(asUser(admin.id, admin.email, "org-a", "OWNER"), admin.id);
     await w.sso.updateProvider(asUser(admin.id, admin.email, "org-a", "OWNER"), provider.id, { enabled: true });
@@ -571,8 +571,8 @@ describe("domains & invitations (§129, §63–65)", () => {
     const me = asUser(admin.id, admin.email, "org-a", "OWNER");
     const started = await w.governance.startDomainVerification(me, "Example.com") as { id: string; dnsRecord: { value: string } };
     const token = started.dnsRecord.value.split("=")[1];
-    await expect(w.governance.confirmDomainVerification(me, started.id, async () => [["dsrclone-site-verification=wrong"]])).rejects.toThrow(/not found/);
-    const verified = await w.governance.confirmDomainVerification(me, started.id, async () => [[`dsrclone-site-verification=${token}`]]) as { status: string };
+    await expect(w.governance.confirmDomainVerification(me, started.id, async () => [["zerosweep-site-verification=wrong"]])).rejects.toThrow(/not found/);
+    const verified = await w.governance.confirmDomainVerification(me, started.id, async () => [[`zerosweep-site-verification=${token}`]]) as { status: string };
     expect(verified.status).toBe("VERIFIED");
   });
 

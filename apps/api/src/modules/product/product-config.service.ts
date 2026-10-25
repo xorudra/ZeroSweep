@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { isPlatformAdminEmail, loadEnv, type AppEnv } from "@dsrclone/config";
-import { billingConfigurationStatus, type ProductMode } from "@dsrclone/security-sdk";
+import { isPlatformAdminEmail, loadEnv, type AppEnv } from "@zerosweep/config";
+import { billingConfigurationStatus, type ProductMode } from "@zerosweep/security-sdk";
 
 /**
  * Product configuration (Prompt 40 §3/§4). The product mode, billing

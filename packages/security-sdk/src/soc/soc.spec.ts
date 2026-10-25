@@ -181,21 +181,21 @@ describe("alerts (§32–§35)", () => {
 
 describe("response policy (§74–§82/§126)", () => {
   it("catalog is closed and predefined (§76)", () => {
-    expect(getResponseActionDefinition("DISABLE_DSRCLONE_API_KEY")?.approvalMode).toBe("SINGLE_APPROVAL");
+    expect(getResponseActionDefinition("DISABLE_ZEROSWEEP_API_KEY")?.approvalMode).toBe("SINGLE_APPROVAL");
     expect(getResponseActionDefinition("RUN_SHELL_COMMAND")).toBeNull();
     expect(getResponseActionDefinition("GENERIC_HTTP_POST")).toBeNull();
   });
 
   it("proposer cannot approve their own high-impact action (§126)", () => {
-    const out = evaluateResponsePolicy({ actionKey: "DISABLE_DSRCLONE_API_KEY", proposerId: "u1", approvals: [{ approverId: "u1", decision: "APPROVED" }] });
+    const out = evaluateResponsePolicy({ actionKey: "DISABLE_ZEROSWEEP_API_KEY", proposerId: "u1", approvals: [{ approverId: "u1", decision: "APPROVED" }] });
     expect(out.eligible).toBe(false);
     expect(out.reasons).toContain("SOD_PROPOSER_CANNOT_APPROVE");
   });
 
   it("dual approval needs two distinct approvers (§147)", () => {
-    const one = evaluateResponsePolicy({ actionKey: "PAUSE_DSRCLONE_INTEGRATION", proposerId: "u1", approvals: [{ approverId: "u2", decision: "APPROVED" }] });
+    const one = evaluateResponsePolicy({ actionKey: "PAUSE_ZEROSWEEP_INTEGRATION", proposerId: "u1", approvals: [{ approverId: "u2", decision: "APPROVED" }] });
     expect(one.eligible).toBe(false);
-    const two = evaluateResponsePolicy({ actionKey: "PAUSE_DSRCLONE_INTEGRATION", proposerId: "u1", approvals: [{ approverId: "u2", decision: "APPROVED" }, { approverId: "u3", decision: "APPROVED" }] });
+    const two = evaluateResponsePolicy({ actionKey: "PAUSE_ZEROSWEEP_INTEGRATION", proposerId: "u1", approvals: [{ approverId: "u2", decision: "APPROVED" }, { approverId: "u3", decision: "APPROVED" }] });
     expect(two.eligible).toBe(true);
   });
 });
@@ -218,7 +218,7 @@ describe("coverage + AI (§112/§151/§101)", () => {
   it("coverage counts only ACTIVE + tested rules (§113)", () => {
     const cov = computeDetectionCoverage([
       { id: "r1", status: "ACTIVE", tested: true, attack: getDetectionTemplate("auth-failure-burst")!.attack, dataSources: ["AUTHENTICATION"], evaluationFailures: 0, matchCount: 3, falsePositiveCount: 0, triagedCount: 2 },
-      { id: "r2", status: "DRAFT", tested: false, attack: getDetectionTemplate("new-kev-exposure")!.attack, dataSources: ["DSRCLONE_INTERNAL"], evaluationFailures: 0, matchCount: 0, falsePositiveCount: 0, triagedCount: 0 },
+      { id: "r2", status: "DRAFT", tested: false, attack: getDetectionTemplate("new-kev-exposure")!.attack, dataSources: ["ZEROSWEEP_INTERNAL"], evaluationFailures: 0, matchCount: 0, falsePositiveCount: 0, triagedCount: 0 },
     ]);
     expect(cov.techniques.find((t) => t.techniqueId === "T1110")?.covered).toBe(true);
     expect(cov.techniques.find((t) => t.techniqueId === "T1190")?.covered).toBe(false);

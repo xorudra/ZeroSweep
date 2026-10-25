@@ -11,7 +11,7 @@ import type { RawCloudInventory } from "./inventory";
 
 export const FIXTURE_AWS_ACCOUNT_ID = "123456789012";
 export const FIXTURE_AZURE_SUBSCRIPTION_ID = "00000000-0000-4000-8000-000000000001";
-export const FIXTURE_GCP_PROJECT_ID = "dsrclone-fixture-project";
+export const FIXTURE_GCP_PROJECT_ID = "zerosweep-fixture-project";
 
 /** AWS fixture inventory (§90): public SG, S3 posture, IAM policy,
  *  logging gaps, EKS/ECR links, RDS/KMS/serverless/secret metadata. */

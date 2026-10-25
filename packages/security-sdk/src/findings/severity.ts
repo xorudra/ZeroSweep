@@ -1,4 +1,4 @@
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 
 export const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"] as const;
 export const SEVERITY_ORDER: Record<Severity, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFORMATIONAL: 0 };

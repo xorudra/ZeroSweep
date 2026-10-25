@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   analyticsEventChecksum, validateAnalyticsEvent, type AnalyticsEventInput,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 
 /**

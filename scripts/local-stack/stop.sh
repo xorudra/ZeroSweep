@@ -1,6 +1,6 @@
 #!/bin/bash
 # Stop the ZeroSweep local stack (app processes, Redis, PostgreSQL).
-STACK="$HOME/workspace/dsrclone-local-stack"
+STACK="$HOME/workspace/zerosweep-local-stack"
 pkill -f "apps/api/dist/main.js" 2>/dev/null && echo "[stack] api stopped" || true
 pkill -f "apps/worker/dist/index.js" 2>/dev/null && echo "[stack] worker stopped" || true
 pkill -f "apps/api/dist/scheduler-main.js" 2>/dev/null && echo "[stack] scheduler stopped" || true

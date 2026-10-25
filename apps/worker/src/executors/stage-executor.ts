@@ -1,12 +1,12 @@
 import {
   ALL_DIRECTORY_SLUGS, API_SLUGS, BINARY_SLUGS, CLOUD_NATIVE_SLUGS, CLOUD_SEC_SLUGS, CODE_SLUGS, DIRECTORY_SLUGS, MOBILE_DYNAMIC_SLUGS, MOBILE_SLUGS, MOBILE_STATIC_SLUGS, NETWORK_SLUGS, NmapAdapter, NucleiAdapter, PRIVILEGED_CLOUD_SLUGS, PROXY_SLUGS, RECON_SLUGS, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS, WIRELESS_SLUGS, WIRELESS_TOOL_STAGES, ScopeMatcher, ToolRegistry,
   activeKillSwitch, approvedNseIdsForProfile, approvedReviewIdsForProfile, evaluateToolPolicy, isKubernetesConnector, isScannerConnectorAdapter, isSonarQubeAdapter, isVulnScannerAdapter, resolveSemgrepPacks, type AuthorizationContext, type KillSwitchContext, type KillSwitchRecord,
-} from "@dsrclone/security-sdk";
-import type { ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import type { ScopeRules } from "@zerosweep/validation";
 import {
   assertExecutionTransition, classifyError, evaluateAuthorizationGate,
   idempotencyKey, makeEvent, type ScanEventRecord,
-} from "@dsrclone/orchestration";
+} from "@zerosweep/orchestration";
 import { InMemoryObjectStore, rawArtifactKey, type ObjectStore } from "../artifacts/object-store";
 import { S3ObjectStore } from "../artifacts/s3-object-store";
 import { processNormalizedResult, type ProcessedResult } from "./result-processor";

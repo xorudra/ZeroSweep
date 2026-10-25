@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import {
   canTransitionLifecycle, computeDeletionImpact, DEFAULT_RETENTION_DAYS,
   type OrganizationLifecycleState,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 

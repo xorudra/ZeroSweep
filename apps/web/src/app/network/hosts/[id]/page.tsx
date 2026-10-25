@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, EmptyState } from "@dsrclone/ui";
+import { Badge, EmptyState } from "@zerosweep/ui";
 
 /**
  * Host detail (Prompt 10 §68/§69): identity, addresses, OS hint WITH

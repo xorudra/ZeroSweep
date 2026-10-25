@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Alert queue (Prompt 28 §103). Alerts exist only because a

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, apiFetch, ApiError } from "@/lib/api-client";
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 
 /**
  * Assessment → Plan → Start flow (Prompt 4 §45–§47). For APPROVED assessments:

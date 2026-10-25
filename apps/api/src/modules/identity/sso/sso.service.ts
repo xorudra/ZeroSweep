@@ -7,8 +7,8 @@ import {
   blockedTargetReason, cloudEndpointVerdict,
   generatePkcePair, mapOidcClaims, mapSamlAttributes, normalizeEmail, randomToken, sha256Hex,
   validateDiscovery, validateIdToken, validateSamlResponse, SamlRejected,
-} from "@dsrclone/security-sdk";
-import { isTenantSecretSlotReference } from "@dsrclone/config";
+} from "@zerosweep/security-sdk";
+import { isTenantSecretSlotReference } from "@zerosweep/config";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { SecretResolver } from "../secret-resolver";

@@ -93,15 +93,15 @@ record("real encrypted backup completes (§160/§166)",
 const backupId = backup.json.id;
 
 const badConfirm = await call("POST", `/platform/backups/${backupId}/restore`,
-  { targetDatabase: "dsrclone_restore", confirm: "yes" });
+  { targetDatabase: "zerosweep_restore", confirm: "yes" });
 record("restore with wrong confirmation refused", badConfirm.status === 400, `status=${badConfirm.status}`);
 
 const prodTarget = await call("POST", `/platform/backups/${backupId}/restore`,
-  { targetDatabase: "dsrclone", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" });
+  { targetDatabase: "zerosweep", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" });
 record("restore over production refused (§173)", prodTarget.status === 400, `status=${prodTarget.status}`);
 
 const restore = await call("POST", `/platform/backups/${backupId}/restore`,
-  { targetDatabase: `dsrclone_${stamp}_restore`, confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT", isRestoreTest: true });
+  { targetDatabase: `zerosweep_${stamp}_restore`, confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT", isRestoreTest: true });
 const v = restore.json.validation ?? {};
 record("isolated restore completes with §174 validation recorded",
   (restore.status === 201 || restore.status === 200) && restore.json.status === "COMPLETED" &&

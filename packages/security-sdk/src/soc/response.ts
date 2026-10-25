@@ -26,28 +26,28 @@ export interface ResponseActionDefinition {
 
 export const RESPONSE_ACTION_CATALOG: readonly ResponseActionDefinition[] = [
   {
-    key: "DISABLE_DSRCLONE_API_KEY", title: "Disable ZeroSweep API key",
+    key: "DISABLE_ZEROSWEEP_API_KEY", title: "Disable ZeroSweep API key",
     description: "Revoke an API key inside ZeroSweep (suspected key compromise).",
     targetKind: "API_KEY", approvalMode: "SINGLE_APPROVAL", highImpact: true,
     rollbackAvailable: true, rollbackNote: "The key can be re-enabled by an administrator; the disablement and any re-enable are audited.",
     timeoutSeconds: 60,
   },
   {
-    key: "REVOKE_DSRCLONE_SESSION", title: "Revoke ZeroSweep session",
+    key: "REVOKE_ZEROSWEEP_SESSION", title: "Revoke ZeroSweep session",
     description: "Terminate one user session inside ZeroSweep.",
     targetKind: "SESSION", approvalMode: "NO_APPROVAL", highImpact: false,
     rollbackAvailable: false, rollbackNote: "Sessions cannot be un-revoked; the user signs in again.",
     timeoutSeconds: 60,
   },
   {
-    key: "DISABLE_DSRCLONE_SERVICE_ACCOUNT", title: "Disable ZeroSweep service account",
+    key: "DISABLE_ZEROSWEEP_SERVICE_ACCOUNT", title: "Disable ZeroSweep service account",
     description: "Disable a service account and its keys inside ZeroSweep.",
     targetKind: "SERVICE_ACCOUNT", approvalMode: "SINGLE_APPROVAL", highImpact: true,
     rollbackAvailable: true, rollbackNote: "The account can be re-enabled by an administrator; audited.",
     timeoutSeconds: 60,
   },
   {
-    key: "PAUSE_DSRCLONE_INTEGRATION", title: "Pause ZeroSweep integration",
+    key: "PAUSE_ZEROSWEEP_INTEGRATION", title: "Pause ZeroSweep integration",
     description: "Pause an integration (stops its sync/delivery) inside ZeroSweep.",
     targetKind: "INTEGRATION", approvalMode: "DUAL_APPROVAL", highImpact: true,
     rollbackAvailable: true, rollbackNote: "The integration can be resumed by an administrator; audited.",

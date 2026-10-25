@@ -2,7 +2,7 @@ import { Controller, Get, Module, type INestApplication } from "@nestjs/common";
 import { APP_GUARD, NestFactory } from "@nestjs/core";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 import { PRISMA } from "../../prisma/prisma.module";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuditService } from "../audit/audit.service";
@@ -163,9 +163,9 @@ describe("A7 session-linked JWTs (guard + refresh + logout)", () => {
     // travels only in the HttpOnly Set-Cookie header. Tests obtain it
     // from the cookie, exactly like the web client does.
     expect(body.sessionToken).toBeUndefined();
-    const setCookie = res.headers.getSetCookie().find((c) => c.startsWith("dsrclone_session=")) ?? "";
+    const setCookie = res.headers.getSetCookie().find((c) => c.startsWith("zerosweep_session=")) ?? "";
     const cookie = setCookie.split(";")[0] as string;
-    const sessionToken = decodeURIComponent(cookie.slice("dsrclone_session=".length));
+    const sessionToken = decodeURIComponent(cookie.slice("zerosweep_session=".length));
     return { ...body, sessionToken, cookie };
   }
 
@@ -218,7 +218,7 @@ describe("A7 session-linked JWTs (guard + refresh + logout)", () => {
 
   it("login binds the JWT to the session (sid) and the guarded route answers 200", async () => {
     const { accessToken, sessionId, cookie } = await login();
-    expect(cookie).toContain("dsrclone_session=");
+    expect(cookie).toContain("zerosweep_session=");
     const payload = JSON.parse(Buffer.from(accessToken.split(".")[1] as string, "base64url").toString("utf8")) as { sid?: string };
     expect(payload.sid).toBe(sessionId);
     expect((await probe(accessToken)).status).toBe(200);
@@ -242,7 +242,7 @@ describe("A7 session-linked JWTs (guard + refresh + logout)", () => {
     expect(res1.status).toBe(201);
     const body1 = (await res1.json()) as { accessToken: string; sessionId: string };
     expect(body1.sessionId).toBe(first.sessionId);
-    const setCookie2 = res1.headers.getSetCookie().find((c) => c.startsWith("dsrclone_session=")) ?? "";
+    const setCookie2 = res1.headers.getSetCookie().find((c) => c.startsWith("zerosweep_session=")) ?? "";
     const cookie2 = setCookie2.split(";")[0] as string;
     expect(cookie2).not.toBe(first.cookie);
     expect(setCookie2).toContain("HttpOnly");
@@ -259,7 +259,7 @@ describe("A7 session-linked JWTs (guard + refresh + logout)", () => {
       body: JSON.stringify({}),
     });
     expect(out.status).toBe(201);
-    const cleared = out.headers.getSetCookie().find((c) => c.startsWith("dsrclone_session=")) ?? "";
+    const cleared = out.headers.getSetCookie().find((c) => c.startsWith("zerosweep_session=")) ?? "";
     expect(cleared).toContain("Max-Age=0");
     expect((await probe(accessToken)).status).toBe(401);
     expect((await refresh(cookie)).status).toBe(401);

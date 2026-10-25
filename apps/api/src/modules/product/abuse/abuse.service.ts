@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ABUSE_SIGNALS, evaluateAbuseResponse, type AbuseResponse, type AbuseSignal } from "@dsrclone/security-sdk";
+import { ABUSE_SIGNALS, evaluateAbuseResponse, type AbuseResponse, type AbuseSignal } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import {
   evidenceFreshness, hashEvidence, snapshotEvidence, validateManualEvidenceUpload,
   type EvidenceClassification,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";

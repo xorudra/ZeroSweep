@@ -1,12 +1,12 @@
 import "reflect-metadata";
 import { hostname } from "node:os";
 import { NestFactory } from "@nestjs/core";
-import { loadEnv, assertProductionConfig } from "@dsrclone/config";
-import { createLogger } from "@dsrclone/logger";
+import { loadEnv, assertProductionConfig } from "@zerosweep/config";
+import { createLogger } from "@zerosweep/logger";
 import { AppModule } from "./app.module";
 import { SecuritySchedulerService } from "./modules/continuous-security/schedules/security-scheduler.service";
 
-const logger = createLogger("dsrclone-scheduler");
+const logger = createLogger("zerosweep-scheduler");
 
 /**
  * Standalone scheduler process (Prompt 25 §52): in production topologies the

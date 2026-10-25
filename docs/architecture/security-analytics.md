@@ -7,7 +7,7 @@ resolved findings), and "not computable" deltas (previous period = 0).
 
 ## Computation model
 
-- Pure aggregation functions live in `@dsrclone/security-sdk`
+- Pure aggregation functions live in `@zerosweep/security-sdk`
   (`analytics/`): `timeSeries`, `groupCount`, `topN`, `distribution`,
   `percentile`, `trend`, lifecycle projection, SLA buckets. They are
   deterministic and unit-tested; the API layer only fetches tenant-scoped

@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Unauthorize
 import {
   base32Decode, decryptSecret, encryptSecret, generateRecoveryCodes as genCodes, generateTotpSecret,
   hashRecoveryCode, isPrivilegedOrgRole, platformKeyFromMaterial, totpSetupUri, verifyRecoveryCode, verifyTotp,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { SecretResolver } from "../secret-resolver";

@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   createMobileDynamicSessionSchema, registerMobileAppSchema, registerMobileDeviceSchema,
   startMobileScanSchema, uploadMobileBuildSchema,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { MobileSecurityService } from "./mobile-security.service";

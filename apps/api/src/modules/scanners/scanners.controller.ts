@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Q
 import {
   createAuthenticationProfileSchema, createSessionProfileSchema, createScannerInstanceSchema,
   grantScanApprovalSchema, scannerImportSchema, updateScannerInstanceSchema,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";

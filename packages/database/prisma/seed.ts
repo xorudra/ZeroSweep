@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { BUNDLED_WORDLISTS, FRAMEWORK_CATALOG, EXAMPLE_PLANS } from "@dsrclone/security-sdk";
+import { BUNDLED_WORDLISTS, FRAMEWORK_CATALOG, EXAMPLE_PLANS } from "@zerosweep/security-sdk";
 
 const prisma = new PrismaClient();
 
@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
  * an adapter row here means "known to the registry", not "implemented".
  * Prompt 5 update: the ten recon adapters (subfinder, amass, assetfinder,
  * findomain, dnsx, httpx, whatweb, gau, waybackurls, katana) are now REAL
- * code adapters in @dsrclone/security-sdk; their rows are seeded ENABLED
+ * code adapters in @zerosweep/security-sdk; their rows are seeded ENABLED
  * below. Tool health is probed at runtime — a missing binary reports
  * UNAVAILABLE honestly; seeding never installs or executes anything.
  *

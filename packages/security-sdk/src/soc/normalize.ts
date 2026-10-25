@@ -90,7 +90,7 @@ export function normalizeTelemetryEvent(raw: unknown): NormalizationResult {
   if (JSON.stringify(r).length > MAX_TELEMETRY_PAYLOAD_BYTES) {
     return { ok: false, errors: ["EVENT_TOO_LARGE"], redactions: [] };
   }
-  const sourceCategory = pick(r, ["sourceCategory", "category", "source_category"]) ?? "DSRCLONE_INTERNAL";
+  const sourceCategory = pick(r, ["sourceCategory", "category", "source_category"]) ?? "ZEROSWEEP_INTERNAL";
   if (!CATEGORY_SET.has(sourceCategory)) errors.push("SOURCE_CATEGORY_UNKNOWN");
   const source = pick(r, ["source", "provider", "sourceName"]) ?? sourceCategory.toLowerCase();
   const eventTimeRaw = pick(r, ["eventTime", "timestamp", "time", "@timestamp", "event_time"]);

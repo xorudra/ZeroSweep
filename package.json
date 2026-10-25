@@ -1,5 +1,5 @@
 {
-  "name": "dsrclone",
+  "name": "zerosweep",
   "version": "1.0.0",
   "private": true,
   "description": "ZeroSweep — authorized automated VAPT & security-assessment orchestration platform (GUI-first)",
@@ -11,10 +11,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:ai": "cd apps/ai && python3 -m pytest -q",
-    "db:validate": "pnpm --filter @dsrclone/database prisma:validate",
-    "db:generate": "pnpm --filter @dsrclone/database prisma:generate",
-    "db:migrate": "pnpm --filter @dsrclone/database prisma:migrate",
-    "db:seed": "pnpm --filter @dsrclone/database prisma:seed"
+    "db:validate": "pnpm --filter @zerosweep/database prisma:validate",
+    "db:generate": "pnpm --filter @zerosweep/database prisma:generate",
+    "db:migrate": "pnpm --filter @zerosweep/database prisma:migrate",
+    "db:seed": "pnpm --filter @zerosweep/database prisma:seed"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

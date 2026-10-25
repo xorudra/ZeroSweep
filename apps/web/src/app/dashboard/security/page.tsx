@@ -1,6 +1,6 @@
 "use client";
 
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 import { CountTable, DashboardShell, Stat, useAnalytics } from "../DashboardShared";
 
 interface SecurityOps {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Network hosts (Prompt 33 §114): the canonical host inventory with

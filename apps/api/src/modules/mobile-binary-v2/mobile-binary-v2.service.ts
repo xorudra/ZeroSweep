@@ -4,8 +4,8 @@ import {
   detectProtectionEvidence, evaluateAdbOperation, evaluateFridaScriptRequest, evaluateObjectionWorkflow,
   guardMobileAiRequest, mobbinProfileDefinition, mobbinReportDefinition, planMobileNlQuery,
   planMobileRetest, redactTrafficBody, redactTrafficHeaders, type CarryForwardFindingRef,
-} from "@dsrclone/security-sdk";
-import type { CreateMobileDynamicSessionInput, UploadMobileBuildInput } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import type { CreateMobileDynamicSessionInput, UploadMobileBuildInput } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

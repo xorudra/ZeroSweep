@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Host detail (Prompt 33 §115): Overview / Network / Ports / Services /

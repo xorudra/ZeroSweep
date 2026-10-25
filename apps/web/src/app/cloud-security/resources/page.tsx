@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Cloud resources (Prompt 14 §79): the normalized multi-cloud

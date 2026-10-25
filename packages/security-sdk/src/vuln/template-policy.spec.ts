@@ -62,6 +62,6 @@ describe("NucleiTemplatePolicy (§4)", () => {
   it("snapshot is frozen metadata recorded for plans (§6)", () => {
     const { snapshot } = selectTemplates();
     expect(snapshot.version).toBeTruthy();
-    expect(snapshot.collection).toBe("dsrclone-governed");
+    expect(snapshot.collection).toBe("zerosweep-governed");
   });
 });

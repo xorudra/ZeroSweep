@@ -3,7 +3,7 @@ import {
   ARJUN_JSON, FFUF_JSON, FEROX_JSONL, GOBUSTER_TEXT, WFUZZ_JSON,
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   createReconAdapters, createWebDiscoveryAdapters, reconHealthBySlug, type FixtureResponse,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { FakeStore } from "./testing/fake-store";
@@ -87,7 +87,7 @@ describe("Prompt 6 web-discovery E2E — WEB_COMPREHENSIVE (fixtures)", () => {
     expect(executed).toContain("PARAMETER_DISCOVERY:arjun");
     expect(executed).toContain("PARAMETER_DISCOVERY:wfuzz");
     const wfuzzCalls = runner.calls.filter((c) => c.executable === "wfuzz");
-    expect(wfuzzCalls.some((c) => c.args.some((a) => a.includes("FUZZ=dsrclone")))).toBe(true); // parameter template
+    expect(wfuzzCalls.some((c) => c.args.some((a) => a.includes("FUZZ=zerosweep")))).toBe(true); // parameter template
     expect(wfuzzCalls.some((c) => c.args.some((a) => a.endsWith("/FUZZ")))).toBe(true); // content template
     // Wordlists enter plans only as governed container paths (§11).
     const ffufCall = runner.calls.find((c) => c.executable === "ffuf")!;
@@ -123,7 +123,7 @@ describe("Prompt 6 web-discovery E2E — WEB_COMPREHENSIVE (fixtures)", () => {
     expect(searchParams.map((p) => p.name).sort()).toEqual(expect.arrayContaining(["id", "page", "q", "sort"]));
     const idSources = new Set(searchParams.filter((p) => p.name === "id").flatMap((p) => p.sources));
     expect([...idSources].sort()).toEqual(["arjun", "wfuzz"]);
-    expect(JSON.stringify(store.parameters)).not.toContain("dsrclone=1");
+    expect(JSON.stringify(store.parameters)).not.toContain("zerosweep=1");
     const apiParams = store.parameters.filter((p) => p.endpointUrl === "https://example.com/api/users");
     expect(apiParams.map((p) => p.name).sort()).toEqual(["limit", "offset"]);
 

@@ -5,7 +5,7 @@
 # seed, and the API/worker/AI processes from this repo.
 # Idempotent: safe to re-run; skips work that is already done.
 set -u
-STACK="$HOME/workspace/dsrclone-local-stack"
+STACK="$HOME/workspace/zerosweep-local-stack"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 mkdir -p "$STACK"
 cd "$STACK"
@@ -26,7 +26,7 @@ export LD_LIBRARY_PATH="$SP/pgserver.libs:$PGB/lib"
 if [ ! -d pgdata ]; then
   mkdir -p pgdata pgsock && chown 65534:65534 pgdata pgsock && chmod 700 pgdata
   setpriv --reuid=65534 --regid=65534 --clear-groups bash -c \
-    "export LD_LIBRARY_PATH='$LD_LIBRARY_PATH'; '$PGB/bin/initdb' -D '$STACK/pgdata' -U dsrclone -A trust --no-instructions -E UTF8 --locale=C" \
+    "export LD_LIBRARY_PATH='$LD_LIBRARY_PATH'; '$PGB/bin/initdb' -D '$STACK/pgdata' -U zerosweep -A trust --no-instructions -E UTF8 --locale=C" \
     || { echo "FATAL: initdb failed"; exit 1; }
 fi
 if ! "$PGB/bin/pg_isready" -h 127.0.0.1 -p 54329 >/dev/null 2>&1; then
@@ -36,7 +36,7 @@ if ! "$PGB/bin/pg_isready" -h 127.0.0.1 -p 54329 >/dev/null 2>&1; then
   for i in $(seq 1 30); do "$PGB/bin/pg_isready" -h 127.0.0.1 -p 54329 >/dev/null 2>&1 && break; sleep 1; done
 fi
 "$PGB/bin/pg_isready" -h 127.0.0.1 -p 54329 || { echo "FATAL: postgres did not start; see $STACK/pg.log"; exit 1; }
-"$PGB/bin/createdb" -h 127.0.0.1 -p 54329 -U dsrclone dsrclone 2>/dev/null || true
+"$PGB/bin/createdb" -h 127.0.0.1 -p 54329 -U zerosweep zerosweep 2>/dev/null || true
 echo "[stack] postgres: accepting connections on 127.0.0.1:54329"
 
 # --- Redis -------------------------------------------------------------------
@@ -58,7 +58,7 @@ if [ ! -f smoke.env ]; then
   python3 - <<'PYEOF'
 import secrets
 lines = {
- "DATABASE_URL": "postgresql://dsrclone@127.0.0.1:54329/dsrclone?schema=public",
+ "DATABASE_URL": "postgresql://zerosweep@127.0.0.1:54329/zerosweep?schema=public",
  "REDIS_URL": "redis://127.0.0.1:6379",
  "JWT_SECRET": secrets.token_hex(32),
  "API_PORT": "4000",
@@ -72,7 +72,7 @@ with open("smoke.env", "w") as f:
 print("[stack] smoke.env generated (local JWT secret)")
 PYEOF
 fi
-export DATABASE_URL="postgresql://dsrclone@127.0.0.1:54329/dsrclone?schema=public"
+export DATABASE_URL="postgresql://zerosweep@127.0.0.1:54329/zerosweep?schema=public"
 
 # --- Migrate + seed ------------------------------------------------------------
 ( cd "$REPO/packages/database" && npx prisma migrate deploy >/dev/null ) \
@@ -91,7 +91,7 @@ export DATABASE_URL="postgresql://dsrclone@127.0.0.1:54329/dsrclone?schema=publi
 if [ -x "$STACK/minio/minio" ]; then
   if [ ! -f "$STACK/minio/minio.env" ]; then
     umask 077
-    printf 'MINIO_ROOT_USER=dsrclone-local\nMINIO_ROOT_PASSWORD=%s\n' \
+    printf 'MINIO_ROOT_USER=zerosweep-local\nMINIO_ROOT_PASSWORD=%s\n' \
       "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" > "$STACK/minio/minio.env"
   fi
   if ! curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then

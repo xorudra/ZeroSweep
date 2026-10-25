@@ -33,7 +33,7 @@ describe("NucleiAdapter (§3–§8)", () => {
     const adapter = new NucleiAdapter(new FixtureToolRunner({ nuclei: { stdout: NUCLEI_JSONL, version: "3.3.0" } }));
     const plan = await adapter.buildExecutionPlan(WEBAPP, { urls: ["https://example.com/"], requestsPerSecond: 150, concurrency: 25 });
     const args = plan.arguments.join(" ");
-    expect(args).toContain("/opt/dsrclone/nuclei-templates/governed");
+    expect(args).toContain("/opt/zerosweep/nuclei-templates/governed");
     expect(args).toContain("-exclude-templates");
     expect(args).toContain("sqli-error-based"); // excluded by id
     expect(args).toContain("default-login-check");

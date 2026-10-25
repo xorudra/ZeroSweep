@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { FIXTURE_BUILD_HASH, FIXTURE_SECRET_VALUE } from "@dsrclone/security-sdk";
+import { FIXTURE_BUILD_HASH, FIXTURE_SECRET_VALUE } from "@zerosweep/security-sdk";
 import { MobileSecurityService } from "./mobile-security.service";
 
 /**

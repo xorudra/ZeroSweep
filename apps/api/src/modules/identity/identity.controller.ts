@@ -11,7 +11,7 @@ import { SsoService } from "./sso/sso.service";
 import { ScimService } from "./scim/scim.service";
 import { KeysService } from "./keys/keys.service";
 import { GovernanceService } from "./governance/governance.service";
-import { GENERIC_RESET_MESSAGE, randomToken, sha256Hex } from "@dsrclone/security-sdk";
+import { GENERIC_RESET_MESSAGE, randomToken, sha256Hex } from "@zerosweep/security-sdk";
 import { Inject } from "@nestjs/common";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuthService } from "../auth/auth.service";

@@ -8,7 +8,7 @@ import {
   type PrGatePreset,
   type SanitizedFindingView,
   type ScannerFailureBehavior,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
@@ -157,7 +157,7 @@ export class QualityGatesService {
       kevListed: f.kevListed === true,
       isSecretFinding: (f.sourceDomain as string) === "CODE" && ((f.vulnClass as string) ?? "").toUpperCase().includes("SECRET"),
       policyViolation: false,
-      dsrcloneReference: `finding:${f.id}`,
+      zerosweepReference: `finding:${f.id}`,
     });
 
     let rules: GateRule[] = [];

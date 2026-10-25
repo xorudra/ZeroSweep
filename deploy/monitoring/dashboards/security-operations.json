@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-security-operations",
+  "uid": "zerosweep-security-operations",
   "title": "ZeroSweep \u2014 Security Operations",
-  "description": "Prompt 38 \u00a7122 security signals. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a7122 security signals. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dsrclone_authorization_denied_total[5m]))",
+          "expr": "sum(rate(zerosweep_authorization_denied_total[5m]))",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "sum(increase(dsrclone_scope_violation_total[5m]))",
+          "expr": "sum(increase(zerosweep_scope_violation_total[5m]))",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "sum(increase(dsrclone_break_glass_total[1h]))",
+          "expr": "sum(increase(zerosweep_break_glass_total[1h]))",
           "refId": "A"
         }
       ],
@@ -94,7 +94,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dsrclone_audit_write_failures_total[5m]))",
+          "expr": "sum(rate(zerosweep_audit_write_failures_total[5m]))",
           "refId": "A"
         }
       ],

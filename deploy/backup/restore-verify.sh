@@ -9,25 +9,25 @@
 #   5. TENANT ISOLATION after restore (§172): every tenant-scoped row's
 #      organization/workspace linkage resolves — no cross-tenant orphans.
 # Only when ALL checks pass does it print RESTORE_VERIFIED and (when
-# METRICS_PUSH_URL is set) push dsrclone_restore_verification_success=1.
+# METRICS_PUSH_URL is set) push zerosweep_restore_verification_success=1.
 set -eu
 
 DEST="${BACKUP_DEST:?BACKUP_DEST is required}"
 ADMIN_URL="${RESTORE_ADMIN_URL:?RESTORE_ADMIN_URL (admin connection to the ISOLATED restore host) is required}"
-SCRATCH_DB="dsrclone_restore_verify_$(date -u +%s)"
+SCRATCH_DB="zerosweep_restore_verify_$(date -u +%s)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"; psql "$ADMIN_URL" -qc "DROP DATABASE IF EXISTS $SCRATCH_DB" >/dev/null 2>&1 || true' EXIT
 
 echo "[restore-verify] locating newest backup in $DEST"
 case "$DEST" in
   s3://*)
-    FILE="$(aws s3 ls "$DEST/" | awk '{print $4}' | grep -E 'dsrclone-.*\.dump(\.age)?$' | sort | tail -1)"
+    FILE="$(aws s3 ls "$DEST/" | awk '{print $4}' | grep -E 'zerosweep-.*\.dump(\.age)?$' | sort | tail -1)"
     [ -n "$FILE" ] || { echo "[restore-verify] FATAL: no backup found" >&2; exit 1; }
     aws s3 cp "$DEST/$FILE" "$WORK/$FILE" --only-show-errors
     aws s3 cp "$DEST/${FILE%.age}.sha256" "$WORK/${FILE%.age}.sha256" --only-show-errors || true
     ;;
   *)
-    FILE="$(ls "$DEST" | grep -E 'dsrclone-.*\.dump(\.age)?$' | sort | tail -1)"
+    FILE="$(ls "$DEST" | grep -E 'zerosweep-.*\.dump(\.age)?$' | sort | tail -1)"
     [ -n "$FILE" ] || { echo "[restore-verify] FATAL: no backup found in $DEST" >&2; exit 1; }
     cp "$DEST/$FILE" "$WORK/"
     cp "$DEST/${FILE%.age}.sha256" "$WORK/" 2>/dev/null || true
@@ -68,7 +68,7 @@ ORPHANS2="$(psql "$RESTORE_URL" -Atc "SELECT count(*) FROM \"Membership\" m LEFT
 [ "$ORPHANS2" = "0" ] || { echo "[restore-verify] FATAL: $ORPHANS2 memberships have no organization after restore" >&2; exit 1; }
 
 if [ -n "${METRICS_PUSH_URL:-}" ]; then
-  printf 'dsrclone_restore_verification_success 1\ndsrclone_backup_last_success_timestamp %s\n' "$(date -u +%s)" \
+  printf 'zerosweep_restore_verification_success 1\nzerosweep_backup_last_success_timestamp %s\n' "$(date -u +%s)" \
     | curl -fsS --data-binary @- "$METRICS_PUSH_URL" >/dev/null || true
 fi
 echo "RESTORE_VERIFIED backup=$FILE scratch_db=$SCRATCH_DB tenant_isolation=ok"

@@ -74,7 +74,7 @@ const CAPTURE_INPUTS = [
 
 export class KismetAdapter extends WirelessAdapterBase {
   readonly executable = "kismet";
-  readonly containerImage = "dsrclone/kismet:local";
+  readonly containerImage = "zerosweep/kismet:local";
   readonly versionArgs = ["--version"];
   readonly metadata: ToolMetadata = wirelessMeta({
     id: "adapter-kismet", slug: "kismet", name: "Kismet",
@@ -103,7 +103,7 @@ export class KismetAdapter extends WirelessAdapterBase {
 
 export class TsharkWirelessAdapter extends WirelessAdapterBase {
   readonly executable = "tshark";
-  readonly containerImage = "dsrclone/tshark:local";
+  readonly containerImage = "zerosweep/tshark:local";
   readonly versionArgs = ["--version"];
   readonly metadata: ToolMetadata = wirelessMeta({
     id: "adapter-tshark-wireless", slug: "tshark-wireless", name: "tshark (wireless)",
@@ -131,7 +131,7 @@ export class TsharkWirelessAdapter extends WirelessAdapterBase {
 
 export class HcxToolsAdapter extends WirelessAdapterBase {
   readonly executable = "hcxpcapngtool";
-  readonly containerImage = "dsrclone/hcxtools:local";
+  readonly containerImage = "zerosweep/hcxtools:local";
   readonly versionArgs = ["--version"];
   readonly metadata: ToolMetadata = wirelessMeta({
     id: "adapter-hcxtools", slug: "hcxtools", name: "hcxtools",
@@ -161,7 +161,7 @@ export class HcxToolsAdapter extends WirelessAdapterBase {
 
 export class AircrackMetadataAdapter extends WirelessAdapterBase {
   readonly executable = "aircrack-ng";
-  readonly containerImage = "dsrclone/aircrack-ng:local";
+  readonly containerImage = "zerosweep/aircrack-ng:local";
   readonly versionArgs = ["--version"];
   readonly metadata: ToolMetadata = wirelessMeta({
     id: "adapter-aircrack-ng", slug: "aircrack-ng", name: "Aircrack-ng (metadata)",

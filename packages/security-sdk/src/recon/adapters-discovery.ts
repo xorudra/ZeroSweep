@@ -82,7 +82,7 @@ export class AmassAdapter extends ReconAdapterBase {
 
 export class AssetfinderAdapter extends ReconAdapterBase {
   readonly executable = "assetfinder";
-  readonly containerImage = "dsrclone/assetfinder"; // platform image built from the official release (§3)
+  readonly containerImage = "zerosweep/assetfinder"; // platform image built from the official release (§3)
   readonly versionArgs: string[] = [];
   protected readonly parser: ReconParser = new AssetfinderParser();
   readonly metadata = meta({
@@ -102,7 +102,7 @@ export class AssetfinderAdapter extends ReconAdapterBase {
 
 export class FindomainAdapter extends ReconAdapterBase {
   readonly executable = "findomain";
-  readonly containerImage = "dsrclone/findomain"; // platform image built from the official release (§3)
+  readonly containerImage = "zerosweep/findomain"; // platform image built from the official release (§3)
   readonly versionArgs = ["--version"];
   protected readonly parser: ReconParser = new FindomainParser();
   readonly metadata = meta({

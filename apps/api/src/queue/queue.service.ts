@@ -1,11 +1,11 @@
 import { Injectable, OnModuleDestroy } from "@nestjs/common";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
-import { loadEnv, QUEUES } from "@dsrclone/config";
-import { createLogger } from "@dsrclone/logger";
-import { operatorRetryAllowed } from "@dsrclone/security-sdk";
+import { loadEnv, QUEUES } from "@zerosweep/config";
+import { createLogger } from "@zerosweep/logger";
+import { operatorRetryAllowed } from "@zerosweep/security-sdk";
 
-const logger = createLogger("dsrclone-api");
+const logger = createLogger("zerosweep-api");
 
 /**
  * Queue access for job CREATION only. The API never executes tools; workers

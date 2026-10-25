@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, NotFoundException, Param, Post, Query, Sse } from "@nestjs/common";
 import { filter, map, type Observable } from "rxjs";
-import { paginationSchema } from "@dsrclone/validation";
+import { paginationSchema } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";

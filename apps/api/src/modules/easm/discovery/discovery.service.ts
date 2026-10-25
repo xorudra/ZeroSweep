@@ -6,7 +6,7 @@ import {
   normalizeHistoricalUrls, normalizeIp, normalizeTechnologyName, normalizeUrl, resolveOwnership,
   resolveTechnologies, sensitiveServiceClass, type DnsRecord, type EasmSnapshot,
   type OwnershipEvidenceInput,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { AlertService } from "../../soc/alerts/alert.service";

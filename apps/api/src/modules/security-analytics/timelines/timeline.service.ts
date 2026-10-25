@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { sha256Hex } from "@dsrclone/security-sdk";
+import { sha256Hex } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { deriveExposure } from "../../continuous-security/snapshots/snapshot.service";
 import { AnalyticsStoreService } from "../storage/analytics-store.service";

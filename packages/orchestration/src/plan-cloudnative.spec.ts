@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   cloudNativeHealthBySlug, createCloudNativeAdapters, createCodeAdapters, codeHealthBySlug,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 
 /**

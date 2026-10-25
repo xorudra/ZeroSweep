@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 import { PageHeader } from "@/components/Shell";
 
 export default function SettingsPage() {

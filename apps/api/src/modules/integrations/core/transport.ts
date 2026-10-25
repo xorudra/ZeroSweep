@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { resolveTenantEnvSecret } from "@dsrclone/config";
-import { UnconfiguredIntegrationTransport, type IntegrationTransport } from "@dsrclone/security-sdk";
+import { resolveTenantEnvSecret } from "@zerosweep/config";
+import { UnconfiguredIntegrationTransport, type IntegrationTransport } from "@zerosweep/security-sdk";
 
 /**
  * Transport factory seam. The production implementation ALWAYS

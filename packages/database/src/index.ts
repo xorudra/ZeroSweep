@@ -15,16 +15,16 @@ export function boundedDatasourceUrl(raw: string | undefined, limitRaw: string |
 }
 
 /** Single reusable Prisma client (global-cached to survive dev hot reloads). */
-const globalForPrisma = globalThis as unknown as { dsrclonePrisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { zerosweepPrisma?: PrismaClient };
 
 const datasourceUrl = boundedDatasourceUrl(process.env.DATABASE_URL, process.env.DATABASE_CONNECTION_LIMIT);
 export const prisma: PrismaClient =
-  globalForPrisma.dsrclonePrisma ??
+  globalForPrisma.zerosweepPrisma ??
   new PrismaClient({
     ...(datasourceUrl ? { datasources: { db: { url: datasourceUrl } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.dsrclonePrisma = prisma;
+if (process.env.NODE_ENV !== "production") globalForPrisma.zerosweepPrisma = prisma;
 
 export * from "@prisma/client";

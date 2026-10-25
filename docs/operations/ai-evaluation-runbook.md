@@ -6,7 +6,7 @@
   Runs the SDK red-team suite (12 cases) plus API-level cases
   (live-snapshot plan validity, data-layer tenant isolation) and
   persists an AiEvaluationRun (suite V2_REDTEAM).
-- SDK only: `runAiRedTeamSuite()` from @dsrclone/security-sdk.
+- SDK only: `runAiRedTeamSuite()` from @zerosweep/security-sdk.
 
 ## Interpreting failures
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface Regression {

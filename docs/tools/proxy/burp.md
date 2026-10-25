@@ -21,16 +21,16 @@ otherwise. Two real channels are used:
 2. **The ZeroSweep bridge contract** — the administrator runs a small
    bridge **inside their licensed Burp environment** (a Montoya
    extension, or a scheduled export job serving the files) exposing:
-   - `GET /dsrclone/health` →
+   - `GET /zerosweep/health` →
      `{ "data": { "product": "burp", "version": "2025.x", "licenseValid": true } }`
      (license state is read from the response, never assumed)
-   - `GET /dsrclone/issues-export` → Burp XML issue export
-   - `GET /dsrclone/site-map` →
+   - `GET /zerosweep/issues-export` → Burp XML issue export
+   - `GET /zerosweep/site-map` →
      `{ "items": [ { "url": "...", "method": "GET", "statusCode": 200 } ] }`
 
    Register the bridge exactly like any other instance: the
    `endpointReference` name resolves in server configuration
-   (`DSRCLONE_SCANNER_ENDPOINTS`); any credential is a reference resolved
+   (`ZEROSWEEP_SCANNER_ENDPOINTS`); any credential is a reference resolved
    in the worker boundary.
 
 ## Priorities (per spec §10)

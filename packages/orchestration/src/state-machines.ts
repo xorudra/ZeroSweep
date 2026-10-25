@@ -1,6 +1,6 @@
 /**
  * Stage and tool-execution state machines (Prompt 4 §18–§19).
- * The scan state machine lives in @dsrclone/types (SCAN_TRANSITIONS); these
+ * The scan state machine lives in @zerosweep/types (SCAN_TRANSITIONS); these
  * two complete the trio the orchestration engine enforces everywhere.
  */
 

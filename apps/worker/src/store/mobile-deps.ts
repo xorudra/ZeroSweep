@@ -13,8 +13,8 @@
  * step (build-side), exactly like the P14 provider and P15 directory
  * transports.
  */
-import { prisma } from "@dsrclone/database";
-import type { MobileApplicationRecord, MobileBuildRecord, MobileConnectorDeps } from "@dsrclone/security-sdk";
+import { prisma } from "@zerosweep/database";
+import type { MobileApplicationRecord, MobileBuildRecord, MobileConnectorDeps } from "@zerosweep/security-sdk";
 
 function toApplicationRecord(app: {
   id: string; workspaceId: string; name: string; platform: string;

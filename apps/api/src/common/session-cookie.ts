@@ -1,4 +1,4 @@
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 import type { Request, Response } from "express";
 
 /**
@@ -13,7 +13,7 @@ import type { Request, Response } from "express";
  * by hand — the API has no cookie-parser dependency and needs exactly
  * one cookie.
  */
-export const SESSION_COOKIE = "dsrclone_session";
+export const SESSION_COOKIE = "zerosweep_session";
 
 /** Transport lifetime only — the server enforces the real (org-policy)
  *  session windows on every validation; 12h mirrors the default absolute

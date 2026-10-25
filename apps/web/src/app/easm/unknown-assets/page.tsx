@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { EmptyState } from "@dsrclone/ui";
+import { EmptyState } from "@zerosweep/ui";
 
 /**
  * Unknown/shadow asset review queue (Prompt 29 §97). Each item pairs

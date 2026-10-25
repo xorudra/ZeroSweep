@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { workerStatusFromHeartbeat, type WorkerStatus } from "@dsrclone/orchestration";
+import { workerStatusFromHeartbeat, type WorkerStatus } from "@zerosweep/orchestration";
 
 /**
  * Worker registration + heartbeat (Prompt 4 §21–§23). The worker registers a
@@ -31,13 +31,13 @@ export const WORKER_TYPES = ["GENERAL_WEB", "NETWORK_EXTERNAL", "NETWORK_INTERNA
 export type WorkerTypeName = (typeof WORKER_TYPES)[number];
 
 export function workerTypeFromEnv(env: NodeJS.ProcessEnv = process.env): WorkerTypeName {
-  const raw = (env.DSRCLONE_WORKER_TYPE ?? "GENERAL_WEB").toUpperCase();
+  const raw = (env.ZEROSWEEP_WORKER_TYPE ?? "GENERAL_WEB").toUpperCase();
   return (WORKER_TYPES as readonly string[]).includes(raw) ? (raw as WorkerTypeName) : "GENERAL_WEB";
 }
 
 export function privilegedCapabilitiesFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
   const type = workerTypeFromEnv(env);
-  const declared = (env.DSRCLONE_WORKER_CAPABILITIES ?? "")
+  const declared = (env.ZEROSWEEP_WORKER_CAPABILITIES ?? "")
     .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
   const allowed = new Set<string>();
   // Layer-2 access exists only on internal workers; packet capture only

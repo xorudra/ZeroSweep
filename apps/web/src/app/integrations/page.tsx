@@ -2,7 +2,7 @@
 
 import { PageHeader } from "@/components/Shell";
 import { ResourceList, Row } from "@/components/ResourceList";
-import { Badge } from "@dsrclone/ui";
+import { Badge } from "@zerosweep/ui";
 
 export default function Page() {
   return (

@@ -5,7 +5,7 @@ from the Prompt 17 mobile adapter (one dual-mode adapter owns the
 `ghidra` slug; mobile configurations delegate unchanged).
 
 - Plan: `BinarySandbox/BinaryInventory` project, `-import <artifact
-  reference>`, `-scriptPath /opt/dsrclone/ghidra-scripts`,
+  reference>`, `-scriptPath /opt/zerosweep/ghidra-scripts`,
   `-postScript BinarySecurityInventory.py`, `-deleteProject`. The
   script is pinned by the platform from the administrator-approved
   set — script selection is never configuration, and user-supplied

@@ -15,7 +15,7 @@
  */
 import {
   BINARY_SLUGS, binaryFindingFingerprint, type BinaryFindingType,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type { ProcessedFinding } from "./result-processor";
 
 export interface BinaryScanIdentity {

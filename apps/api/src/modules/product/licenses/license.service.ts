@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { evaluateLicense, parseLicenseDocument, type LicenseEvaluation } from "@dsrclone/security-sdk";
+import { evaluateLicense, parseLicenseDocument, type LicenseEvaluation } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { ProductConfigService } from "../product-config.service";

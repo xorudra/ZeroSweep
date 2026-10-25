@@ -1,4 +1,4 @@
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 import { canonicalizeCidr, ipInCidr, isCidr, isIpLiteral, parseIp } from "./cidr";
 import { evaluateDestination } from "./cidr";
 

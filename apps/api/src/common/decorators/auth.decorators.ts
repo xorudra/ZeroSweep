@@ -1,9 +1,9 @@
 import { createParamDecorator, SetMetadata, type ExecutionContext } from "@nestjs/common";
-import type { Role } from "@dsrclone/types";
+import type { Role } from "@zerosweep/types";
 
-export const ROLES_KEY = "dsrclone:roles";
+export const ROLES_KEY = "zerosweep:roles";
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
-export const IS_PUBLIC_KEY = "dsrclone:public";
+export const IS_PUBLIC_KEY = "zerosweep:public";
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
 export interface RequestUser {

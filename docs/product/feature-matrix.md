@@ -1,7 +1,7 @@
 # Product Feature Matrix (Prompt 40 §274/§275)
 
 Authoritative source: the Product Feature Registry in
-`@dsrclone/security-sdk` (`PRODUCT_FEATURE_REGISTRY`) and each plan
+`@zerosweep/security-sdk` (`PRODUCT_FEATURE_REGISTRY`) and each plan
 version's `PlanEntitlement` rows. This matrix describes the EXAMPLE
 plans (§256); deployments may define their own plans — entitlements
 are data, not code.

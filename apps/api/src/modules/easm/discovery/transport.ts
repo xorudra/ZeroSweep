@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { EasmSourceKind } from "@dsrclone/security-sdk";
+import type { EasmSourceKind } from "@zerosweep/security-sdk";
 
 /**
  * Discovery transport seam (Prompt 29 §12/§36/§130). A transport

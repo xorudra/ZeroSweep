@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { groupCount, sha256Hex, topN } from "@dsrclone/security-sdk";
+import { groupCount, sha256Hex, topN } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { deriveExposure } from "../../continuous-security/snapshots/snapshot.service";
 import { RESOLVED_LIFECYCLES } from "../helpers";

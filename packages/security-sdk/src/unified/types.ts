@@ -1,4 +1,4 @@
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 
 /**
  * Unified vulnerability-management vocabulary (Prompt 20 §5–§11).

@@ -8,7 +8,7 @@
  * detection: compare inventory + worker version across environments).
  * SBOMs and signatures are produced in CI (syft / cosign); when those tools
  * are absent the manifest says so instead of fabricating references.
- * Usage: DSRCLONE_VERSION=25.0.0 node deploy/scripts/release-manifest.mjs
+ * Usage: ZEROSWEEP_VERSION=25.0.0 node deploy/scripts/release-manifest.mjs
  */
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -29,14 +29,14 @@ const heartbeat = readFileSync(join(root, "apps/worker/src/heartbeat/heartbeat.t
 const workerVersion = /WORKER_VERSION = "([^"]+)"/.exec(heartbeat)?.[1] ?? null;
 
 const images = ["api", "web", "ai", "worker", "scheduler", "migrate"].map((name) => ({
-  name: `dsrclone-${name}`,
+  name: `zerosweep-${name}`,
   reference: process.env[`IMAGE_REF_${name.toUpperCase()}`] ?? null,
   digest: process.env[`IMAGE_DIGEST_${name.toUpperCase()}`] ?? null,
 }));
 
 const manifest = {
   product: "ZeroSweep",
-  version: process.env.DSRCLONE_VERSION ?? null,
+  version: process.env.ZEROSWEEP_VERSION ?? null,
   gitCommit: git(["rev-parse", "HEAD"]),
   gitBranch: git(["rev-parse", "--abbrev-ref", "HEAD"]),
   builtAt: new Date().toISOString(),

@@ -17,7 +17,7 @@ import {
   type HostResolver,
   type SanitizedFindingView,
   type SecurityEventEnvelope,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { request as httpsRequest } from "node:https";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
@@ -208,14 +208,14 @@ export class OutboxProcessorService {
     const body = JSON.stringify(envelope);
     const headers: Record<string, string> = {
       "content-type": "application/json",
-      "x-dsrclone-event": envelope.eventType,
-      "x-dsrclone-delivery": delivery.id as string,
-      "x-dsrclone-event-id": envelope.eventId,
+      "x-zerosweep-event": envelope.eventType,
+      "x-zerosweep-delivery": delivery.id as string,
+      "x-zerosweep-event-id": envelope.eventId,
     };
     if (sub.secretReference) {
       const secret = this.secrets.resolve(sub.secretReference as string);
       if (!secret) return this.finish(delivery, "NOT_CONFIGURED", { category: "SIGNING_SECRET_UNRESOLVED" }, now);
-      headers["x-dsrclone-signature"] = signOutboundPayload(secret, body);
+      headers["x-zerosweep-signature"] = signOutboundPayload(secret, body);
     }
     const breaker = this.breakerFor(`webhook:${sub.id}`);
     if (!breaker.canExecute(now.getTime())) {

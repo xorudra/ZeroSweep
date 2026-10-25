@@ -2,8 +2,8 @@ import {
   BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { deleteAccountSchema } from "@dsrclone/validation";
-import { GENERIC_AUTH_ERROR, randomToken } from "@dsrclone/security-sdk";
+import { deleteAccountSchema } from "@zerosweep/validation";
+import { GENERIC_AUTH_ERROR, randomToken } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

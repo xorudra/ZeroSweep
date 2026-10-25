@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   createBinaryAdapters, BINARY_SLUGS,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PROFILE_TEMPLATES } from "./profiles";
 import { buildScanPlan } from "./plan";
 

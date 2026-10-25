@@ -58,7 +58,7 @@ import {
   TLS_FINDING,
   XSS_FINDING,
 } from "./fixtures";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 const scopeRules = FIXTURE_SCOPE_RULES as ScopeRules;
 const NOW = new Date("2026-10-07T12:00:00.000Z");

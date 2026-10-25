@@ -7,8 +7,8 @@ WEB_PORT="${WEB_PORT:-3000}"
 echo "API    : $(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${API_PORT}/api/v1/health" || echo unreachable)"
 echo "AI     : $(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${AI_PORT}/health" || echo unreachable)"
 echo "Web    : $(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${WEB_PORT}/" || echo unreachable)"
-if [ -f "${WORKER_HEARTBEAT_FILE:-/tmp/dsrclone-worker-heartbeat.json}" ]; then
-  echo "Worker : heartbeat present (${WORKER_HEARTBEAT_FILE:-/tmp/dsrclone-worker-heartbeat.json})"
+if [ -f "${WORKER_HEARTBEAT_FILE:-/tmp/zerosweep-worker-heartbeat.json}" ]; then
+  echo "Worker : heartbeat present (${WORKER_HEARTBEAT_FILE:-/tmp/zerosweep-worker-heartbeat.json})"
 else
   echo "Worker : no heartbeat file (worker not running, or WORKER_HEARTBEAT_FILE differs)"
 fi

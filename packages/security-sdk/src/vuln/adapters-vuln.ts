@@ -155,7 +155,7 @@ export class NucleiAdapter extends VulnAdapterBase {
 
 export class NiktoAdapter extends VulnAdapterBase {
   readonly executable = "nikto";
-  readonly containerImage = "dsrclone/nikto"; // platform image built from the official release
+  readonly containerImage = "zerosweep/nikto"; // platform image built from the official release
   readonly versionArgs = ["-Version"];
   protected readonly parser: VulnParser = new NiktoParser();
   readonly metadata = meta({
@@ -217,7 +217,7 @@ export class TestsslAdapter extends VulnAdapterBase {
 
 export class SslyzeAdapter extends VulnAdapterBase {
   readonly executable = "sslyze";
-  readonly containerImage = "dsrclone/sslyze"; // platform image built from the official release
+  readonly containerImage = "zerosweep/sslyze"; // platform image built from the official release
   readonly versionArgs = ["--version"];
   protected readonly parser: VulnParser = new SslyzeParser();
   readonly metadata = meta({

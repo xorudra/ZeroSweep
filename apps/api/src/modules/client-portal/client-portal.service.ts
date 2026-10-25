@@ -4,7 +4,7 @@ import {
   projectFindingForClient, clientNotificationText, renderReport, evaluateShareLink, hashShareToken,
   evaluateRemediationTransition, toV2LifecycleState, REMEDIATION_TRANSITIONS,
   type ReportSnapshotDocument,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 
 /** Shortest legal path through the Prompt 31 case machine (BFS over
  *  REMEDIATION_TRANSITIONS); null when the target is unreachable. */

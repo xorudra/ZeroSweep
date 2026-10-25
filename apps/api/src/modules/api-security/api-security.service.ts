@@ -4,8 +4,8 @@ import {
   OpenApiImporter, PostmanCollectionImporter, ScopeMatcher, SpecImportError,
   isSecretLikeKey, parsePostmanEnvironment,
   type ApiImportResult,
-} from "@dsrclone/security-sdk";
-import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import { scopeRulesSchema, type ScopeRules } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { assertTargetInOrg, resolveWorkspace } from "../../common/tenant";

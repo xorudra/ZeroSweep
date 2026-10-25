@@ -1255,7 +1255,7 @@ model Scope {
   workspaceId String
   targetId    String
   name        String
-  // Structured rules only (validated by @dsrclone/validation): includeHosts,
+  // Structured rules only (validated by @zerosweep/validation): includeHosts,
   // excludeHosts, includeCidrs, allowedPorts, allowedPaths, excludedPaths.
   rules       Json
   target      Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
@@ -4783,7 +4783,7 @@ model MobileTestDevice {
   // session (§74/§151); the platform never connects to arbitrary
   // devices.
   deviceType          String                 @default("ANDROID_EMULATOR") // ANDROID_EMULATOR | ANDROID_TEST_DEVICE | IOS_SIMULATOR | IOS_TEST_DEVICE
-  ownership           String                 @default("DSRCLONE_MANAGED") // DSRCLONE_MANAGED | ORGANIZATION_OWNED
+  ownership           String                 @default("ZEROSWEEP_MANAGED") // ZEROSWEEP_MANAGED | ORGANIZATION_OWNED
   authorizationStatus String                 @default("NOT_AUTHORIZED") // AUTHORIZED | NOT_AUTHORIZED | REVOKED
   environment         String                 @default("LAB") // LAB | TEST | UNKNOWN
   osVersion           String?
@@ -5805,7 +5805,7 @@ model ExternalFindingReference {
   // across the boundary; an inbound record whose hash matches was
   // originated here and is skipped, never re-applied.
   contentHash       String?
-  origin            String   @default("EXTERNAL") // EXTERNAL | DSRCLONE
+  origin            String   @default("EXTERNAL") // EXTERNAL | ZEROSWEEP
   syncVersion       Int      @default(1)
   lastSyncedAt      DateTime @default(now())
   finding           Finding? @relation(fields: [findingId], references: [id], onDelete: SetNull)

@@ -38,14 +38,14 @@ export interface NucleiTemplateMeta {
 /** Frozen snapshot reference (§6): a ScanPlan records this; templates are
  *  never updated mid-assessment. */
 export const NUCLEI_TEMPLATE_SNAPSHOT = {
-  collection: "dsrclone-governed",
+  collection: "zerosweep-governed",
   version: "2026.10.1",
   updatedAt: "2026-10-01T00:00:00.000Z",
 } as const;
 
 /** The governed template collection path inside the tool container. Plans
  *  reference the COLLECTION, plus explicit exclusions — never user paths. */
-export const GOVERNED_TEMPLATE_DIR = "/opt/dsrclone/nuclei-templates/governed";
+export const GOVERNED_TEMPLATE_DIR = "/opt/zerosweep/nuclei-templates/governed";
 
 const T = (partial: Partial<NucleiTemplateMeta> & Pick<NucleiTemplateMeta, "id" | "name" | "severity" | "classification" | "vulnClass">): NucleiTemplateMeta => ({
   tags: [], references: [], source: "governed", ...partial,

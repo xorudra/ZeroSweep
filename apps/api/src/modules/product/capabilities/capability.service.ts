@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   PRODUCT_FEATURE_REGISTRY, resolveCapability, resolveCommercialToolStatus,
   COMMERCIAL_TOOLS, type CapabilityResolution, type FeatureKey,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { EntitlementService } from "../entitlements/entitlement.service";
 import { PlatformControlService } from "../../platform-ops/platform-control.service";

@@ -183,7 +183,7 @@ export class GitHubConnector extends BaseConnector implements SourceControlProvi
           conclusion: check.status === "PASS" ? "success" : check.status === "FAIL" ? "failure" : check.status === "WARN" ? "neutral" : "skipped",
           output: {
             title: `ZeroSweep security gate: ${check.status}`,
-            summary: `${check.summary}\nNew: ${check.counts.newTotal} (critical ${check.counts.newCritical}, high ${check.counts.newHigh}) · Resolved: ${check.counts.resolved} · ${check.dsrcloneReference}`,
+            summary: `${check.summary}\nNew: ${check.counts.newTotal} (critical ${check.counts.newCritical}, high ${check.counts.newHigh}) · Resolved: ${check.counts.resolved} · ${check.zerosweepReference}`,
           },
         },
       });
@@ -271,8 +271,8 @@ export class GitLabConnector extends BaseConnector implements SourceControlProvi
         path: `/api/v4/projects/${check.externalRepoId}/statuses/${check.commitSha}`,
         body: {
           state: check.status === "PASS" ? "success" : check.status === "FAIL" ? "failed" : "canceled",
-          name: "dsrclone-security-gate",
-          description: `${check.summary} · New: ${check.counts.newTotal} · ${check.dsrcloneReference}`.slice(0, 255),
+          name: "zerosweep-security-gate",
+          description: `${check.summary} · New: ${check.counts.newTotal} · ${check.zerosweepReference}`.slice(0, 255),
         },
       });
       return { published: res.status >= 200 && res.status < 300, detail: `GitLab status publish returned HTTP ${res.status}` };
@@ -359,10 +359,10 @@ export class BitbucketConnector extends BaseConnector implements SourceControlPr
         method: "POST",
         path: `/2.0/repositories/${workspace}/${check.externalRepoId}/commit/${check.commitSha}/statuses/build`,
         body: {
-          key: "dsrclone-security-gate",
+          key: "zerosweep-security-gate",
           state: check.status === "PASS" ? "SUCCESSFUL" : check.status === "FAIL" ? "FAILED" : "STOPPED",
           name: "ZeroSweep Security Gate",
-          description: `${check.summary} · New: ${check.counts.newTotal} · ${check.dsrcloneReference}`.slice(0, 255),
+          description: `${check.summary} · New: ${check.counts.newTotal} · ${check.zerosweepReference}`.slice(0, 255),
         },
       });
       return { published: res.status >= 200 && res.status < 300, detail: `Bitbucket build-status publish returned HTTP ${res.status}` };

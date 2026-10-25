@@ -8,7 +8,7 @@ import {
   normalizeProviderInventory,
   type CloudAccountRecord, type CloudConnectorDeps, type CloudProvider,
   type FixtureResponse, type RawCloudInventory,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { RetestRunner, type RetestStore } from "./executors/retest-runner";

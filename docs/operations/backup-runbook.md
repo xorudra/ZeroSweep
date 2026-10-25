@@ -11,6 +11,6 @@
 - Encryption: set `PLATFORM_BACKUP_PASSPHRASE_FILE` to a
   secret-mounted file; artifacts are AES-256 encrypted before the
   checksum is taken (§166).
-- Verify weekly: the `DsrcloneBackupStale` alert fires if no
+- Verify weekly: the `ZerosweepBackupStale` alert fires if no
   successful backup lands in 25h. A backup is valid only after a
   restore test — see the restore runbook.

@@ -76,9 +76,9 @@ export class SecretFingerprintService {
 
   fingerprint(secretValue: string): string {
     if (this.key) {
-      return createHmac("sha256", this.key).update("dsrclone-secret-v1\0").update(secretValue).digest("hex");
+      return createHmac("sha256", this.key).update("zerosweep-secret-v1\0").update(secretValue).digest("hex");
     }
-    return createHash("sha256").update("dsrclone-secret-v1\0").update(secretValue).digest("hex");
+    return createHash("sha256").update("zerosweep-secret-v1\0").update(secretValue).digest("hex");
   }
 
   /** Constant-shape equality for dedupe checks without storing values. */

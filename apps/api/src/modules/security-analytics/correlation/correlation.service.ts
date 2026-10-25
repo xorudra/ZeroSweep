@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   BUILTIN_CORRELATION_RULES, evaluateCorrelation, type CorrelationRuleDef, type CorrelationSubject,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { deriveExposure } from "../../continuous-security/snapshots/snapshot.service";
 

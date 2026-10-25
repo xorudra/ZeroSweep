@@ -1,5 +1,5 @@
 {
-  "name": "@dsrclone/worker",
+  "name": "@zerosweep/worker",
   "version": "1.0.0",
   "private": true,
   "main": "dist/index.js",
@@ -12,15 +12,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dsrclone/config": "workspace:*",
-    "@dsrclone/logger": "workspace:*",
-    "@dsrclone/security-sdk": "workspace:*",
+    "@zerosweep/config": "workspace:*",
+    "@zerosweep/logger": "workspace:*",
+    "@zerosweep/security-sdk": "workspace:*",
     "bullmq": "^5.34.0",
     "ioredis": "^5.4.2",
-    "@dsrclone/database": "workspace:*",
-    "@dsrclone/orchestration": "workspace:*",
-    "@dsrclone/types": "workspace:*",
-    "@dsrclone/validation": "workspace:*"
+    "@zerosweep/database": "workspace:*",
+    "@zerosweep/orchestration": "workspace:*",
+    "@zerosweep/types": "workspace:*",
+    "@zerosweep/validation": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

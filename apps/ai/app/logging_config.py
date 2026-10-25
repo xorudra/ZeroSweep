@@ -13,13 +13,13 @@ class JsonFormatter(logging.Formatter):
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
-            "service": "dsrclone-ai",
+            "service": "zerosweep-ai",
             "message": record.getMessage(),
         }
         return json.dumps(entry)
 
 
-def get_logger(name: str = "dsrclone-ai") -> logging.Logger:
+def get_logger(name: str = "zerosweep-ai") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)

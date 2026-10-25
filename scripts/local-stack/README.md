@@ -8,9 +8,9 @@ the platform end-to-end (Prompt 25's mandatory live-stack verification).
 
 - **PostgreSQL 16.2** via the `pgserver` pip package's bundled binaries,
   run as the unprivileged `nobody` user (PostgreSQL refuses to run as
-  root) on port **54329**, data under `~/workspace/dsrclone-local-stack/pgdata`.
+  root) on port **54329**, data under `~/workspace/zerosweep-local-stack/pgdata`.
 - **Redis 7.2.5** built from the official source tarball, on port 6379,
-  AOF enabled, data under `~/workspace/dsrclone-local-stack/redisdata`.
+  AOF enabled, data under `~/workspace/zerosweep-local-stack/redisdata`.
 - Applies **all Prisma migrations** (`prisma migrate deploy`) and the
   **seed**, then boots API (4000), worker, scheduler and AI (8000).
 - MinIO is the only component not provisioned here: its release binary
@@ -29,7 +29,7 @@ bash scripts/local-stack/resilience.sh     # executable resilience subset
 bash scripts/local-stack/stop.sh           # stop app processes + services
 ```
 
-State lives OUTSIDE the repo in `~/workspace/dsrclone-local-stack/`
+State lives OUTSIDE the repo in `~/workspace/zerosweep-local-stack/`
 (venv, pgdata, redis build/data, logs, smoke.env with a locally
 generated JWT secret). Nothing there is committed.
 

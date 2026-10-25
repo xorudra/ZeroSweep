@@ -3,12 +3,12 @@ import {
   API_SLUGS, CODE_SLUGS, INERT_CONNECTOR_DEPS, INERT_KUBERNETES_DEPS, LocalEchoAdapter, MockSecurityAdapter, NETWORK_SLUGS, PROXY_SLUGS, RECON_SLUGS, ToolRegistry, VULN_SCANNER_SLUGS, VULN_SLUGS, WEB_DISCOVERY_SLUGS,
   apiHealthBySlug, binaryHealthRecord, cloudNativeHealthBySlug, cloudSecHealthBySlug, codeHealthBySlug, directoryHealthRecord, mobileHealthBySlug, networkHealthBySlug, proxyHealthBySlug, reconHealthBySlug, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerWebDiscoveryAdapters, vulnHealthBySlug,
   type ScannerInstanceRecord,
-} from "@dsrclone/security-sdk";
-import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
-import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
+} from "@zerosweep/security-sdk";
+import { scopeRulesSchema, type ScopeRules } from "@zerosweep/validation";
+import { assertScanTransition, type ScanStatus } from "@zerosweep/types";
 import {
   buildScanPlan, evaluateAuthorizationGate, makeEvent, type ScanPlan,
-} from "@dsrclone/orchestration";
+} from "@zerosweep/orchestration";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

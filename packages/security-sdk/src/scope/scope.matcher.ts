@@ -1,4 +1,4 @@
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 /**
  * Reusable scope matcher. Wildcard host rules: "*.example.com" matches any

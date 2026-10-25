@@ -126,7 +126,7 @@ export interface PublishCheckInput {
   status: "PASS" | "FAIL" | "WARN" | "ERROR" | "SKIPPED";
   summary: string;
   counts: { newCritical: number; newHigh: number; newTotal: number; resolved: number };
-  dsrcloneReference: string;
+  zerosweepReference: string;
 }
 
 export interface WebhookVerification {
@@ -224,5 +224,5 @@ export interface SanitizedFindingView {
   assetReference?: string;
   remediation?: string;
   riskExplanation?: string;
-  dsrcloneReference: string;
+  zerosweepReference: string;
 }

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { api, apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Asset detail (Prompt 5 §44): canonical hostname, addresses, scope verdict,

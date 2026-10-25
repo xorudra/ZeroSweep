@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { computeRemediationMetrics, type CaseTimelineFacts } from "@dsrclone/security-sdk";
+import { computeRemediationMetrics, type CaseTimelineFacts } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { CaseRow } from "./case-state.service";
 

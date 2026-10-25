@@ -1,11 +1,11 @@
 import { ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { loginSchema, registerSchema } from "@dsrclone/validation";
+import { loginSchema, registerSchema } from "@zerosweep/validation";
 import {
   GENERIC_AUTH_ERROR, isPrivilegedOrgRole, normalizeEmail, randomToken, sha256Hex,
-} from "@dsrclone/security-sdk";
-import { isPlatformAdminEmail, loadEnv, registrationMode } from "@dsrclone/config";
+} from "@zerosweep/security-sdk";
+import { isPlatformAdminEmail, loadEnv, registrationMode } from "@zerosweep/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
 import { rateLimitCheck, rateLimitHit, rateLimitRecord } from "../../common/rate-limit-store";

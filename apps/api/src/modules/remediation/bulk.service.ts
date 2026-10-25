@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { BULK_REMEDIATION_ACTIONS, BULK_REMEDIATION_MAX_ITEMS, type BulkRemediationAction } from "@dsrclone/security-sdk";
+import { BULK_REMEDIATION_ACTIONS, BULK_REMEDIATION_MAX_ITEMS, type BulkRemediationAction } from "@zerosweep/security-sdk";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { CaseStateService } from "./case-state.service";
 import { OwnershipService } from "./ownership.service";

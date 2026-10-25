@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Compliance posture (Prompt 13 §88): control assessments from the CIS

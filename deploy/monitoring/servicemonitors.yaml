@@ -4,8 +4,8 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: dsrclone-api
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-api
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   selector:
     matchLabels: { app: api }
@@ -17,10 +17,10 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dsrclone-dashboards
+  name: zerosweep-dashboards
   labels:
     grafana_dashboard: "1"
-    app.kubernetes.io/part-of: dsrclone
+    app.kubernetes.io/part-of: zerosweep
 data:
   README.md: |
     # ZeroSweep Grafana dashboards (Prompt 25 §109)

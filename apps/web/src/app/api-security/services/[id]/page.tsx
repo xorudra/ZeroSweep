@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Badge, Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /**
  * Per-API assessment view (Prompt 9 §55): one API service — its base

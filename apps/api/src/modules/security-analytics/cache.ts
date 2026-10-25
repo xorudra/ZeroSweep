@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { analyticsCacheKey, analyticsCachePrefix } from "@dsrclone/security-sdk";
+import { analyticsCacheKey, analyticsCachePrefix } from "@zerosweep/security-sdk";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { classificationCeiling, permissionsFor } from "./permissions";
 

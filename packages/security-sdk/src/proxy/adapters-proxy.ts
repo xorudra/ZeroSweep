@@ -4,7 +4,7 @@ import type { AdapterTarget, SecurityToolAdapter } from "../adapter/adapter.inte
 import type { AdapterInputField, ToolMetadata } from "../adapter/adapter.types";
 import type { ExecutionPlan } from "../execution/execution.types";
 import type { NormalizedEndpoint, NormalizedHttpTransaction, NormalizedSecurityResult, NormalizedWebSocket } from "../findings/finding.types";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 import { TIMEOUT_FIELD, URLS_FIELD } from "../recon/recon-adapter.base";
 import type { ParsedProxy } from "./parsers-proxy";
 import type { ParsedObservation } from "../vuln/parsers-vuln";
@@ -302,7 +302,7 @@ export class BurpConnector extends ProductConnector {
     // inside the licensed environment (documented in docs/tools/proxy/
     // burp.md) — if it does not answer, the connector is UNAVAILABLE,
     // never "probably fine" (§66).
-    const res = await this.call(instance, { method: "GET", path: "/dsrclone/health" }, "X-ZeroSweep-Bridge-Key");
+    const res = await this.call(instance, { method: "GET", path: "/zerosweep/health" }, "X-ZeroSweep-Bridge-Key");
     if (res.status !== 200) throw new Error(`Burp bridge health returned HTTP ${res.status}`);
     const parsed = JSON.parse(res.body) as { version?: string; licenseState?: string };
     return { version: parsed.version, licenseState: parsed.licenseState, latencyMs: res.latencyMs };
@@ -311,7 +311,7 @@ export class BurpConnector extends ProductConnector {
   async importEndpoints(contextId: string): Promise<{ endpoints: NormalizedEndpoint[]; transactions: NormalizedHttpTransaction[]; webSockets: NormalizedWebSocket[] }> {
     const context = this.contextById(contextId);
     const instance = await this.instanceFor(context);
-    const res = await this.call(instance, { method: "GET", path: "/dsrclone/site-map" }, "X-ZeroSweep-Bridge-Key");
+    const res = await this.call(instance, { method: "GET", path: "/zerosweep/site-map" }, "X-ZeroSweep-Bridge-Key");
     const entries = JSON.parse(res.body) as Array<{ url?: string; method?: string; statusCode?: number }>;
     const endpoints: NormalizedEndpoint[] = [];
     for (const e of entries.slice(0, this.budget.maxImportedEndpoints)) {
@@ -336,7 +336,7 @@ export class BurpConnector extends ProductConnector {
   async getIssues(contextId: string): Promise<NormalizedVulnFinding[]> {
     const context = this.contextById(contextId);
     const instance = await this.instanceFor(context);
-    const res = await this.call(instance, { method: "GET", path: "/dsrclone/issues-export" }, "X-ZeroSweep-Bridge-Key");
+    const res = await this.call(instance, { method: "GET", path: "/zerosweep/issues-export" }, "X-ZeroSweep-Bridge-Key");
     if (res.status !== 200) throw new AdapterUnavailableError(`burp-suite-professional: issues export returned HTTP ${res.status}`);
     const parsed = this.parser.parse(res.body);
     this.lastExport = parsed;

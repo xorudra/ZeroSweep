@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   evaluateRemediationTransition, type RemediationStatus,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import { EventsService } from "../integrations/events/events.service";

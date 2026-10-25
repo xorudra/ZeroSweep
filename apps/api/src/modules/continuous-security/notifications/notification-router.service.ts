@@ -4,7 +4,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import {
   alertFingerprint, alertGroupKey, checkThrottle, escalationDue, isQuietHours, policyAdmitsEvent,
   validateWebhookDestination, type NotificationEventView, type NotificationPolicyView,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";

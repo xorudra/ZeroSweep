@@ -20,7 +20,7 @@ MODERATE
    path of one in-scope endpoint: `wfuzz -z file,<list> --hc 404 -t 5 -f /dev/stdout,json <base>FUZZ`
 2. **PARAMETER** — the registered PARAMETER_NAMES list is fuzzed as query
    keys against one eligible endpoint with a fixed benign marker value:
-   `wfuzz -z file,<parameter-names> --hc 404,400 -t 5 -f /dev/stdout,json <base>?FUZZ=dsrclone`
+   `wfuzz -z file,<parameter-names> --hc 404,400 -t 5 -f /dev/stdout,json <base>?FUZZ=zerosweep`
 
 The worker selects the template from the STAGE (parameter-discovery stage →
 PARAMETER, otherwise CONTENT) — users never choose payloads, and there is

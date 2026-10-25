@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from "@ne
 import {
   SLA_PAUSE_REASONS, deriveSlaState, evaluateSlaRecalculation, resolveRemediationSla,
   type RemediationSlaPolicyView, type SlaPauseReason,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { CaseStateService, type CaseRow } from "./case-state.service";

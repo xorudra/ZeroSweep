@@ -36,7 +36,7 @@ jobs:
           pnpm test:ai
       - name: Prisma migration validation
         run: |
-          pnpm --filter @dsrclone/database exec prisma format --check || true
+          pnpm --filter @zerosweep/database exec prisma format --check || true
           pnpm db:validate
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
@@ -60,16 +60,16 @@ jobs:
         with:
           path: .
           format: cyclonedx-json
-          output-file: dsrclone-sbom.cyclonedx.json
+          output-file: zerosweep-sbom.cyclonedx.json
       - name: Build production images
         run: |
           for img in web api ai worker scheduler; do
-            docker build -f deploy/docker/$img.Dockerfile -t dsrclone-$img:${{ github.sha }} .
+            docker build -f deploy/docker/$img.Dockerfile -t zerosweep-$img:${{ github.sha }} .
           done
       - name: Container vulnerability scan (Trivy)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: dsrclone-api:${{ github.sha }}
+          image-ref: zerosweep-api:${{ github.sha }}
           format: table
           severity: CRITICAL,HIGH
           exit-code: "1"

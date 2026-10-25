@@ -30,7 +30,7 @@ export interface NseScriptMeta {
 /** Frozen snapshot reference: a ScanPlan records this; the governed
  *  script set is never changed mid-assessment. */
 export const NSE_POLICY_SNAPSHOT = {
-  collection: "dsrclone-governed-nse",
+  collection: "zerosweep-governed-nse",
   version: "2026.10.1",
   updatedAt: "2026-10-01T00:00:00.000Z",
 } as const;

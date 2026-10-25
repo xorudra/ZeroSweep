@@ -1,5 +1,5 @@
 import { BadRequestException, HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
-import { evaluateQuota, quotaExceededBody, type QuotaEvaluation } from "@dsrclone/security-sdk";
+import { evaluateQuota, quotaExceededBody, type QuotaEvaluation } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { UsageMeteringService } from "../usage/usage.service";

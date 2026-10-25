@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /**
  * Web VAPT V2 workspace (Prompt 32 §152): targets, scan wizard entry,

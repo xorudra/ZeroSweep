@@ -3,7 +3,7 @@ import {
   approveWirelessCaptureSchema, createApprovedWirelessProfileSchema,
   createWirelessEnvironmentSchema, registerWirelessSensorSchema,
   requestWirelessLabValidationSchema, startWirelessScanSchema, uploadWirelessCaptureSchema,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { WirelessSecurityService } from "./wireless-security.service";

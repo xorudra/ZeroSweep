@@ -237,7 +237,7 @@ export class InMemoryScannerInstanceProvider implements ScannerInstanceProvider 
 }
 
 /** Platform-critical variable names no reference resolver may ever return
- *  (mirror of PLATFORM_SECRET_NAMES in @dsrclone/config — kept inline so
+ *  (mirror of PLATFORM_SECRET_NAMES in @zerosweep/config — kept inline so
  *  this package stays dependency-light; security audit 2026-10-16). */
 const PLATFORM_SECRET_NAMES: ReadonlySet<string> = new Set([
   "JWT_SECRET",
@@ -264,13 +264,13 @@ export class EnvSecretResolver implements SecretResolver {
   }
 }
 
-/** Env-backed endpoint resolver: DSRCLONE_SCANNER_ENDPOINTS is a JSON map
+/** Env-backed endpoint resolver: ZEROSWEEP_SCANNER_ENDPOINTS is a JSON map
  *  of reference → { baseUrl, approvedInternal } held ONLY in server
  *  configuration (§17). Malformed config resolves nothing. */
 export class EnvEndpointResolver implements EndpointResolver {
   async resolve(reference: string): Promise<{ baseUrl: string; approvedInternal?: boolean } | undefined> {
     try {
-      const raw = process.env.DSRCLONE_SCANNER_ENDPOINTS;
+      const raw = process.env.ZEROSWEEP_SCANNER_ENDPOINTS;
       if (!raw) return undefined;
       const map = JSON.parse(raw) as Record<string, { baseUrl?: string; approvedInternal?: boolean }>;
       const entry = map[reference];

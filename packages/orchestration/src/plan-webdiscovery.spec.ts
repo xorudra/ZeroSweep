@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FixtureToolRunner, MockSecurityAdapter, ToolRegistry,
   registerReconAdapters, registerWebDiscoveryAdapters,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 import { resolveTemplate } from "./profiles";
 

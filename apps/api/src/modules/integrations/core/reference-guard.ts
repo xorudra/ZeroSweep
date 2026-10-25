@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { isTenantSecretSlotReference } from "@dsrclone/config";
+import { isTenantSecretSlotReference } from "@zerosweep/config";
 
 /**
  * Write-site guard for tenant-controlled secret references (security

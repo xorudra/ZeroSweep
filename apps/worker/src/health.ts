@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
-import { createLogger } from "@dsrclone/logger";
+import { createLogger } from "@zerosweep/logger";
 
-const logger = createLogger("dsrclone-worker");
+const logger = createLogger("zerosweep-worker");
 
 export interface WorkerHealth {
   status: "ok" | "degraded";
@@ -13,7 +13,7 @@ export interface WorkerHealth {
 /** Workers have no HTTP surface in this phase: health is logged and written
  *  to a heartbeat file the dashboard/API can read. */
 export function reportHealth(health: WorkerHealth): void {
-  const file = process.env.WORKER_HEARTBEAT_FILE ?? "/tmp/dsrclone-worker-heartbeat.json";
+  const file = process.env.WORKER_HEARTBEAT_FILE ?? "/tmp/zerosweep-worker-heartbeat.json";
   try {
     writeFileSync(file, JSON.stringify(health, null, 2));
   } catch {

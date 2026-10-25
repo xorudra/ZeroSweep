@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
-import { isReservedSlug, isValidSlug } from "@dsrclone/security-sdk";
-import { registrationMode } from "@dsrclone/config";
+import { isReservedSlug, isValidSlug } from "@zerosweep/security-sdk";
+import { registrationMode } from "@zerosweep/config";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { rateLimitHit } from "../../../common/rate-limit-store";
 import { AuditService } from "../../audit/audit.service";

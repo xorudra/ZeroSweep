@@ -20,7 +20,7 @@ import {
   type ValidationPlan,
   type ValidationRiskClass,
   type ValidationTransport,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 
 /**
  * Controlled validation runner (Prompt 16 §12/§13/§43–§46). Runs on

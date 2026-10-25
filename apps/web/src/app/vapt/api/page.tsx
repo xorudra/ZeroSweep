@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * API VAPT V2 workspace (Prompt 32 §153): API services, governed

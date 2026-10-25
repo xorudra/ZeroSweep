@@ -36,14 +36,14 @@ export function buildSarifLog(input: {
     return {
       ruleId,
       level: LEVEL_BY_SEVERITY[f.severity] ?? "warning",
-      message: { text: clean(`[${f.severity}] ${f.title} (${f.dsrcloneReference})`, 600) },
+      message: { text: clean(`[${f.severity}] ${f.title} (${f.zerosweepReference})`, 600) },
       locations: [{
         physicalLocation: {
           artifactLocation: { uri: clean(f.filePath ?? f.assetReference ?? "unknown", 300) },
           ...(f.startLine ? { region: { startLine: f.startLine } } : {}),
         },
       }],
-      partialFingerprints: { dsrcloneFindingId: f.id },
+      partialFingerprints: { zerosweepFindingId: f.id },
       properties: {
         severity: f.severity,
         status: f.lifecycleStatus,

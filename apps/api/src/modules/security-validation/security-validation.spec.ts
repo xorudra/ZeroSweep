@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, NotFoundException } from "@nestjs/common";
-import { FIXTURE_SCOPE_RULES } from "@dsrclone/security-sdk";
+import { FIXTURE_SCOPE_RULES } from "@zerosweep/security-sdk";
 import { ValidationWorkflowService } from "./workflows/validation-workflow.service";
 import { ValidationApprovalsService } from "./approvals/approvals.service";
 import { ValidationPoliciesService } from "./policies/policies.service";
@@ -397,7 +397,7 @@ describe("callback tokens (§47/§48/§87)", () => {
     await expect(w.callbacks.ingest(issued.token, {})).rejects.toThrow(HttpException);
     await expect(w.callbacks.ingest("not-a-token", {})).rejects.toThrow(HttpException);
     w.tables.validationCallbackToken!.push({
-      id: "tok-expired", tokenHash: (await import("@dsrclone/security-sdk")).hashCallbackToken("expired-token"),
+      id: "tok-expired", tokenHash: (await import("@zerosweep/security-sdk")).hashCallbackToken("expired-token"),
       workspaceId: WS, sessionId: "sess-1", expiresAt: new Date("2000-01-01"), consumedAt: null, createdAt: new Date(),
     } as Row);
     await expect(w.callbacks.ingest("expired-token", {})).rejects.toThrow(/EXPIRED/);

@@ -7,7 +7,7 @@ import {
   buildKubernetesCoverage, correlateRuntimeEvent, evaluateBaselineDeviations,
   hashBaselineRules, planKubernetesVerification,
   type CloudV2BaselineRule, type CloudV2PipelineStage, type K8sRoleBindingRecord, type K8sRoleRecord,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { AuditService } from "../audit/audit.service";
 import { AlertService } from "../soc/alerts/alert.service";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";

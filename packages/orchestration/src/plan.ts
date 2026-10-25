@@ -1,6 +1,6 @@
-import type { AssessmentProfile, TargetType } from "@dsrclone/types";
-import type { ScopeRules } from "@dsrclone/validation";
-import type { ToolRegistry } from "@dsrclone/security-sdk";
+import type { AssessmentProfile, TargetType } from "@zerosweep/types";
+import type { ScopeRules } from "@zerosweep/validation";
+import type { ToolRegistry } from "@zerosweep/security-sdk";
 import { buildDag, type ValidatedDag } from "./dag";
 import { resolveTemplate, type StageType } from "./profiles";
 import { selectAdaptersForStage, type SelectedAdapter, type ToolSelectionOptions } from "./tool-selector";

@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { isProtectedTarget, lifecycleAllowsNewWork, type FeatureKey } from "@dsrclone/security-sdk";
+import { isProtectedTarget, lifecycleAllowsNewWork, type FeatureKey } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { EntitlementService } from "./entitlement.service";

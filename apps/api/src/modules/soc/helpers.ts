@@ -1,4 +1,4 @@
-import { DEFAULT_SOC_SLA_MINUTES, type AlertPriority } from "@dsrclone/security-sdk";
+import { DEFAULT_SOC_SLA_MINUTES, type AlertPriority } from "@zerosweep/security-sdk";
 import type { PrismaClientLike } from "../../prisma/prisma.module";
 
 export type Row = Record<string, unknown>;

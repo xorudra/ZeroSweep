@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 export interface AiResponseView {

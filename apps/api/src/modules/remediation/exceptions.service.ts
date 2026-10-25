@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable } from "@nestjs/common";
-import { EXCEPTION_TYPES } from "@dsrclone/security-sdk";
+import { EXCEPTION_TYPES } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { CaseStateService } from "./case-state.service";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 import { correlateFindings } from "../vuln/correlation";
 import {
   InMemoryScannerInstanceProvider, InMemorySessionProfileProvider, MapEndpointResolver, MapSecretResolver,

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Subject } from "rxjs";
-import type { ScanEventRecord } from "@dsrclone/orchestration";
+import type { ScanEventRecord } from "@zerosweep/orchestration";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 
 /**

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ASSESSMENT_PROFILES, TARGET_TYPES } from "@dsrclone/types";
+import { ASSESSMENT_PROFILES, TARGET_TYPES } from "@zerosweep/types";
 
 const domainRe = /^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 const ipv4Re = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;

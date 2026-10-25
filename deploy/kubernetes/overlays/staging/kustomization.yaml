@@ -2,7 +2,7 @@
 # synthetic or minimized — never a copy of production tenant data (§32).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: dsrclone-staging
+namespace: zerosweep-staging
 resources:
   - ../../base
 patches:
@@ -17,17 +17,17 @@ patches:
         path: /spec/maxReplicas
         value: 3
 commonAnnotations:
-  dsrclone.io/release-channel: "staging"
+  zerosweep.io/release-channel: "staging"
 images:
-  - name: ghcr.io/xorudra/dsrclone-api
+  - name: ghcr.io/xorudra/zerosweep-api
     newTag: "25.0.0-rc.1"
-  - name: ghcr.io/xorudra/dsrclone-web
+  - name: ghcr.io/xorudra/zerosweep-web
     newTag: "25.0.0-rc.1"
-  - name: ghcr.io/xorudra/dsrclone-ai
+  - name: ghcr.io/xorudra/zerosweep-ai
     newTag: "25.0.0-rc.1"
-  - name: ghcr.io/xorudra/dsrclone-worker
+  - name: ghcr.io/xorudra/zerosweep-worker
     newTag: "25.0.0-rc.1"
-  - name: ghcr.io/xorudra/dsrclone-scheduler
+  - name: ghcr.io/xorudra/zerosweep-scheduler
     newTag: "25.0.0-rc.1"
-  - name: ghcr.io/xorudra/dsrclone-migrate
+  - name: ghcr.io/xorudra/zerosweep-migrate
     newTag: "25.0.0-rc.1"

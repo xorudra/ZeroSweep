@@ -17,7 +17,7 @@ DEST="${BACKUP_DEST:?BACKUP_DEST (s3://bucket/prefix or local directory) is requ
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-DUMP="$WORK/dsrclone-$STAMP.dump"
+DUMP="$WORK/zerosweep-$STAMP.dump"
 
 echo "[backup] dumping (custom format)"
 pg_dump --format=custom --no-owner --no-privileges "$BACKUP_DATABASE_URL" > "$DUMP"

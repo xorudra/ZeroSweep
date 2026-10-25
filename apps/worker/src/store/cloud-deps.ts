@@ -1,5 +1,5 @@
-import { prisma } from "@dsrclone/database";
-import type { CloudConnectorDeps } from "@dsrclone/security-sdk";
+import { prisma } from "@zerosweep/database";
+import type { CloudConnectorDeps } from "@zerosweep/security-sdk";
 
 /**
  * Prisma-backed cloud connector dependencies for the production

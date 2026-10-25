@@ -3,7 +3,7 @@ import {
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   NIKTO_JSON, NUCLEI_JSONL, SSLYZE_JSON, TESTSSL_JSON,
   createVulnAdapters, vulnHealthBySlug, type FixtureResponse,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { FakeStore } from "./testing/fake-store";

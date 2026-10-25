@@ -1,5 +1,5 @@
-import { prisma } from "@dsrclone/database";
-import type { DirectoryConnectorDeps } from "@dsrclone/security-sdk";
+import { prisma } from "@zerosweep/database";
+import type { DirectoryConnectorDeps } from "@zerosweep/security-sdk";
 
 /**
  * Prisma-backed directory connector dependencies (Prompt 15 §7/§15).

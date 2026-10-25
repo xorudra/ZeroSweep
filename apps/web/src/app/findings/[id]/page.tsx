@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { FindingAiPanel } from "@/components/AiAssistant";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 import { api, apiFetch, ApiError } from "@/lib/api-client";
 
 type FindingDetail = Record<string, unknown> & {

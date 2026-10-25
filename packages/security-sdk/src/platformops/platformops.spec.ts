@@ -25,9 +25,9 @@ describe("secret references (§21–§24)", () => {
     expect(isSecretReference("env:PROD_DB_PASSWORD")).toBe(true);
     expect(isSecretReference("file:/run/secrets/db_password")).toBe(true);
     expect(isSecretReference("docker-secret:db_password")).toBe(true);
-    expect(isSecretReference("k8s-secret:dsrclone/db/ password".replace(" ", ""))).toBe(true);
+    expect(isSecretReference("k8s-secret:zerosweep/db/ password".replace(" ", ""))).toBe(true);
     expect(isSecretReference("vault:secret/data/db#password")).toBe(true);
-    expect(isSecretReference("aws-sm:prod/dsrclone/db")).toBe(true);
+    expect(isSecretReference("aws-sm:prod/zerosweep/db")).toBe(true);
     expect(isSecretReference("hunter2")).toBe(false);
     expect(isSecretReference("postgresql://u:p@host/db")).toBe(false);
   });
@@ -36,7 +36,7 @@ describe("secret references (§21–§24)", () => {
 describe("production configuration (§16–§28)", () => {
   const good = {
     nodeEnv: "production",
-    databaseUrl: "postgresql://u:p@db:5432/dsrclone?sslmode=require",
+    databaseUrl: "postgresql://u:p@db:5432/zerosweep?sslmode=require",
     databaseRequireTls: true, databaseConnectionLimit: 10,
     redisUrl: "rediss://redis:6379", redisRequireTls: true,
     jwtSecret: "x".repeat(40), corsOrigin: "https://app.example.org",
@@ -117,10 +117,10 @@ describe("backup & restore (§160–§180, §232–§234)", () => {
   });
   it("restore targets must be isolated recovery databases (§173)", () => {
     expect(RESTORE_CONFIRMATION).toBe("RESTORE_INTO_ISOLATED_ENVIRONMENT");
-    expect(evaluateRestoreTarget({ targetDatabase: "dsrclone", productionDatabase: "dsrclone" }).ok).toBe(false);
-    expect(evaluateRestoreTarget({ targetDatabase: "postgres", productionDatabase: "dsrclone" }).ok).toBe(false);
-    expect(evaluateRestoreTarget({ targetDatabase: "dsrclone_copy", productionDatabase: "dsrclone" }).ok).toBe(false);
-    expect(evaluateRestoreTarget({ targetDatabase: "dsrclone_restore", productionDatabase: "dsrclone" })).toEqual({ ok: true });
+    expect(evaluateRestoreTarget({ targetDatabase: "zerosweep", productionDatabase: "zerosweep" }).ok).toBe(false);
+    expect(evaluateRestoreTarget({ targetDatabase: "postgres", productionDatabase: "zerosweep" }).ok).toBe(false);
+    expect(evaluateRestoreTarget({ targetDatabase: "zerosweep_copy", productionDatabase: "zerosweep" }).ok).toBe(false);
+    expect(evaluateRestoreTarget({ targetDatabase: "zerosweep_restore", productionDatabase: "zerosweep" })).toEqual({ ok: true });
   });
   it("restore validation requires every check (§174)", () => {
     const all = { databaseConsistent: true, objectReferencesValid: true, reportAccessValid: true, findingHistoryPresent: true, tenantIsolationIntact: true };
@@ -153,7 +153,7 @@ describe("SLO (§124–§127)", () => {
 describe("observability safety (§98/§107/§116)", () => {
   it("flags high-cardinality / identifying metric labels", () => {
     expect(metricLabelViolations({ route: "/x", user_id: "u1", finding_id: "f" })).toEqual(["user_id", "finding_id"]);
-    expect(metricNameValid("dsrclone_http_requests_total")).toBe(true);
+    expect(metricNameValid("zerosweep_http_requests_total")).toBe(true);
     expect(metricNameValid("http_requests")).toBe(false);
   });
   it("span screening removes secrets outright and drops payloads", () => {

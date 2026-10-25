@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-platform-overview",
+  "uid": "zerosweep-platform-overview",
   "title": "ZeroSweep \u2014 Platform Overview",
-  "description": "Prompt 38 \u00a7119 availability, rate, errors, latency, backlog, capacity, scan success. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a7119 availability, rate, errors, latency, backlog, capacity, scan success. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "avg(dsrclone_dependency_up)",
+          "expr": "avg(zerosweep_dependency_up)",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dsrclone_http_requests_total[5m]))",
+          "expr": "sum(rate(zerosweep_http_requests_total[5m]))",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dsrclone_http_requests_total{status_class=\"5xx\"}[5m])) / sum(rate(dsrclone_http_requests_total[5m]))",
+          "expr": "sum(rate(zerosweep_http_requests_total{status_class=\"5xx\"}[5m])) / sum(rate(zerosweep_http_requests_total[5m]))",
           "refId": "A"
         }
       ],
@@ -94,7 +94,7 @@
       },
       "targets": [
         {
-          "expr": "sum(dsrclone_queue_waiting_jobs)",
+          "expr": "sum(zerosweep_queue_waiting_jobs)",
           "refId": "A"
         }
       ],
@@ -119,7 +119,7 @@
       },
       "targets": [
         {
-          "expr": "sum(dsrclone_worker_busy_slots)",
+          "expr": "sum(zerosweep_worker_busy_slots)",
           "refId": "A"
         }
       ],
@@ -144,7 +144,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dsrclone_scan_jobs_completed_total[1h])) / clamp_min(sum(rate(dsrclone_scan_jobs_total[1h])), 1)",
+          "expr": "sum(rate(zerosweep_scan_jobs_completed_total[1h])) / clamp_min(sum(rate(zerosweep_scan_jobs_total[1h])), 1)",
           "refId": "A"
         }
       ],

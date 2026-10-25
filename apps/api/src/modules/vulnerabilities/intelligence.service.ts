@@ -3,7 +3,7 @@ import {
   CpeCveCorrelationService, EpssIntelligenceProvider, InMemoryIntelligenceDataset, IntelligenceSyncEngine,
   KevIntelligenceProvider, NvdIntelligenceProvider, VulnerabilityIntelligenceServiceV2,
   enrichFinding, normalizeCveId, type IntelligenceDataset, type IntelligenceSourceId,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 
 /**

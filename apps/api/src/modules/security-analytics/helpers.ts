@@ -1,4 +1,4 @@
-import type { DslRecord } from "@dsrclone/security-sdk";
+import type { DslRecord } from "@zerosweep/security-sdk";
 
 /**
  * Shared record builders: turn tenant-scoped rows into the flat

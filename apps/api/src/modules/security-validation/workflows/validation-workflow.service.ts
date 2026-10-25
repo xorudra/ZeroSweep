@@ -13,8 +13,8 @@ import {
   validatorsForFinding,
   type ValidationBudget,
   type ValidationFindingView,
-} from "@dsrclone/security-sdk";
-import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import { scopeRulesSchema, type ScopeRules } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { QueueService } from "../../../queue/queue.service";

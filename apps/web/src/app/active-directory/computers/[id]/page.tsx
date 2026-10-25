@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 
 /**
  * Computer detail (Prompt 15 §93): OS, delegation configuration,

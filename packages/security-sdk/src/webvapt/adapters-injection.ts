@@ -109,7 +109,7 @@ export class DalfoxAdapter extends ApiAdapterBase {
 
 export class XsstrikeAdapter extends ApiAdapterBase {
   readonly executable = "xsstrike";
-  readonly containerImage = "dsrclone/xsstrike:governed";
+  readonly containerImage = "zerosweep/xsstrike:governed";
   readonly versionArgs = ["--help"];
   protected baseUrl = "";
   readonly metadata = meta({
@@ -203,7 +203,7 @@ export const COMMIX_FORBIDDEN_OPTIONS: readonly string[] = [
 
 export class CommixAdapter extends ApiAdapterBase {
   readonly executable = "commix";
-  readonly containerImage = "dsrclone/commix:governed";
+  readonly containerImage = "zerosweep/commix:governed";
   readonly versionArgs = ["--version"];
   protected baseUrl = "";
   readonly metadata = meta({
@@ -246,7 +246,7 @@ export const SSTIMAP_FORBIDDEN_OPTIONS: readonly string[] = [
 
 export class SstimapAdapter extends ApiAdapterBase {
   readonly executable = "sstimap";
-  readonly containerImage = "dsrclone/sstimap:governed";
+  readonly containerImage = "zerosweep/sstimap:governed";
   readonly versionArgs = ["--help"];
   protected baseUrl = "";
   readonly metadata = meta({

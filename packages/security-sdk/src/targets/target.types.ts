@@ -1,4 +1,4 @@
-import type { TargetType } from "@dsrclone/types";
+import type { TargetType } from "@zerosweep/types";
 
 /** A target as handed to an adapter, after API-side validation. */
 export interface AdapterTargetInput {

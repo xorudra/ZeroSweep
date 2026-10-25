@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ToolRegistry, createCodeAdapters, MockSecurityAdapter, codeHealthBySlug } from "@dsrclone/security-sdk";
+import { ToolRegistry, createCodeAdapters, MockSecurityAdapter, codeHealthBySlug } from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 import { resolveTemplate } from "./profiles";
 

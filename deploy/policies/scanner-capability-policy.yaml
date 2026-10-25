@@ -4,7 +4,7 @@
 # the same data at runtime (worker capability declarations, Prompt 13);
 # this file is the deployment-side source of truth reviewed in change
 # control. A tool not listed for a pool MUST NOT run in that pool.
-apiVersion: dsrclone.io/v1alpha1
+apiVersion: zerosweep.io/v1alpha1
 kind: ScannerCapabilityPolicy
 metadata:
   name: platform-default

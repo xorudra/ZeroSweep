@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-storage",
+  "uid": "zerosweep-storage",
   "title": "ZeroSweep \u2014 Storage",
-  "description": "Prompt 38 \u00a758\u2013\u00a762 object storage + backup freshness. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a758\u2013\u00a762 object storage + backup freshness. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_dependency_up{dependency=\"minio\"}",
+          "expr": "zerosweep_dependency_up{dependency=\"minio\"}",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "(time() - dsrclone_backup_last_success_timestamp) / 3600",
+          "expr": "(time() - zerosweep_backup_last_success_timestamp) / 3600",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_restore_verification_success",
+          "expr": "zerosweep_restore_verification_success",
           "refId": "A"
         }
       ],

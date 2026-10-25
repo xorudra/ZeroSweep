@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import * as bcrypt from "bcryptjs";
 import {
   DEFAULT_PASSWORD_POLICY, emailDomain, evaluatePassword, normalizeEmail, randomToken, sha256Hex,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
@@ -157,16 +157,16 @@ export class GovernanceService {
     await this.audit.record({ actorId: user.id, organizationId: user.organizationId, action: "DOMAIN_VERIFICATION_STARTED", resourceType: "OrganizationDomain", resourceId: record.id as string, metadata: { domain: clean } });
     // The token is shown once so it can be published as a DNS TXT record;
     // only its hash persists (§61).
-    return { id: record.id, domain: clean, status: "PENDING", dnsRecord: { type: "TXT", name: `_dsrclone-verify.${clean}`, value: `dsrclone-site-verification=${token}` }, shownOnce: true };
+    return { id: record.id, domain: clean, status: "PENDING", dnsRecord: { type: "TXT", name: `_zerosweep-verify.${clean}`, value: `zerosweep-site-verification=${token}` }, shownOnce: true };
   }
 
   /** Verify via an injected DNS TXT lookup (fixture in tests). */
   async confirmDomainVerification(user: RequestUser, domainId: string, resolveTxt: (name: string) => Promise<string[][]>) {
     const record = await this.prisma.organizationDomain.findFirst({ where: { id: domainId, organizationId: user.organizationId } });
     if (!record) throw new NotFoundException("Domain not found");
-    const records = await resolveTxt(`_dsrclone-verify.${record.domain}`);
+    const records = await resolveTxt(`_zerosweep-verify.${record.domain}`);
     const flat = records.flat().join(" ");
-    const expectedPrefix = "dsrclone-site-verification=";
+    const expectedPrefix = "zerosweep-site-verification=";
     const presented = flat.split(/\s+/).find((t) => t.startsWith(expectedPrefix))?.slice(expectedPrefix.length);
     if (!presented || sha256Hex(presented) !== record.verificationTokenHash) {
       throw new BadRequestException("Verification token not found in DNS TXT records");

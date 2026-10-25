@@ -12,11 +12,11 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/database/package.json packages/database/
 COPY packages/security-sdk/package.json packages/security-sdk/
 COPY packages/ packages/
-RUN pnpm install --frozen-lockfile --ignore-scripts --filter @dsrclone/database... \
- && pnpm --filter @dsrclone/database exec prisma generate
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @zerosweep/database... \
+ && pnpm --filter @zerosweep/database exec prisma generate
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
-LABEL org.opencontainers.image.title="dsrclone-migrate" \
+LABEL org.opencontainers.image.title="zerosweep-migrate" \
       org.opencontainers.image.description="ZeroSweep controlled database migration runner (one-shot)" \
       org.opencontainers.image.source="https://github.com/xorudra/zerosweep" \
       org.opencontainers.image.licenses="UNLICENSED"

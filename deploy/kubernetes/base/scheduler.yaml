@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: scheduler
-  labels: { app: scheduler, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: scheduler, app.kubernetes.io/part-of: zerosweep }
 spec:
   replicas: 1
   strategy:
@@ -15,9 +15,9 @@ spec:
   selector: { matchLabels: { app: scheduler } }
   template:
     metadata:
-      labels: { app: scheduler, app.kubernetes.io/part-of: dsrclone }
+      labels: { app: scheduler, app.kubernetes.io/part-of: zerosweep }
     spec:
-      serviceAccountName: dsrclone-scheduler
+      serviceAccountName: zerosweep-scheduler
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -26,11 +26,11 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: scheduler
-          image: ghcr.io/xorudra/dsrclone-scheduler:25.0.0
+          image: ghcr.io/xorudra/zerosweep-scheduler:25.0.0
           imagePullPolicy: IfNotPresent
           envFrom:
-            - configMapRef: { name: dsrclone-config }
-            - secretRef: { name: dsrclone-secrets }
+            - configMapRef: { name: zerosweep-config }
+            - secretRef: { name: zerosweep-secrets }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   explainAttackPath, explainTrend, timeSeries, translateNlToDsl, countInRange, bucketForRange,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { SearchService } from "../search/search.service";

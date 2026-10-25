@@ -2,8 +2,8 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import {
   DEFAULT_SLOS, evaluateSli, validateReleaseMetadata,
   type SliResult, type SloDefinition,
-} from "@dsrclone/security-sdk";
-import { loadEnv } from "@dsrclone/config";
+} from "@zerosweep/security-sdk";
+import { loadEnv } from "@zerosweep/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";

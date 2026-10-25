@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, Controller, Get, Header, Param, Patch, Post, Query, Req,
 } from "@nestjs/common";
 import { z } from "zod";
-import type { VmLifecycleStatus } from "@dsrclone/security-sdk";
+import type { VmLifecycleStatus } from "@zerosweep/security-sdk";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";
 import { VulnerabilityService } from "./vulnerability.service";

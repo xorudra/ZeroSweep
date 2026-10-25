@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/Shell";
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 
 /**
  * Security — the operating organization's published document for this

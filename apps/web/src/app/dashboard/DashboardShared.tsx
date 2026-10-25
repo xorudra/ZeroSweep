@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 export function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {

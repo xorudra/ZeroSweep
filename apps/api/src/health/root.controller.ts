@@ -1,5 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
-import { API_PREFIX } from "@dsrclone/config";
+import { API_PREFIX } from "@zerosweep/config";
 import { Public } from "../common/decorators/auth.decorators";
 
 /**
@@ -14,7 +14,7 @@ export class RootController {
   @Get()
   root(): { service: string; status: string; health: string; liveness: string } {
     return {
-      service: "dsrclone-api",
+      service: "zerosweep-api",
       status: "ok",
       health: `/${API_PREFIX}/health`,
       liveness: `/${API_PREFIX}/health/live`,

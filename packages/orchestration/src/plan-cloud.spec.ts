@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   PACU_DESCRIPTOR, cloudSecHealthBySlug, createCloudSecAdapters,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PROFILE_TEMPLATES, STAGE_LIBRARY, resolveTemplate } from "./profiles";
 import { buildScanPlan } from "./plan";
 

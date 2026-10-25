@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { evaluateUpgradePreflight, SUPPORT_MATRIX, type UpgradePreflightResult } from "@dsrclone/security-sdk";
+import { evaluateUpgradePreflight, SUPPORT_MATRIX, type UpgradePreflightResult } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { ProductConfigService } from "../product-config.service";
 

@@ -1,6 +1,6 @@
-import type { ToolRegistry } from "@dsrclone/security-sdk";
-import type { RiskLevel, ToolMetadata } from "@dsrclone/security-sdk";
-import type { TargetType } from "@dsrclone/types";
+import type { ToolRegistry } from "@zerosweep/security-sdk";
+import type { RiskLevel, ToolMetadata } from "@zerosweep/security-sdk";
+import type { TargetType } from "@zerosweep/types";
 import type { StageDefinition } from "./profiles";
 
 /**

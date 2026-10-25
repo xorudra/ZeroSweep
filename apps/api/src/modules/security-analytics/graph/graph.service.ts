@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   scoreAttackPath, traverseGraph, type AnalyticsGraphEdge, type AnalyticsGraphNode,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { deriveExposure } from "../../continuous-security/snapshots/snapshot.service";
 

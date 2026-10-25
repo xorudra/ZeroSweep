@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /** Identity analytics (Prompt 27 §93) — MFA coverage, SSO, privileged identities, keys and access reviews (organization-scoped, Prompt 23 records). */
 interface Identity {

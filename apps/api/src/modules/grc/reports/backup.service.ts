@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { canonicalJson, hashEvidence } from "@dsrclone/security-sdk";
+import { canonicalJson, hashEvidence } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";

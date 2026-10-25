@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface ClientFinding {

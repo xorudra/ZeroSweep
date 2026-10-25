@@ -1,5 +1,5 @@
 {
-  "name": "@dsrclone/database",
+  "name": "@zerosweep/database",
   "version": "1.0.0",
   "private": true,
   "main": "dist/index.js",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "@dsrclone/security-sdk": "workspace:*"
+    "@zerosweep/security-sdk": "workspace:*"
   },
   "devDependencies": {
     "prisma": "^5.22.0",

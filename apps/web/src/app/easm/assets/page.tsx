@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { EmptyState } from "@dsrclone/ui";
+import { EmptyState } from "@zerosweep/ui";
 
 /**
  * External asset inventory (Prompt 29 §99). Filters mirror the API:

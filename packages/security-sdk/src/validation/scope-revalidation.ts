@@ -1,5 +1,5 @@
 import { blockedTargetReason, ScopeMatcher } from "../scope/scope.matcher";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 /**
  * Scope revalidation (Prompt 16 §9) — performed IMMEDIATELY before

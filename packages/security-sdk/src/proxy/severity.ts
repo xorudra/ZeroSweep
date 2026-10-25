@@ -1,4 +1,4 @@
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 
 /**
  * Scanner severity/confidence normalization (Prompt 8 §34–§35).

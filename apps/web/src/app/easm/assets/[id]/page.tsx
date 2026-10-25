@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * External asset detail (Prompt 29 §100): ownership evidence,

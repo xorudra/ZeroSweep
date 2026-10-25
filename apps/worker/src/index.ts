@@ -1,8 +1,8 @@
 import { Worker, type Job } from "bullmq";
-import { QUEUES, loadEnv, assertProductionConfig } from "@dsrclone/config";
-import { createLogger } from "@dsrclone/logger";
-import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters, registerWebVaptAdapters, registerWirelessAdapters } from "@dsrclone/security-sdk";
-import { prisma } from "@dsrclone/database";
+import { QUEUES, loadEnv, assertProductionConfig } from "@zerosweep/config";
+import { createLogger } from "@zerosweep/logger";
+import { LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, registerApiAdapters, registerBinaryAdapters, registerCloudNativeAdapters, registerCloudSecAdapters, registerCodeAdapters, registerDirectoryAdapters, registerMobileAdapters, registerNetworkAdapters, registerProxyAdapters, registerReconAdapters, registerVulnAdapters, registerVulnScannerAdapters, registerWebDiscoveryAdapters, registerWebVaptAdapters, registerWirelessAdapters } from "@zerosweep/security-sdk";
+import { prisma } from "@zerosweep/database";
 import { createRedisConnection } from "./connection";
 import { reportHealth, type WorkerHealth } from "./health";
 import type { OrchestrationJobData, PlaceholderJobData, ScanOrchestrationJobData } from "./jobs";
@@ -33,7 +33,7 @@ import { metrics, METRICS } from "./telemetry/metrics";
  * the capability instead (Prompt 5 §2/§56).
  */
 
-const logger = createLogger("dsrclone-worker");
+const logger = createLogger("zerosweep-worker");
 // Prompt 25 §30/§33: fail fast on placeholder secrets / unsafe production config.
 assertProductionConfig(loadEnv());
 const connection = createRedisConnection();

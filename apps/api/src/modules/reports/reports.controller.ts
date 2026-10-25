@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
 import { z } from "zod";
-import { paginationSchema } from "@dsrclone/validation";
+import { paginationSchema } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";

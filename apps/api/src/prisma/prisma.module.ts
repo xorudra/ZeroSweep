@@ -1,5 +1,5 @@
 import { Global, Module } from "@nestjs/common";
-import { prisma } from "@dsrclone/database";
+import { prisma } from "@zerosweep/database";
 
 export const PRISMA = Symbol("PRISMA_CLIENT");
 export type PrismaClientLike = typeof prisma;

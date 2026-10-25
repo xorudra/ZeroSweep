@@ -5,8 +5,8 @@ import {
   sourceRiskFactors,
   ScopeMatcher, type CorrelationStats, type DnsRecordSet, type NormalizedFinding,
   type NormalizedSecurityResult, type NormalizedSoftwareComponent, type NormalizedVulnFinding,
-} from "@dsrclone/security-sdk";
-import type { ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import type { ScopeRules } from "@zerosweep/validation";
 
 /**
  * Result processing (Prompt 4 §32–§37, extended by Prompt 5 §31–§36):
@@ -174,7 +174,7 @@ export interface ProcessedFinding {
   endColumn?: number;
   ruleId?: string;
   codeFlow?: { label: string; filePath: string; startLine?: number; endLine?: number }[];
-  secret?: import("@dsrclone/security-sdk").NormalizedSecretFinding;
+  secret?: import("@zerosweep/security-sdk").NormalizedSecretFinding;
   componentName?: string;
   componentVersion?: string;
   componentPurl?: string;
@@ -256,7 +256,7 @@ export type ProcessedComponent = NormalizedSoftwareComponent;
 
 /** Prompt 14 §14/§15: a normalized cloud resource plus its scope
  *  verdict — out-of-scope resources are recorded, never analyzed. */
-export type ProcessedCloudResource = import("@dsrclone/security-sdk").NormalizedCloudResource & {
+export type ProcessedCloudResource = import("@zerosweep/security-sdk").NormalizedCloudResource & {
   scopeStatus: "IN_SCOPE" | "OUT_OF_SCOPE";
 };
 
@@ -322,7 +322,7 @@ export interface ProcessedGraphqlService {
 
 /** Prompt 9 §25: JWT inspection metadata — fingerprint + redacted claims
  *  only; a raw token can never reach this shape. */
-export type ProcessedJwtProfile = import("@dsrclone/security-sdk").NormalizedJwtProfile;
+export type ProcessedJwtProfile = import("@zerosweep/security-sdk").NormalizedJwtProfile;
 
 export interface ProcessedResult {
   assets: ProcessedAsset[];
@@ -342,30 +342,30 @@ export interface ProcessedResult {
   /** Prompt 12: software components inventoried by source scans (§45). */
   components: ProcessedComponent[];
   /** Prompt 13: cloud-native inventory + posture payload passthrough. */
-  cloudNative: import("@dsrclone/security-sdk").NormalizedCloudNativeData;
+  cloudNative: import("@zerosweep/security-sdk").NormalizedCloudNativeData;
   /** Prompt 14: multi-cloud inventory payload passthrough — resources
    *  carry their scope verdict (§15); the stores persist them. */
   cloud: {
     resources: ProcessedCloudResource[];
-    identities: import("@dsrclone/security-sdk").NormalizedCloudIdentity[];
-    relationships: import("@dsrclone/security-sdk").NormalizedCloudRelationship[];
-    controlAssessments: import("@dsrclone/security-sdk").NormalizedControlAssessment[];
-    riskPaths: import("@dsrclone/security-sdk").NormalizedCloudRiskPath[];
-    snapshot?: import("@dsrclone/security-sdk").NormalizedCloudSnapshot;
+    identities: import("@zerosweep/security-sdk").NormalizedCloudIdentity[];
+    relationships: import("@zerosweep/security-sdk").NormalizedCloudRelationship[];
+    controlAssessments: import("@zerosweep/security-sdk").NormalizedControlAssessment[];
+    riskPaths: import("@zerosweep/security-sdk").NormalizedCloudRiskPath[];
+    snapshot?: import("@zerosweep/security-sdk").NormalizedCloudSnapshot;
   };
   /** Prompt 15: Active Directory inventory + identity-graph payload
    *  passthrough — the stores persist it into the directory tables. */
-  directory: import("@dsrclone/security-sdk").NormalizedDirectoryData;
+  directory: import("@zerosweep/security-sdk").NormalizedDirectoryData;
   /** Prompt 17: mobile static-analysis payload passthrough — the
    *  stores persist it into the mobile build inventory tables. */
-  mobile: import("@dsrclone/security-sdk").NormalizedMobileData;
+  mobile: import("@zerosweep/security-sdk").NormalizedMobileData;
   /** Prompt 18: binary static-analysis payload passthrough — the
    *  stores persist it into the binary artifact inventory tables. */
-  binary: import("@dsrclone/security-sdk").NormalizedBinaryData;
+  binary: import("@zerosweep/security-sdk").NormalizedBinaryData;
   /** Prompt 19: wireless passive-inventory payload passthrough — the
    *  stores persist it into the wireless environment tables (APs,
    *  stations, observations, events). */
-  wireless: import("@dsrclone/security-sdk").NormalizedWirelessData;
+  wireless: import("@zerosweep/security-sdk").NormalizedWirelessData;
   /** Prompt 6: parameter + form inventory, and how many candidate
    *  endpoints were suppressed by the wildcard/trap guards (§19/§47). */
   parameters: ProcessedParameter[];

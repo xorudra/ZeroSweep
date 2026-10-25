@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface Citation { sourceType: string; sourceId: string; label: string; claimKind?: string; confidence?: number }

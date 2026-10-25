@@ -31,7 +31,7 @@ carries this disclaimer, and the headline metric is labelled
 | reports | GrcReportService, GrcBackupService | Immutable report snapshots, exports, GRC backup/restore |
 | ai | AiGrcService | Grounded AI GRC assistant + deterministic NL query plans |
 
-Pure mathematics and data live in `@dsrclone/security-sdk` (`src/grc`):
+Pure mathematics and data live in `@zerosweep/security-sdk` (`src/grc`):
 the versioned framework catalog, the control library, cross-framework
 mappings, risk-matrix computation, evaluation/freshness functions,
 evidence hashing, hostile-upload validation, audit-package manifests

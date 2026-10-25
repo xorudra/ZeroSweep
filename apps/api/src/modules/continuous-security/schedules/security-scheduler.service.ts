@@ -5,9 +5,9 @@ import {
   classifyProfile, decideLease, decideMissedRuns, decideRetry, evaluateFrequency, evaluateWindows,
   findEquivalentRunningScan, nextCronRun, nextLeaseUntil, revalidateScope, scheduleRunKey,
   type HostResolver,
-} from "@dsrclone/security-sdk";
-import { scopeRulesSchema } from "@dsrclone/validation";
-import type { Role } from "@dsrclone/types";
+} from "@zerosweep/security-sdk";
+import { scopeRulesSchema } from "@zerosweep/validation";
+import type { Role } from "@zerosweep/types";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";
@@ -19,7 +19,7 @@ import { MonitoringPolicyService } from "../monitoring/monitoring-policy.service
 import { AutoRetestService } from "../retesting/auto-retest.service";
 import { SnapshotService } from "../snapshots/snapshot.service";
 import { DriftService } from "../drift/drift.service";
-import { evaluateAutoRetestEligibility } from "@dsrclone/security-sdk";
+import { evaluateAutoRetestEligibility } from "@zerosweep/security-sdk";
 
 const LEASE_SCOPE = "continuous-scheduler";
 const MAX_INSTANTS_PER_SCHEDULE = 50;
@@ -418,7 +418,7 @@ export class SecuritySchedulerService {
       : null;
     return {
       id: schedule.createdBy,
-      email: user?.email ?? "scheduler@dsrclone",
+      email: user?.email ?? "scheduler@zerosweep",
       organizationId: workspace?.organizationId ?? "",
       role: ((membership?.role as Role | undefined) ?? "VIEWER"),
     };

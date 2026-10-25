@@ -7,12 +7,12 @@ Two supported topologies ship in `deploy/`:
 1. **Docker Compose (production profile)** —
    `deploy/compose/docker-compose.production.yml`. Services run
    read-only, `cap_drop: ["ALL"]`, `no-new-privileges`, non-root.
-   Set `DSRCLONE_VERSION=1.0.0-rc.1` (immutable tag — never `latest`)
+   Set `ZEROSWEEP_VERSION=1.0.0-rc.1` (immutable tag — never `latest`)
    and provide secrets via the environment/secret store, never in
    the compose file. The API refuses to boot on placeholder secrets
    (`assertProductionConfig`).
 2. **Kubernetes** — Kustomize base in `deploy/kubernetes` (canonical)
-   or the Helm chart in `deploy/helm/dsrclone` (renders an equivalent
+   or the Helm chart in `deploy/helm/zerosweep` (renders an equivalent
    subset). NetworkPolicies in `deploy/policies` define the service
    communication matrix; scanner workers are the only components with
    target egress.
@@ -24,7 +24,7 @@ Local reference stack (development/verification):
 ## Configuration & secrets
 
 - All configuration is environment-driven and validated by
-  `@dsrclone/config` (zod) at boot; production violations are fatal.
+  `@zerosweep/config` (zod) at boot; production violations are fatal.
 - Platform data secrets are **references** (vault names), never
   values. Application-managed sensitive fields are AES-256-GCM
   encrypted (identity vault) or hashed (tokens, recovery codes).

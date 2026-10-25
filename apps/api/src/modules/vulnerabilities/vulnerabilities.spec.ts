@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { FIXTURE_CVE, NESSUS_FIXTURE, NESSUS_XXE_ATTACK } from "@dsrclone/security-sdk";
+import { FIXTURE_CVE, NESSUS_FIXTURE, NESSUS_XXE_ATTACK } from "@zerosweep/security-sdk";
 import { VulnerabilityService } from "./vulnerability.service";
 import { IntelligenceService } from "./intelligence.service";
 import { RetestService } from "./retest.service";

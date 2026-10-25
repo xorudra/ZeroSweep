@@ -7,7 +7,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: migrate
-  labels: { app: migrate, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: migrate, app.kubernetes.io/part-of: zerosweep }
   annotations:
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
@@ -16,10 +16,10 @@ spec:
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
-      labels: { app: migrate, app.kubernetes.io/part-of: dsrclone }
+      labels: { app: migrate, app.kubernetes.io/part-of: zerosweep }
     spec:
       restartPolicy: Never
-      serviceAccountName: dsrclone-scheduler
+      serviceAccountName: zerosweep-scheduler
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -28,12 +28,12 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: migrate
-          image: ghcr.io/xorudra/dsrclone-migrate:25.0.0
+          image: ghcr.io/xorudra/zerosweep-migrate:25.0.0
           imagePullPolicy: IfNotPresent
           env:
             - name: DATABASE_URL
               valueFrom:
-                secretKeyRef: { name: dsrclone-secrets, key: DATABASE_URL }
+                secretKeyRef: { name: zerosweep-secrets, key: DATABASE_URL }
             - { name: NODE_ENV, value: "production" }
           securityContext:
             allowPrivilegeEscalation: false

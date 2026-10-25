@@ -1,4 +1,4 @@
-import { evaluateLifecycleTransition } from "@dsrclone/security-sdk";
+import { evaluateLifecycleTransition } from "@zerosweep/security-sdk";
 import { CaseStateService } from "./case-state.service";
 import { RemediationCasesService } from "./cases.service";
 import { TriageService } from "./triage.service";

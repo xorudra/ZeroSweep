@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { ForbiddenException, NotFoundException, BadRequestException } from "@nestjs/common";
-import { generateApiKey } from "@dsrclone/security-sdk";
+import { generateApiKey } from "@zerosweep/security-sdk";
 import { TelemetryService } from "./telemetry/telemetry.service";
 import { IngestionCoordinator } from "./telemetry/ingestion-coordinator.service";
 import { DetectionService } from "./detections/detection.service";
@@ -576,7 +576,7 @@ describe("response engine (§74–§82)", () => {
     } as never });
     const inc = await incident(s);
     const proposed = await s.response.propose(ENGINEER, WS, inc.id, {
-      actionKey: "DISABLE_DSRCLONE_API_KEY", targetReference: "key-victim", nonce: "n-1",
+      actionKey: "DISABLE_ZEROSWEEP_API_KEY", targetReference: "key-victim", nonce: "n-1",
     });
     const executionId = proposed.execution.id as string;
     expect(proposed.execution.status).toBe("PENDING_APPROVAL");
@@ -607,7 +607,7 @@ describe("response engine (§74–§82)", () => {
     } as never });
     const inc = await incident(s);
     const proposed = await s.response.propose(OWNER, WS, inc.id, {
-      actionKey: "PAUSE_DSRCLONE_INTEGRATION", targetReference: "int-1", nonce: "n-2",
+      actionKey: "PAUSE_ZEROSWEEP_INTEGRATION", targetReference: "int-1", nonce: "n-2",
     });
     const executionId = proposed.execution.id as string;
     await s.response.approve(ENGINEER, WS, executionId, { decision: "APPROVED" });
@@ -670,7 +670,7 @@ describe("correlation, health, analytics, SIEM, AI", () => {
     await s.prisma.finding.create({ data: { id: "f-1", workspaceId: WS, organizationId: "org-1", assetId: "asset-1", title: "Log4Shell", severity: "CRITICAL", cve: "CVE-2021-44228", status: "OPEN" } as never });
     await s.prisma.kevRecord.create({ data: { id: "kev-1", cveId: "CVE-2021-44228" } as never });
     const out = await s.coordinator.ingestAndProcess(OWNER, WS, SESSION_AUTH, [{
-      id: "exp-1", sourceCategory: "DSRCLONE_INTERNAL", eventCategory: "EXPOSURE", eventAction: "EXPOSURE_CHANGED",
+      id: "exp-1", sourceCategory: "ZEROSWEEP_INTERNAL", eventCategory: "EXPOSURE", eventAction: "EXPOSURE_CHANGED",
       eventTime: new Date().toISOString(), assetId: "asset-1", attributes: { public: true },
     }]);
     expect(out.correlationPatterns).toContain("public-exposure-kev");

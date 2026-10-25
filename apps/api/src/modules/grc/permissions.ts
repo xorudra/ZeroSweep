@@ -1,6 +1,6 @@
 import { ForbiddenException } from "@nestjs/common";
-import type { Role } from "@dsrclone/types";
-import { GRC_PERMISSIONS, type GrcPermission } from "@dsrclone/security-sdk";
+import type { Role } from "@zerosweep/types";
+import { GRC_PERMISSIONS, type GrcPermission } from "@zerosweep/security-sdk";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 
 export { GRC_PERMISSIONS };

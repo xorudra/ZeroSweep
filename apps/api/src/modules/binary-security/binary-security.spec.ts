@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { FAKE_BINARY_TOKEN, FIXTURE_ELF_HARDENED, FIXTURE_ELF_SHA256 } from "@dsrclone/security-sdk";
+import { FAKE_BINARY_TOKEN, FIXTURE_ELF_HARDENED, FIXTURE_ELF_SHA256 } from "@zerosweep/security-sdk";
 import { BinarySecurityService } from "./binary-security.service";
 
 /**

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { loadEnv, resolveTenantEnvSecret } from "@dsrclone/config";
+import { loadEnv, resolveTenantEnvSecret } from "@zerosweep/config";
 
 /**
  * Secret REFERENCES (§48/§67): the database stores only reference names.

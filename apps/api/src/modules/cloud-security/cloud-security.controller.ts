@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { z } from "zod";
-import { registerCloudAccountSchema, startCloudScanSchema } from "@dsrclone/validation";
+import { registerCloudAccountSchema, startCloudScanSchema } from "@zerosweep/validation";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { CloudSecurityService } from "./cloud-security.service";

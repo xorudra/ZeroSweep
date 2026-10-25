@@ -159,11 +159,11 @@ describe("backup orchestrator (§160–§171)", () => {
   });
 
   it("records an honest FAILED run when pg_dump is unavailable — never a fake success", async () => {
-    process.env.DATABASE_URL = "postgresql://dsrclone@127.0.0.1:54329/dsrclone";
+    process.env.DATABASE_URL = "postgresql://zerosweep@127.0.0.1:54329/zerosweep";
     const prevBin = process.env.PG_BIN_DIR;
     const prevDir = process.env.PLATFORM_BACKUP_DIR;
     process.env.PG_BIN_DIR = "/nonexistent-pg-bin";
-    process.env.PLATFORM_BACKUP_DIR = "/tmp/dsrclone-test-backups";
+    process.env.PLATFORM_BACKUP_DIR = "/tmp/zerosweep-test-backups";
     try {
       const db = makeDb();
       const svc = new BackupService(db as never, new AuditService(db as never));
@@ -182,13 +182,13 @@ describe("backup orchestrator (§160–§171)", () => {
 
 describe("backup encryption fail-closed (§166)", () => {
   it("refuses to write any dump without a passphrase file or into /tmp — recorded FAILED, never plaintext", async () => {
-    process.env.DATABASE_URL = "postgresql://dsrclone@127.0.0.1:54329/dsrclone";
+    process.env.DATABASE_URL = "postgresql://zerosweep@127.0.0.1:54329/zerosweep";
     const prevDir = process.env.PLATFORM_BACKUP_DIR;
     const prevPass = process.env.PLATFORM_BACKUP_PASSPHRASE_FILE;
     delete process.env.PLATFORM_BACKUP_PASSPHRASE_FILE;
     try {
       // Private directory, but no encryption configured -> fail closed.
-      process.env.PLATFORM_BACKUP_DIR = "/var/backups/dsrclone-test";
+      process.env.PLATFORM_BACKUP_DIR = "/var/backups/zerosweep-test";
       const db = makeDb();
       const svc = new BackupService(db as never, new AuditService(db as never));
       const record = await svc.startBackup(admin, { kind: "POSTGRES" });
@@ -196,7 +196,7 @@ describe("backup encryption fail-closed (§166)", () => {
       expect(record.errorSummary).toMatch(/encrypt/i);
       expect((record as Row).reference).toBeUndefined();
       // Predictable shared /tmp directory -> fail closed even before dump.
-      process.env.PLATFORM_BACKUP_DIR = "/tmp/dsrclone-test-backups";
+      process.env.PLATFORM_BACKUP_DIR = "/tmp/zerosweep-test-backups";
       process.env.PLATFORM_BACKUP_PASSPHRASE_FILE = "/nonexistent/passphrase";
       const db2 = makeDb();
       const svc2 = new BackupService(db2 as never, new AuditService(db2 as never));
@@ -230,30 +230,30 @@ describe("restore orchestrator (§172–§175/§202)", () => {
     db.platformBackup.rows.push({ ...completedBackup });
     const svc = new BackupService(db as never, new AuditService(db as never));
     // A tenant ADMIN without the platform-admin flag cannot restore.
-    await expect(svc.restore(tenantAdmin, "bk-1", { targetDatabase: "dsrclone_restore", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" }))
+    await expect(svc.restore(tenantAdmin, "bk-1", { targetDatabase: "zerosweep_restore", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" }))
       .rejects.toBeInstanceOf(ForbiddenException);
-    await expect(svc.restore(owner, "bk-1", { targetDatabase: "dsrclone_restore", confirm: "yes" }))
+    await expect(svc.restore(owner, "bk-1", { targetDatabase: "zerosweep_restore", confirm: "yes" }))
       .rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("refuses production and non-isolated targets before touching anything", async () => {
-    process.env.DATABASE_URL = "postgresql://dsrclone@127.0.0.1:54329/dsrclone";
+    process.env.DATABASE_URL = "postgresql://zerosweep@127.0.0.1:54329/zerosweep";
     const db = makeDb();
     db.platformBackup.rows.push({ ...completedBackup });
     const svc = new BackupService(db as never, new AuditService(db as never));
-    await expect(svc.restore(owner, "bk-1", { targetDatabase: "dsrclone", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" }))
+    await expect(svc.restore(owner, "bk-1", { targetDatabase: "zerosweep", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" }))
       .rejects.toBeInstanceOf(BadRequestException);
-    await expect(svc.restore(owner, "bk-1", { targetDatabase: "dsrclone_copy", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" }))
+    await expect(svc.restore(owner, "bk-1", { targetDatabase: "zerosweep_copy", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" }))
       .rejects.toBeInstanceOf(BadRequestException);
     expect(db.platformRestore.rows).toHaveLength(0);
   });
 
   it("fails the restore record (integrity) when the artifact is missing/corrupt — production untouched", async () => {
-    process.env.DATABASE_URL = "postgresql://dsrclone@127.0.0.1:54329/dsrclone";
+    process.env.DATABASE_URL = "postgresql://zerosweep@127.0.0.1:54329/zerosweep";
     const db = makeDb();
     db.platformBackup.rows.push({ ...completedBackup });
     const svc = new BackupService(db as never, new AuditService(db as never));
-    const done = await svc.restore(owner, "bk-1", { targetDatabase: "dsrclone_restore", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" });
+    const done = await svc.restore(owner, "bk-1", { targetDatabase: "zerosweep_restore", confirm: "RESTORE_INTO_ISOLATED_ENVIRONMENT" });
     expect(done.status).toBe("FAILED");
     expect(db.auditLog.rows.map((r) => r.action)).toContain("RESTORE_FAILED");
   });

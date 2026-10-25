@@ -1,5 +1,5 @@
 apiVersion: v2
-name: dsrclone
+name: zerosweep
 description: ZeroSweep — GUI-first automated VAPT / security-assessment platform
 type: application
 version: 1.0.0
@@ -8,4 +8,4 @@ home: https://github.com/xorudra/zerosweep
 sources:
   - https://github.com/xorudra/zerosweep
 annotations:
-  dsrclone.io/canonical-path: "deploy/kubernetes (Kustomize) — this chart renders an equivalent subset for Helm-native environments; security semantics are defined by the Kustomize base + deploy/policies"
+  zerosweep.io/canonical-path: "deploy/kubernetes (Kustomize) — this chart renders an equivalent subset for Helm-native environments; security semantics are defined by the Kustomize base + deploy/policies"

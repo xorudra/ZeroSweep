@@ -83,7 +83,7 @@ export function mobileFindingFingerprint(parts: {
     parts.platform.toUpperCase(), parts.component.toLowerCase(), parts.ruleId.toUpperCase(),
     (parts.cwe ?? "").toUpperCase(), parts.findingType.toUpperCase(),
   ].join("|");
-  return createHash("sha256").update(`dsrclone-mobile-v1\0${basis}`).digest("hex");
+  return createHash("sha256").update(`zerosweep-mobile-v1\0${basis}`).digest("hex");
 }
 
 export function mobileCrossBuildKey(parts: {
@@ -99,5 +99,5 @@ export function mobileCrossBuildKey(parts: {
     parts.platform.toUpperCase(), parts.component.toLowerCase(), parts.ruleId.toUpperCase(),
     (parts.cwe ?? "").toUpperCase(), parts.findingType.toUpperCase(),
   ].join("|");
-  return createHash("sha256").update(`dsrclone-mobile-v1\0${basis}`).digest("hex");
+  return createHash("sha256").update(`zerosweep-mobile-v1\0${basis}`).digest("hex");
 }

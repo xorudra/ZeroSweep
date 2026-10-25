@@ -11,7 +11,7 @@ import { HttpEvidenceRedactor } from "./redactor";
 import { mapBurpConfidence, mapBurpSeverity, mapCaidoSeverity, mapZapConfidence, mapZapSeverity } from "./severity";
 import { ENDPOINT_REFERENCE_PATTERN, validateEndpointReference } from "./types";
 import { assertScannerEndpointAllowed } from "./connector";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 const SCOPE: ScopeRules = {
   includeHosts: ["example.com"], excludeHosts: [], includeCidrs: [],

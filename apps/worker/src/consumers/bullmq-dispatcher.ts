@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 import type IORedis from "ioredis";
-import { prisma } from "@dsrclone/database";
-import { stageJobId } from "@dsrclone/orchestration";
+import { prisma } from "@zerosweep/database";
+import { stageJobId } from "@zerosweep/orchestration";
 import type { StageDispatcher } from "./dag-runner";
 import type { StageJobData, StageExecutionOutcome } from "../executors/stage-executor";
 

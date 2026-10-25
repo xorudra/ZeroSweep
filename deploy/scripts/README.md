@@ -12,12 +12,12 @@ Run in CI for every release image, failing the release on violation:
 
 ```sh
 # Scan (fail on fixable CRITICAL)
-trivy image --severity CRITICAL,HIGH --exit-code 1 ghcr.io/xorudra/dsrclone-api:<version>
-grype ghcr.io/xorudra/dsrclone-api:<version> --fail-on critical
+trivy image --severity CRITICAL,HIGH --exit-code 1 ghcr.io/xorudra/zerosweep-api:<version>
+grype ghcr.io/xorudra/zerosweep-api:<version> --fail-on critical
 # SBOM (attach to the release + record the reference in the manifest)
-syft ghcr.io/xorudra/dsrclone-api:<version> -o spdx-json > sbom-api.spdx.json
+syft ghcr.io/xorudra/zerosweep-api:<version> -o spdx-json > sbom-api.spdx.json
 # Sign (keyless OIDC in CI) — admission verifies (deploy/policies)
-cosign sign ghcr.io/xorudra/dsrclone-api:<version>
+cosign sign ghcr.io/xorudra/zerosweep-api:<version>
 ```
 
 `release-manifest.mjs` never fabricates digests/SBOM references: fields

@@ -49,8 +49,8 @@ export const GOBUSTER_TEXT = [
 
 /** Wfuzz PARAMETER-template output: fuzzed query keys on /search. */
 export const WFUZZ_JSON = JSON.stringify([
-  { id: 1, url: "https://example.com/search?id=dsrclone", code: 200, lines: 30, words: 90, chars: 1500, description: "id" },
-  { id: 2, url: "https://example.com/search?sort=dsrclone", code: 200, lines: 30, words: 91, chars: 1502, description: "sort" },
+  { id: 1, url: "https://example.com/search?id=zerosweep", code: 200, lines: 30, words: 90, chars: 1500, description: "id" },
+  { id: 2, url: "https://example.com/search?sort=zerosweep", code: 200, lines: 30, words: 91, chars: 1502, description: "sort" },
   { id: 3, url: "https://example.com/hidden-panel", code: 200, lines: 12, words: 40, chars: 800, description: "hidden-panel" },
 ]);
 

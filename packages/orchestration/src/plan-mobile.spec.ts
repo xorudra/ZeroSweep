@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   createMobileAdapters, createFixtureMobileDeps, mobileHealthBySlug, MOBILE_SLUGS,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PROFILE_TEMPLATES, STAGE_LIBRARY, resolveTemplate } from "./profiles";
 import { buildScanPlan } from "./plan";
 

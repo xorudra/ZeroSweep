@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface ProviderRow { id: string; name: string; type: string; enabled: boolean; enforceSso: boolean; jitEnabled: boolean; jitDefaultRole: string; oidc?: { issuer: string; clientId: string; clientSecretRef: string; clientSecretConfigured: boolean } | null; saml?: { idpEntityId: string; ssoUrl: string; spEntityId: string; certificateConfigured: boolean; wantEncryptedAssertions: boolean } | null }

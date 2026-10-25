@@ -25,7 +25,7 @@ export class UsersController {
   /** Launch Safety F29: the caller's own personal-data export (JSON download). */
   @Get("me/export")
   @Header("Content-Type", "application/json")
-  @Header("Content-Disposition", 'attachment; filename="dsrclone-data-export.json"')
+  @Header("Content-Disposition", 'attachment; filename="zerosweep-data-export.json"')
   async exportMe(@CurrentUser() user: RequestUser) {
     return this.users.exportMe(user);
   }

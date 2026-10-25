@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { buildDiagnosticBundle, type DiagnosticBundle } from "@dsrclone/security-sdk";
+import { buildDiagnosticBundle, type DiagnosticBundle } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { HealthService } from "../../../health/health.service";
 import { ProductConfigService } from "../product-config.service";

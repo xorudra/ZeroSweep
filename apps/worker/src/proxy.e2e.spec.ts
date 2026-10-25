@@ -7,7 +7,7 @@ import {
   InMemoryScannerInstanceProvider, InMemorySessionProfileProvider, MapEndpointResolver, MapSecretResolver,
   FIXTURE_INSTANCES, FIXTURE_ENDPOINTS, FIXTURE_SECRETS, createFixtureTransport,
   type ConnectorDeps, type ScannerInstanceRecord, type SessionProfileRecord,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { FakeStore } from "./testing/fake-store";

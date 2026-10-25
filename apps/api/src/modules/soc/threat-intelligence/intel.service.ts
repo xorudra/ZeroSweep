@@ -2,13 +2,13 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import {
   computeIndicatorConfidence, indicatorIsActiveForDetection, normalizeIndicatorValue,
   parseStixBundle, type IndicatorType,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireSocPermission } from "../permissions";
 import { AlertService } from "../alerts/alert.service";
-import { socAlertFingerprint } from "@dsrclone/security-sdk";
+import { socAlertFingerprint } from "@zerosweep/security-sdk";
 import type { Row } from "../helpers";
 
 interface IndicatorInput {

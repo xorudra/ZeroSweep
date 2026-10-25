@@ -6,7 +6,7 @@ import {
   FIXTURE_EMBEDDED_URL, GHIDRA_BINARY_REPORT_JSON, RADARE2_REPORT_JSON, FixtureToolRunner,
   LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, binaryHealthBySlug, createBinaryAdapters,
   type FixtureResponse,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { FakeStore } from "./testing/fake-store";

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /** GRC analytics (Prompt 27 §94) — control failures, evidence freshness, assessment gaps. Assessment support only; never a certification claim. */
 interface Grc {

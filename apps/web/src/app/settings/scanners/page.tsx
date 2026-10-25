@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * Admin → Scanner Instances (Prompt 8 §54/§55). Owner/Admin register the
@@ -164,7 +164,7 @@ export default function ScannerSettingsPage() {
               <button disabled={busy !== null} className="rounded bg-sky-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">Register instance</button>
             </div>
             <p className="text-xs text-slate-500 md:col-span-2">
-              The reference must exist in the server&apos;s scanner-endpoint configuration (DSRCLONE_SCANNER_ENDPOINTS)
+              The reference must exist in the server&apos;s scanner-endpoint configuration (ZEROSWEEP_SCANNER_ENDPOINTS)
               and the credential reference in the worker environment. URLs, hostnames and IPs are rejected here by
               design — that is what keeps scanner registration SSRF-safe. Burp Suite is commercial: register the
               bridge inside your licensed Burp environment (see docs/tools/proxy/burp.md).

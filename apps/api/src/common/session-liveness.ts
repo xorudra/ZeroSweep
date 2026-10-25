@@ -1,5 +1,5 @@
 import { UnauthorizedException } from "@nestjs/common";
-import { clampSessionPolicy, sessionExpired } from "@dsrclone/security-sdk";
+import { clampSessionPolicy, sessionExpired } from "@zerosweep/security-sdk";
 import type { PrismaClientLike } from "../prisma/prisma.module";
 
 /**

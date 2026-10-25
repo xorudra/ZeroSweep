@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /**
  * Security analytics overview (Prompt 27 §88). Every number is

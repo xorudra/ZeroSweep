@@ -6,7 +6,7 @@
   class — bounded labels; process + dependency-up gauges). Workers export
   queue depth/wait, stage durations, tool availability and heartbeat
   freshness. Prometheus rules: `deploy/monitoring/prometheus-rules.yaml`.
-- **Logs**: structured JSON from `@dsrclone/logger`, secrets redacted at
+- **Logs**: structured JSON from `@zerosweep/logger`, secrets redacted at
   emission, correlation fields requestId/jobId/scanId/eventId/traceId
   (§105–§107). Log-injection safety: user-derived values are never
   interpolated into message strings, only structured fields.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { MockSecurityAdapter, ToolRegistry } from "@zerosweep/security-sdk";
 import { StageExecutor } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { processNormalizedResult } from "./executors/result-processor";

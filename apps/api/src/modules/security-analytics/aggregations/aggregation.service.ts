@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   bucketForRange, countInRange, distribution, evidenceFreshness, groupCount, meanTimeTo,
   mttrBy, percentile, regressionRanking, recurrenceBy, slaBuckets, timeSeries, topN, trend,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { deriveExposure } from "../../continuous-security/snapshots/snapshot.service";
 import { RESOLVED_LIFECYCLES } from "../helpers";

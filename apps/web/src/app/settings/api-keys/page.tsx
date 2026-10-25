@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface KeyRow { id: string; name: string; prefix: string; ownerKind: string; scopes: string[]; expiresAt: string | null; lastUsedAt: string | null; revokedAt: string | null }

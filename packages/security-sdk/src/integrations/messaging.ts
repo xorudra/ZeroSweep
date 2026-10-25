@@ -18,7 +18,7 @@ export function buildSlackFindingAlert(finding: SanitizedFindingView): { text: s
     ? `${finding.filePath}${finding.startLine ? `:${finding.startLine}` : ""}`
     : (finding.assetReference ?? "asset");
   const headline = clean(`[${finding.severity}] ${finding.title}`, 300);
-  const text = `${headline} — ${clean(location, 200)} (${finding.dsrcloneReference})`;
+  const text = `${headline} — ${clean(location, 200)} (${finding.zerosweepReference})`;
   return {
     text,
     blocks: [
@@ -29,7 +29,7 @@ export function buildSlackFindingAlert(finding: SanitizedFindingView): { text: s
           { type: "mrkdwn", text: `*Severity:* ${finding.severity}` },
           { type: "mrkdwn", text: `*Status:* ${finding.lifecycleStatus}` },
           { type: "mrkdwn", text: `*Location:* ${clean(location, 200)}` },
-          { type: "mrkdwn", text: `*Reference:* ${finding.dsrcloneReference}` },
+          { type: "mrkdwn", text: `*Reference:* ${finding.zerosweepReference}` },
         ],
       },
       ...(finding.remediation
@@ -58,7 +58,7 @@ export function buildTeamsFindingAlert(finding: SanitizedFindingView): Record<st
         { name: "Severity", value: finding.severity },
         { name: "Status", value: finding.lifecycleStatus },
         { name: "Location", value: clean(location, 200) },
-        { name: "Reference", value: finding.dsrcloneReference },
+        { name: "Reference", value: finding.zerosweepReference },
       ],
       text: finding.remediation ? clean(finding.remediation, 400) : undefined,
     }],

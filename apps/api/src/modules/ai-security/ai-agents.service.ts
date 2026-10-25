@@ -3,7 +3,7 @@ import {
   APPLICATION_SECURITY_AGENT, CLOUD_SECURITY_AGENT, REMEDIATION_AGENT, SECURITY_ANALYSIS_AGENT,
   SOC_INVESTIGATION_AGENT, VULNERABILITY_ANALYSIS_AGENT, buildInvestigationTimeline,
   runBoundedAgent, validateAiStructuredOutput, type AiAgentDefinition, type AiSecurityResponse,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

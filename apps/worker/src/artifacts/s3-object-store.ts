@@ -46,7 +46,7 @@ export class S3ObjectStore implements ObjectStore {
     if (!endpoint || !accessKey || !secretKey) return undefined;
     return new S3ObjectStore({
       endpoint, accessKey, secretKey,
-      bucket: env.MINIO_BUCKET ?? "dsrclone-artifacts",
+      bucket: env.MINIO_BUCKET ?? "zerosweep-artifacts",
       region: env.MINIO_REGION ?? "us-east-1",
     });
   }

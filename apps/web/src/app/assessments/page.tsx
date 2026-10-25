@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/Shell";
 import { ResourceList, Row } from "@/components/ResourceList";
 import { AssessmentActions } from "@/components/AssessmentActions";
 import { CreateAssessment, PendingApprovals } from "@/components/AssessmentCreate";
-import { Badge } from "@dsrclone/ui";
+import { Badge } from "@zerosweep/ui";
 
 export default function Page() {
   const [refreshKey, setRefreshKey] = useState(0);

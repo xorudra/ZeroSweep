@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EmptyState } from "@dsrclone/ui";
+import { EmptyState } from "@zerosweep/ui";
 import { apiFetch, ApiError } from "@/lib/api-client";
 
 interface ListResponse { items?: unknown[]; total?: number; }

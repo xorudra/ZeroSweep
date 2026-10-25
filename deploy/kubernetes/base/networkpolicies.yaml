@@ -8,7 +8,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
@@ -17,7 +17,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: web
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   podSelector: { matchLabels: { app: web } }
   policyTypes: [Ingress, Egress]
@@ -41,7 +41,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: api
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   podSelector: { matchLabels: { app: api } }
   policyTypes: [Ingress, Egress]
@@ -55,7 +55,7 @@ spec:
       ports: [{ port: 4000 }]
   egress:
     # Data services are addressed as external/managed endpoints via the
-    # dsrclone-data namespace stand-ins below; in managed-service
+    # zerosweep-data namespace stand-ins below; in managed-service
     # deployments these are replaced by the provider's private endpoints
     # (still never the metadata address, which no rule allows).
     - to:
@@ -75,7 +75,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: workers
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   podSelector:
     matchExpressions:

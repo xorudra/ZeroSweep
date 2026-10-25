@@ -1,11 +1,11 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   FalcoConnector, buildCycloneDxSbom, parseImageReference, validateRegistryUrl,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type {
   CreateContainerRegistryInput, CreateKubernetesClusterInput, IngestRuntimeEventInput,
   RegisterContainerImageInput, StartContainerScanInput, StartKubernetesScanInput,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

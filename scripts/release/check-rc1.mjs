@@ -149,15 +149,15 @@ let testSummary = "";
   if (skipSlow) {
     gate(11, "BACKUP/RESTORE", false, "skipped by operator (--skip-slow) — an RC run must not skip this gate");
   } else {
-    const stack = join(process.env.HOME ?? "", "workspace/dsrclone-local-stack");
+    const stack = join(process.env.HOME ?? "", "workspace/zerosweep-local-stack");
     const pgBin = join(stack, "venv/lib/python3.12/site-packages/pgserver/pginstall/bin");
     const dump = join(stack, "backups/rc1-gate.dump");
     const env = { ...process.env };
     const steps = [
-      ["psql", ["-h", "127.0.0.1", "-p", "54329", "-U", "dsrclone", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS dsrclone_rc1_gate;"]],
-      ["pg_dump", ["-h", "127.0.0.1", "-p", "54329", "-U", "dsrclone", "-Fc", "-f", dump, "dsrclone"]],
-      ["psql", ["-h", "127.0.0.1", "-p", "54329", "-U", "dsrclone", "-d", "postgres", "-c", "CREATE DATABASE dsrclone_rc1_gate;"]],
-      ["pg_restore", ["-h", "127.0.0.1", "-p", "54329", "-U", "dsrclone", "-d", "dsrclone_rc1_gate", dump]],
+      ["psql", ["-h", "127.0.0.1", "-p", "54329", "-U", "zerosweep", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS zerosweep_rc1_gate;"]],
+      ["pg_dump", ["-h", "127.0.0.1", "-p", "54329", "-U", "zerosweep", "-Fc", "-f", dump, "zerosweep"]],
+      ["psql", ["-h", "127.0.0.1", "-p", "54329", "-U", "zerosweep", "-d", "postgres", "-c", "CREATE DATABASE zerosweep_rc1_gate;"]],
+      ["pg_restore", ["-h", "127.0.0.1", "-p", "54329", "-U", "zerosweep", "-d", "zerosweep_rc1_gate", dump]],
     ];
     let ok = true; let detail = "";
     for (const [bin, args] of steps) {
@@ -165,11 +165,11 @@ let testSummary = "";
       if (r.status !== 0) { ok = false; detail = `${bin} failed: ${(r.stderr ?? "").slice(0, 150)}`; break; }
     }
     if (ok) {
-      const q = (db) => spawnSync(join(pgBin, "psql"), ["-h", "127.0.0.1", "-p", "54329", "-U", "dsrclone", "-d", db, "-Atc", "SELECT (SELECT count(*) FROM \"Finding\") || '/' || (SELECT count(*) FROM \"AuditLog\");"], { encoding: "utf8" }).stdout?.trim();
-      const a = q("dsrclone"); const b = q("dsrclone_rc1_gate");
+      const q = (db) => spawnSync(join(pgBin, "psql"), ["-h", "127.0.0.1", "-p", "54329", "-U", "zerosweep", "-d", db, "-Atc", "SELECT (SELECT count(*) FROM \"Finding\") || '/' || (SELECT count(*) FROM \"AuditLog\");"], { encoding: "utf8" }).stdout?.trim();
+      const a = q("zerosweep"); const b = q("zerosweep_rc1_gate");
       ok = a === b && !!a;
       detail = `findings/audit source=${a} restored=${b}`;
-      spawnSync(join(pgBin, "psql"), ["-h", "127.0.0.1", "-p", "54329", "-U", "dsrclone", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS dsrclone_rc1_gate;"], { encoding: "utf8" });
+      spawnSync(join(pgBin, "psql"), ["-h", "127.0.0.1", "-p", "54329", "-U", "zerosweep", "-d", "postgres", "-c", "DROP DATABASE IF EXISTS zerosweep_rc1_gate;"], { encoding: "utf8" });
     }
     gate(11, "BACKUP/RESTORE", ok, detail);
   }
@@ -181,7 +181,7 @@ let testSummary = "";
     readOnly: /read_only:\s*true/.test(compose),
     capDropAll: /cap_drop:\s*\["ALL"\]/.test(compose),
     noNewPrivileges: /no-new-privileges/.test(compose),
-    immutableTags: /\$\{DSRCLONE_VERSION:\?/.test(compose),
+    immutableTags: /\$\{ZEROSWEEP_VERSION:\?/.test(compose),
     stagedCiPresent: (() => { try { readFileSync(join(ROOT, "deploy/ci/production-ci.yml"), "utf8"); return true; } catch { return false; } })(),
     webSecurityHeaders: /Content-Security-Policy/.test(readFileSync(join(ROOT, "apps/web/next.config.mjs"), "utf8")),
   };

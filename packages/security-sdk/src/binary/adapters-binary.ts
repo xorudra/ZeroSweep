@@ -30,7 +30,7 @@ import { GhidraAdapter } from "../mobile/adapters-mobile";
  *  governed directory the Prompt 17 adapter plans against (§18/§20).
  *  Binary mode adds ONE platform script from it; nothing else is
  *  expressible. */
-export const GHIDRA_APPROVED_SCRIPTS_DIR = "/opt/dsrclone/ghidra-scripts";
+export const GHIDRA_APPROVED_SCRIPTS_DIR = "/opt/zerosweep/ghidra-scripts";
 import type { ParsedMobile } from "../mobile/types";
 import { BinaryAdapterBase, assertBinaryConfig, binConfigStr } from "./binary-adapter.base";
 import {
@@ -63,7 +63,7 @@ function binaryMeta(partial: Partial<ToolMetadata> & Pick<ToolMetadata, "id" | "
 
 export class ChecksecAdapter extends BinaryAdapterBase {
   readonly executable = "checksec";
-  readonly containerImage = "dsrclone/checksec:local";
+  readonly containerImage = "zerosweep/checksec:local";
   readonly versionArgs = ["--version"];
   readonly metadata: ToolMetadata = binaryMeta({
     id: "adapter-checksec", slug: "checksec", name: "checksec",
@@ -195,7 +195,7 @@ export const RADARE2_PROFILES: Record<string, Radare2AnalysisProfile> = {
 
 export class Radare2Adapter extends BinaryAdapterBase {
   readonly executable = "r2";
-  readonly containerImage = "dsrclone/radare2:local";
+  readonly containerImage = "zerosweep/radare2:local";
   readonly versionArgs = ["-v"];
   readonly metadata: ToolMetadata = binaryMeta({
     id: "adapter-radare2", slug: "radare2", name: "radare2",

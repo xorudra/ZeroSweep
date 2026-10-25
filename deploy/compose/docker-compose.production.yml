@@ -7,7 +7,7 @@
 #   secrets. `.env.production.example` documents the variables with
 #   PLACEHOLDER values only.
 # - Images are referenced by immutable version tag (never `latest`); set
-#   DSRCLONE_VERSION in the environment (release manifest, §144).
+#   ZEROSWEEP_VERSION in the environment (release manifest, §144).
 # - Migrations run ONCE as a dedicated one-shot service before the API
 #   starts — API replicas never race migrations (§36).
 # - Every service is hardened: non-root (image USER), read-only root
@@ -39,13 +39,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-dsrclone}
+      POSTGRES_USER: ${POSTGRES_USER:-zerosweep}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be supplied externally}
-      POSTGRES_DB: ${POSTGRES_DB:-dsrclone}
+      POSTGRES_DB: ${POSTGRES_DB:-zerosweep}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-dsrclone}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-zerosweep}"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -94,7 +94,7 @@ services:
   # One-shot controlled migration (§36–§39): preflight + `prisma migrate
   # deploy` under an advisory lock; exits before app services start.
   migrate:
-    image: ghcr.io/xorudra/dsrclone-migrate:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-migrate:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/migrate.Dockerfile
@@ -108,7 +108,7 @@ services:
     tmpfs: ["/tmp"]
 
   api:
-    image: ghcr.io/xorudra/dsrclone-api:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-api:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/api.Dockerfile
@@ -129,7 +129,7 @@ services:
         limits: { cpus: "1.0", memory: 1G }
 
   scheduler:
-    image: ghcr.io/xorudra/dsrclone-scheduler:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-scheduler:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/scheduler.Dockerfile
@@ -149,15 +149,15 @@ services:
         limits: { cpus: "0.5", memory: 512M }
 
   worker-general:
-    image: ghcr.io/xorudra/dsrclone-worker:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-worker:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/worker.Dockerfile
-      args: { DSRCLONE_WORKER_TYPE: GENERAL_WEB }
+      args: { ZEROSWEEP_WORKER_TYPE: GENERAL_WEB }
     restart: unless-stopped
     environment:
       <<: *app-env
-      DSRCLONE_WORKER_TYPE: GENERAL_WEB
+      ZEROSWEEP_WORKER_TYPE: GENERAL_WEB
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -169,15 +169,15 @@ services:
         limits: { cpus: "2.0", memory: 2G }
 
   worker-network:
-    image: ghcr.io/xorudra/dsrclone-worker:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-worker:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/worker.Dockerfile
-      args: { DSRCLONE_WORKER_TYPE: NETWORK_EXTERNAL }
+      args: { ZEROSWEEP_WORKER_TYPE: NETWORK_EXTERNAL }
     restart: unless-stopped
     environment:
       <<: *app-env
-      DSRCLONE_WORKER_TYPE: NETWORK_EXTERNAL
+      ZEROSWEEP_WORKER_TYPE: NETWORK_EXTERNAL
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -189,7 +189,7 @@ services:
         limits: { cpus: "2.0", memory: 2G }
 
   ai:
-    image: ghcr.io/xorudra/dsrclone-ai:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-ai:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/ai.Dockerfile
@@ -209,7 +209,7 @@ services:
         limits: { cpus: "1.0", memory: 1G }
 
   web:
-    image: ghcr.io/xorudra/dsrclone-web:${DSRCLONE_VERSION:?set DSRCLONE_VERSION to an immutable release tag}
+    image: ghcr.io/xorudra/zerosweep-web:${ZEROSWEEP_VERSION:?set ZEROSWEEP_VERSION to an immutable release tag}
     build:
       context: ../..
       dockerfile: deploy/docker/web.Dockerfile
@@ -270,7 +270,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in the external env file}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
-      - ../monitoring/dashboards:/var/lib/grafana/dashboards/dsrclone:ro
+      - ../monitoring/dashboards:/var/lib/grafana/dashboards/zerosweep:ro
       - ../monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     ports:

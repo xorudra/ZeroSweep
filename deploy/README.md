@@ -3,7 +3,7 @@
 ## Canonical path (§24–§26)
 
 **Kustomize is canonical**: `kubernetes/base` + `kubernetes/overlays/{development,staging,production}`.
-Helm (`helm/dsrclone`) is an equivalent-subset alternative for Helm-native
+Helm (`helm/zerosweep`) is an equivalent-subset alternative for Helm-native
 shops. Production Compose (`compose/docker-compose.production.yml`) covers
 single-host deployments. All three express the SAME topology and security
 posture; if they ever disagree, the Kustomize base + `deploy/policies`
@@ -22,7 +22,7 @@ Migration Job (one-shot per release) ──► PostgreSQL DDL (only DDL path)
 ```
 
 Separate concerns (§27–§29): **configuration** (ConfigMap / env, in git),
-**secrets** (secret manager → `dsrclone-secrets`, never in git), and
+**secrets** (secret manager → `zerosweep-secrets`, never in git), and
 **state** (PostgreSQL, Redis AOF, object bucket) evolve and rotate
 independently.
 

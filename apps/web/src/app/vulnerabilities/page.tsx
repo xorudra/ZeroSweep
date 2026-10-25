@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { ResourceList, Row } from "@/components/ResourceList";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 const LIFECYCLES = ["", "NEW", "TRIAGED", "CONFIRMED", "IN_PROGRESS", "REMEDIATED", "RETEST_PENDING", "RESOLVED", "FALSE_POSITIVE", "ACCEPTED_RISK"];

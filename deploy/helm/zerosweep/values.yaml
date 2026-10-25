@@ -1,28 +1,28 @@
 # ZeroSweep Helm values. Secrets are NEVER set here — the chart consumes an
-# EXISTING Secret (default name: dsrclone-secrets) created by your secret
+# EXISTING Secret (default name: zerosweep-secrets) created by your secret
 # manager, plus a ConfigMap rendered from `config` below (non-secret only).
 global:
   imageRegistry: ghcr.io/xorudra
   imageTag: "1.0.0-rc.1" # immutable release tag — never "latest"
 
-existingSecret: dsrclone-secrets
+existingSecret: zerosweep-secrets
 
 config:
   NODE_ENV: production
   DATABASE_CONNECTION_LIMIT: "10"
   DATABASE_REQUIRE_TLS: "true"
   REDIS_REQUIRE_TLS: "true"
-  MINIO_ENDPOINT: "https://objects.dsrclone.internal:9000"
+  MINIO_ENDPOINT: "https://objects.zerosweep.internal:9000"
   AI_SERVICE_URL: "http://ai:8000"
   API_CORS_ORIGIN: "https://app.example.com"
   SCHEDULER_TICK_MS: "15000"
 
 services:
   api:
-    image: dsrclone-api
+    image: zerosweep-api
     replicas: 2
     port: 4000
-    serviceAccount: dsrclone-api
+    serviceAccount: zerosweep-api
     runAsUser: 1000
     command: ["node", "dist/main.js"]
     healthPath: /api/v1/health
@@ -30,10 +30,10 @@ services:
       requests: { cpu: "250m", memory: "512Mi", ephemeral-storage: "256Mi" }
       limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "1Gi" }
   web:
-    image: dsrclone-web
+    image: zerosweep-web
     replicas: 2
     port: 3000
-    serviceAccount: dsrclone-web
+    serviceAccount: zerosweep-web
     runAsUser: 1000
     command: ["./node_modules/.bin/next", "start", "-p", "3000"]
     healthPath: /
@@ -41,10 +41,10 @@ services:
       requests: { cpu: "200m", memory: "384Mi", ephemeral-storage: "256Mi" }
       limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "1Gi" }
   ai:
-    image: dsrclone-ai
+    image: zerosweep-ai
     replicas: 1
     port: 8000
-    serviceAccount: dsrclone-ai
+    serviceAccount: zerosweep-ai
     runAsUser: 999
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     healthPath: /health
@@ -52,10 +52,10 @@ services:
       requests: { cpu: "250m", memory: "512Mi", ephemeral-storage: "256Mi" }
       limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "1Gi" }
   scheduler:
-    image: dsrclone-scheduler
+    image: zerosweep-scheduler
     replicas: 1 # lease-guarded (Prompt 22); keep at 1
     port: 0
-    serviceAccount: dsrclone-scheduler
+    serviceAccount: zerosweep-scheduler
     runAsUser: 1000
     command: ["node", "dist/scheduler-main.js"]
     healthPath: ""
@@ -63,15 +63,15 @@ services:
       requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "128Mi" }
       limits: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
   worker-general:
-    image: dsrclone-worker
+    image: zerosweep-worker
     replicas: 2
     port: 0
-    serviceAccount: dsrclone-worker-controller
+    serviceAccount: zerosweep-worker-controller
     runAsUser: 1000
     command: ["node", "dist/index.js"]
     healthPath: ""
     env:
-      DSRCLONE_WORKER_TYPE: GENERAL_WEB
+      ZEROSWEEP_WORKER_TYPE: GENERAL_WEB
     resources:
       requests: { cpu: "500m", memory: "512Mi", ephemeral-storage: "512Mi" }
       limits: { cpu: "2", memory: "2Gi", ephemeral-storage: "4Gi" }

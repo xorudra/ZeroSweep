@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 /**
  * Active-scan approval (Prompt 8 §40–§43, §70). ACTIVE_WEB_SCANNING is

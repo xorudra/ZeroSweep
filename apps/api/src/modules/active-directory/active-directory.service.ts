@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { AD_DISABLED_REGISTRATIONS, isValidCredentialReference, looksLikeSecretValue } from "@dsrclone/security-sdk";
-import type { RegisterAdDomainInput, StartAdScanInput } from "@dsrclone/validation";
+import { AD_DISABLED_REGISTRATIONS, isValidCredentialReference, looksLikeSecretValue } from "@zerosweep/security-sdk";
+import type { RegisterAdDomainInput, StartAdScanInput } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

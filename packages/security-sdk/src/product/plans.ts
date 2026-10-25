@@ -122,7 +122,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "admin", "api", "app", "auth", "billing", "blog", "cdn", "client", "demo",
   "docs", "help", "legal", "login", "logout", "mail", "platform", "portal",
   "public", "register", "root", "security", "settings", "signup", "status",
-  "support", "system", "terms", "privacy", "dsrclone", "www",
+  "support", "system", "terms", "privacy", "zerosweep", "www",
 ]);
 
 export function isReservedSlug(slug: string): boolean {

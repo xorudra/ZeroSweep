@@ -4,7 +4,7 @@ import {
   AI_SAFE_DEFAULT_PROFILE, AI_TOOL_CATALOG, authorizationSnapshotHash, canTransitionWorkflow,
   evaluateAiApproval, planAutomaticAnalysis, validateAiPlan,
   type AiAuthorizationSnapshot, type AiPlanStep, type AiRiskClass, type AiSecurityPlan,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

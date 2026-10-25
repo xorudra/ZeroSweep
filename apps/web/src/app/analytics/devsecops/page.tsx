@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /** DevSecOps analytics (Prompt 27 §91) — repositories, pipeline gates, SAST/SCA trends, secret findings. */
 interface KeyCount { key: string | null; count: number }

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { loadEnv, validateProductionConfig } from "@dsrclone/config";
-import { evaluateProductionConfig, type ConfigViolation } from "@dsrclone/security-sdk";
+import { loadEnv, validateProductionConfig } from "@zerosweep/config";
+import { evaluateProductionConfig, type ConfigViolation } from "@zerosweep/security-sdk";
 
 /**
  * ProductionConfigurationService (Prompt 38 §16): the single place the

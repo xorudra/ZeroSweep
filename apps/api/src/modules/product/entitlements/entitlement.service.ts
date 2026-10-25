@@ -2,7 +2,7 @@ import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import {
   computeEffectiveEntitlements, evaluateLicense, findEntitlement, isSafetyInvariantKey,
   type EffectiveEntitlement, type EntitlementGrant, type FeatureKey,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { ProductConfigService } from "../product-config.service";
 

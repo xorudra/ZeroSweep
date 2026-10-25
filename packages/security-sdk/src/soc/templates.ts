@@ -52,7 +52,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventCategory", "eq", "IDENTITY"), cond("eventAction", "in", ["ROLE_GRANTED", "PRIVILEGE_ESCALATED", "ADMIN_ROLE_ASSIGNED"])) },
     attack: [map("Persistence", "T1098", "Account Manipulation", "MEDIUM")],
-    dataSources: ["AUTHENTICATION", "DSRCLONE_INTERNAL"],
+    dataSources: ["AUTHENTICATION", "ZEROSWEEP_INTERNAL"],
   },
   {
     key: "unexpected-admin-access", name: "Unexpected administrative access",
@@ -70,7 +70,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventAction", "eq", "SERVICE_ACCOUNT_CREATED"), cond("attributes.privileged", "eq", true)) },
     attack: [map("Persistence", "T1136", "Create Account", "MEDIUM")],
-    dataSources: ["DSRCLONE_INTERNAL", "CLOUD"],
+    dataSources: ["ZEROSWEEP_INTERNAL", "CLOUD"],
   },
   {
     key: "api-key-misuse", name: "API-key misuse indicators",
@@ -79,7 +79,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "THRESHOLD", windowSeconds: 600, threshold: { count: 10, groupBy: "attributes.sourceIp" },
       conditions: all(cond("eventAction", "eq", "API_KEY_AUTH_FAILURE")) },
     attack: [map("Credential Access", "T1110", "Brute Force", "LOW")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "security-policy-change", name: "Security policy change",
@@ -88,7 +88,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventCategory", "eq", "POLICY"), cond("eventAction", "in", ["POLICY_UPDATED", "POLICY_CREATED", "POLICY_DELETED"])) },
     attack: [map("Defense Evasion", "T1562", "Impair Defenses", "LOW")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "critical-control-disabled", name: "Critical control disabled",
@@ -97,7 +97,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventAction", "in", ["CONTROL_DISABLED", "ENFORCEMENT_DISABLED", "MFA_ENFORCEMENT_DISABLED"])) },
     attack: [map("Defense Evasion", "T1562", "Impair Defenses", "MEDIUM", "T1562.001")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "public-exposure-change", name: "Public exposure change",
@@ -106,7 +106,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventAction", "eq", "EXPOSURE_CHANGED"), cond("attributes.public", "eq", true)) },
     attack: [map("Initial Access", "T1133", "External Remote Services", "LOW")],
-    dataSources: ["CLOUD", "DSRCLONE_INTERNAL"],
+    dataSources: ["CLOUD", "ZEROSWEEP_INTERNAL"],
   },
   {
     key: "new-kev-exposure", name: "New KEV exposure",
@@ -115,7 +115,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventAction", "eq", "KEV_MATCHED")) },
     attack: [map("Initial Access", "T1190", "Exploit Public-Facing Application", "MEDIUM")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "critical-vuln-critical-asset", name: "Critical vulnerability on critical asset",
@@ -124,7 +124,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventCategory", "eq", "FINDING"), cond("severity", "eq", "CRITICAL"), cond("attributes.assetCriticality", "eq", "CRITICAL")) },
     attack: [map("Initial Access", "T1190", "Exploit Public-Facing Application", "LOW")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "gate-bypass-attempt", name: "DevSecOps gate bypass attempt",
@@ -142,7 +142,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "SINGLE_EVENT",
       conditions: all(cond("eventAction", "eq", "SCOPE_VIOLATION")) },
     attack: [map("Reconnaissance", "T1595", "Active Scanning", "LOW")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "invalid-webhook-burst", name: "Invalid webhook signature burst",
@@ -151,7 +151,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "THRESHOLD", windowSeconds: 300, threshold: { count: 10, groupBy: "source" },
       conditions: all(cond("eventAction", "eq", "WEBHOOK_INVALID_SIGNATURE")) },
     attack: [map("Initial Access", "T1071", "Application Layer Protocol", "LOW", "T1071.001")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "secret-access-failures", name: "Repeated secret-access failures",
@@ -160,7 +160,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "THRESHOLD", windowSeconds: 600, threshold: { count: 3, groupBy: "identityReference" },
       conditions: all(cond("eventAction", "eq", "SECRET_ACCESS_DENIED")) },
     attack: [map("Credential Access", "T1552", "Unsecured Credentials", "MEDIUM")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "integration-credential-failure", name: "Unexpected integration credential failure",
@@ -169,7 +169,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
     definition: { type: "THRESHOLD", windowSeconds: 900, threshold: { count: 3, groupBy: "source" },
       conditions: all(cond("eventAction", "eq", "INTEGRATION_AUTH_FAILURE")) },
     attack: [map("Defense Evasion", "T1078", "Valid Accounts", "LOW")],
-    dataSources: ["DSRCLONE_INTERNAL"],
+    dataSources: ["ZEROSWEEP_INTERNAL"],
   },
   {
     key: "privilege-then-sensitive-access", name: "Privilege change followed by sensitive access",
@@ -183,7 +183,7 @@ export const DETECTION_TEMPLATES: readonly DetectionTemplate[] = [
         all(cond("eventAction", "eq", "SENSITIVE_RESOURCE_ACCESS")),
       ] },
     attack: [map("Privilege Escalation", "T1078", "Valid Accounts", "MEDIUM")],
-    dataSources: ["AUTHENTICATION", "DSRCLONE_INTERNAL"],
+    dataSources: ["AUTHENTICATION", "ZEROSWEEP_INTERNAL"],
   },
 ] as const;
 

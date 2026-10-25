@@ -6,9 +6,9 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: dsrclone-production
+  name: zerosweep-production
   labels:
-    app.kubernetes.io/part-of: dsrclone
+    app.kubernetes.io/part-of: zerosweep
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted

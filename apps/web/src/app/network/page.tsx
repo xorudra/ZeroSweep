@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, EmptyState } from "@dsrclone/ui";
+import { Badge, EmptyState } from "@zerosweep/ui";
 
 /**
  * Network VAPT dashboard (Prompt 10 §66/§67/§70/§72). Networks, hosts,

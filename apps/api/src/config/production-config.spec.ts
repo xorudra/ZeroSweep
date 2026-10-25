@@ -1,11 +1,11 @@
-import { envSchema, validateProductionConfig, assertProductionConfig } from "@dsrclone/config";
+import { envSchema, validateProductionConfig, assertProductionConfig } from "@zerosweep/config";
 
 /**
  * Production configuration gate (Prompt 25 §30/§33): placeholder secrets and
  * unsafe production settings must REFUSE the boot; development stays easy.
  */
 describe("production config validation", () => {
-  const strongDb = "postgresql://dsrclone:supplied-by-secret-store@db.internal:5432/dsrclone?schema=public&sslmode=require";
+  const strongDb = "postgresql://zerosweep:supplied-by-secret-store@db.internal:5432/zerosweep?schema=public&sslmode=require";
 
   it("accepts development defaults without violations", () => {
     const env = envSchema.parse({});
@@ -31,7 +31,7 @@ describe("production config validation", () => {
     const env = envSchema.parse({
       NODE_ENV: "production",
       JWT_SECRET: "a-very-strong-production-secret-value-0123456789",
-      DATABASE_URL: "postgresql://dsrclone:pw@db.internal:5432/dsrclone",
+      DATABASE_URL: "postgresql://zerosweep:pw@db.internal:5432/zerosweep",
       DATABASE_REQUIRE_TLS: "true",
       REDIS_URL: "redis://redis.internal:6379",
       REDIS_REQUIRE_TLS: "true",

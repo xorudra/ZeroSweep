@@ -7,8 +7,8 @@
 set -eu
 
 SRC_ALIAS="${OBJECT_SRC_ALIAS:-dsrsrc}"
-SRC_BUCKET="${MINIO_BUCKET:-dsrclone-artifacts}"
-DST="${OBJECT_BACKUP_DEST:?OBJECT_BACKUP_DEST like s3backup/dsrclone-artifacts-backup is required}"
+SRC_BUCKET="${MINIO_BUCKET:-zerosweep-artifacts}"
+DST="${OBJECT_BACKUP_DEST:?OBJECT_BACKUP_DEST like s3backup/zerosweep-artifacts-backup is required}"
 TOOL="${OBJECT_BACKUP_TOOL:-mc}"
 
 case "$TOOL" in

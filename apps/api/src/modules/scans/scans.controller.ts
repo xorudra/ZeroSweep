@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from "@nestjs/common";
-import { assertScanTransition, type ScanStatus } from "@dsrclone/types";
-import { createScanSchema, paginationSchema } from "@dsrclone/validation";
+import { assertScanTransition, type ScanStatus } from "@zerosweep/types";
+import { createScanSchema, paginationSchema } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";

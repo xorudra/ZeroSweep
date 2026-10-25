@@ -1,5 +1,5 @@
 import Redis from "ioredis";
-import { rateLimitDecision, type AttemptBucket } from "@dsrclone/security-sdk";
+import { rateLimitDecision, type AttemptBucket } from "@zerosweep/security-sdk";
 
 /**
  * Shared rate-limit counters (security audit 2026-10-16 run-2).

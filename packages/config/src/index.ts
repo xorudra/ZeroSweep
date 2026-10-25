@@ -9,7 +9,7 @@ const booleanFromEnv = z.preprocess(
 export const envSchema = z.object({
   // Environment modes (Prompt 25 §32): development | test | staging | production.
   NODE_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
-  DATABASE_URL: z.string().min(1).default("postgresql://dsrclone:change-me-local-only@localhost:5432/dsrclone?schema=public"),
+  DATABASE_URL: z.string().min(1).default("postgresql://zerosweep:change-me-local-only@localhost:5432/zerosweep?schema=public"),
   // Launch Safety B20: optional migration-only connection string. When a
   // deployment sets it, boot-time migrations run with this (privileged)
   // URL while services keep using DATABASE_URL. Absent = migrations fall
@@ -23,13 +23,13 @@ export const envSchema = z.object({
   // flag lets a deployment assert TLS is actually in use (Prompt 25 §40).
   REDIS_REQUIRE_TLS: booleanFromEnv.default(false),
   MINIO_ENDPOINT: z.string().url().default("http://localhost:9000"),
-  MINIO_BUCKET: z.string().default("dsrclone-artifacts"),
+  MINIO_BUCKET: z.string().default("zerosweep-artifacts"),
   AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
   // Peer service URLs for the platform status view (Admin Panel). The
   // defaults are the reference deployment's public URLs; a self-hosted
   // deployment overrides them with its own.
-  WORKER_SERVICE_URL: z.string().url().default("https://dsrclone-worker.onrender.com"),
-  WEB_APP_URL: z.string().url().default("https://dsrclone-web.onrender.com"),
+  WORKER_SERVICE_URL: z.string().url().default("https://zerosweep-worker.onrender.com"),
+  WEB_APP_URL: z.string().url().default("https://zerosweep-web.onrender.com"),
   API_PORT: z.coerce.number().int().positive().default(4000),
   JWT_SECRET: z.string().min(32).default("change-me-local-dev-secret-at-least-32-chars"),
   JWT_EXPIRES_IN: z.string().default("1h"),
@@ -193,7 +193,7 @@ export const APP_NAME = "ZeroSweep";
 export const API_PREFIX = "api/v1";
 export const QUEUES = {
   ORCHESTRATION: "assessment-orchestration",
-  PLACEHOLDER: "dsrclone-placeholder",
+  PLACEHOLDER: "zerosweep-placeholder",
   REPORTS: "report-generation",
   NORMALIZATION: "normalization",
   // Prompt 4 §13 orchestration queues. Jobs carry IDs/references only —

@@ -10,7 +10,7 @@
  */
 import {
   WIRELESS_SLUGS, wirelessFindingFingerprint, type WirelessFindingType,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type { ProcessedFinding } from "./result-processor";
 
 export interface WirelessScanIdentity {

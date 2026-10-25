@@ -1,6 +1,6 @@
 import type { SecurityToolAdapter } from "../adapter/adapter.interface";
 import type { Capability, ToolCategory } from "../adapter/adapter.types";
-import type { TargetType } from "@dsrclone/types";
+import type { TargetType } from "@zerosweep/types";
 import { DuplicateAdapterError } from "../adapter/adapter.errors";
 import { validateAdapterMetadata } from "./registry.validation";
 import type { RegistryQuery } from "./registry.types";

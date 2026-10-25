@@ -16,7 +16,7 @@
 import {
   MOBILE_SLUGS, MOBILE_RULE_TAXONOMY, canonicalMobileFingerprint, crossBuildKeyFor,
   type MobileFindingType,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type { ProcessedFinding } from "./result-processor";
 
 export interface MobileScanIdentity {

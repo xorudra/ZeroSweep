@@ -5,7 +5,7 @@ import {
   ToolRegistry, createDirectoryAdapters, createFixtureDirectoryTransport,
   directoryHealthBySlug, fixturePreviousBloodHoundExport, parseBloodHoundExport,
   type DirectoryConnectorDeps, type FixtureResponse, type NormalizedDirectoryData,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { RetestRunner, type RetestStore } from "./executors/retest-runner";

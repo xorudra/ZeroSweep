@@ -5,10 +5,10 @@ import {
   analyzeBinaryPlatform, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders,
   analyzeWirelessPosture, detectWirelessDrift, evaluateWirelessGate, mergeWirelessData,
   type ApprovedWirelessProfileShape, type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type NormalizedWirelessAccessPoint, type NormalizedWirelessData, type NormalizedWirelessSecurityEvent, type SourceFileEntry,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { createHash } from "node:crypto";
-import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@dsrclone/orchestration";
-import type { ScopeRules } from "@dsrclone/validation";
+import { buildScanPlan, type ScanPlan, type ScanEventRecord } from "@zerosweep/orchestration";
+import type { ScopeRules } from "@zerosweep/validation";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
 import { correlateProcessedFindings, processNormalizedResult, type ProcessedCloudResource, type ProcessedComponent, type ProcessedResult } from "../executors/result-processor";
@@ -1134,7 +1134,7 @@ export class FakeStore implements ScanRunStore {
       ...(this.cloudSecFixtures.environment ? { environment: this.cloudSecFixtures.environment } : {}),
       toolSlug: "cloud-platform-analysis",
     };
-    let result: { findings: import("@dsrclone/security-sdk").NormalizedFinding[]; controlAssessments: import("@dsrclone/security-sdk").NormalizedControlAssessment[] } | null = null;
+    let result: { findings: import("@zerosweep/security-sdk").NormalizedFinding[]; controlAssessments: import("@zerosweep/security-sdk").NormalizedControlAssessment[] } | null = null;
     if (section === "IAM_ANALYSIS") result = analyzeIam(identities, ctx);
     else if (section === "STORAGE_ANALYSIS") {
       const a = analyzeStorage(resources, ctx);

@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, HttpException, HttpStatus, type ExceptionFilter } from "@nestjs/common";
-import { createLogger } from "@dsrclone/logger";
+import { createLogger } from "@zerosweep/logger";
 
-const logger = createLogger("dsrclone-api");
+const logger = createLogger("zerosweep-api");
 
 /** Central error handling: production responses never leak stack traces,
  *  database details, filesystem paths or internal commands. */

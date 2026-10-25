@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { buildSearchableText, redactDisplayText } from "@dsrclone/security-sdk";
+import { buildSearchableText, redactDisplayText } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { deriveExposure } from "../../continuous-security/snapshots/snapshot.service";
 

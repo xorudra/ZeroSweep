@@ -12,7 +12,7 @@ import type {
   NormalizedControlAssessment, NormalizedFinding, NormalizedKubernetesWorkload,
   NormalizedRuntimeEvent, NormalizedSoftwareComponent, NormalizedSbom,
 } from "../findings/finding.types";
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 import { buildPurl } from "../code/components";
 import { SecretFingerprintService, classifySecretType, redactedPreview } from "../code/secrets";
 import {

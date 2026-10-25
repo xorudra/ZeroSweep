@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { planRetest, type VmLifecycleStatus } from "@dsrclone/security-sdk";
+import { planRetest, type VmLifecycleStatus } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

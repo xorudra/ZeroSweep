@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Settings:
-    service_name: str = "dsrclone-ai"
+    service_name: str = "zerosweep-ai"
     environment: str = os.environ.get("NODE_ENV", "development")
     host: str = os.environ.get("AI_HOST", "0.0.0.0")
     port: int = int(os.environ.get("AI_PORT", "8000"))

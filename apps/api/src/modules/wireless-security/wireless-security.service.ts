@@ -4,12 +4,12 @@ import {
   createWirelessAdapters, evaluateActiveToolRequest, evaluateWirelessLabPolicy,
   maskMacAddress, normalizeBssid, sanitizeSsid, sanitizeWirelessText,
   validateWirelessCaptureUpload, wirelessHealthBySlug,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type {
   ApproveWirelessCaptureInput, CreateApprovedWirelessProfileInput,
   CreateWirelessEnvironmentInput, RegisterWirelessSensorInput,
   RequestWirelessLabValidationInput, StartWirelessScanInput, UploadWirelessCaptureInput,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

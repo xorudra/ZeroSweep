@@ -10,5 +10,5 @@ def test_health_ok():
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "ok"
-    assert body["service"] == "dsrclone-ai"
+    assert body["service"] == "zerosweep-ai"
     assert body["llm_connected"] is False

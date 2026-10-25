@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { computeDowngradeImpact } from "@dsrclone/security-sdk";
+import { computeDowngradeImpact } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { EntitlementService } from "../entitlements/entitlement.service";

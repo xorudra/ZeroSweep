@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Badge, Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /**
  * Cloud Security V2 (Prompt 34 §1/§126). Connection tests, the Cloud

@@ -3,7 +3,7 @@ import {
   createEventEnvelope,
   hmacSha256Hex,
   type SecurityEventEnvelope,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import {
   OutboxRunner,
   type OutboxDeliveryRecord,
@@ -69,7 +69,7 @@ function setup(http: OutboxHttp) {
   });
   store.envelopes.set("outbox-1", envelope);
   store.subscriptions.set("sub-1", {
-    id: "sub-1", endpoint: "https://hooks.example.com/dsrclone",
+    id: "sub-1", endpoint: "https://hooks.example.com/zerosweep",
     enabled: true, secretReference: "env:TEST_HOOK_SECRET",
   });
   store.deliveries.push({
@@ -95,8 +95,8 @@ describe("outbox runner (§79)", () => {
     expect(summary.delivered).toBe(1);
     expect(store.deliveries[0]!.status).toBe("DELIVERED");
     expect(store.outboxStatus.get("outbox-1")).toBe("DELIVERED");
-    expect(seen[0]!.headers["x-dsrclone-signature"]).toBe(`sha256=${hmacSha256Hex(SECRET, seen[0]!.body)}`);
-    expect(seen[0]!.headers["x-dsrclone-event-id"]).toBe(envelope.eventId);
+    expect(seen[0]!.headers["x-zerosweep-signature"]).toBe(`sha256=${hmacSha256Hex(SECRET, seen[0]!.body)}`);
+    expect(seen[0]!.headers["x-zerosweep-event-id"]).toBe(envelope.eventId);
   });
 
   it("dead-letters an SSRF destination without requesting it (§128)", async () => {
@@ -119,7 +119,7 @@ describe("outbox runner (§79)", () => {
     });
     const summary = await runner.runOnce(new Date());
     expect(summary.deadLettered).toBe(1);
-    expect(urls).toEqual(["https://hooks.example.com/dsrclone"]); // private hop never requested
+    expect(urls).toEqual(["https://hooks.example.com/zerosweep"]); // private hop never requested
     expect(store.deliveries[0]!.responseMetadata.reasonCode).toBe("SSRF_PROTECTED_DESTINATION");
   });
 

@@ -1,4 +1,4 @@
-import type { TargetType } from "@dsrclone/types";
+import type { TargetType } from "@zerosweep/types";
 import type { ToolMetadata } from "./adapter.types";
 import type { AuthorizationContext, ExecutionPlan } from "../execution/execution.types";
 import type { NormalizedSecurityResult } from "../findings/finding.types";

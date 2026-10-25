@@ -1,5 +1,5 @@
 {
-  "name": "@dsrclone/security-sdk",
+  "name": "@zerosweep/security-sdk",
   "version": "1.0.0-rc.1",
   "private": true,
   "main": "dist/index.js",
@@ -11,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dsrclone/types": "workspace:*",
-    "@dsrclone/validation": "workspace:*",
+    "@zerosweep/types": "workspace:*",
+    "@zerosweep/validation": "workspace:*",
     "js-yaml": "4.3.2"
   },
   "devDependencies": {

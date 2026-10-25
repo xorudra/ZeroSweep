@@ -1,4 +1,4 @@
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 
 /** Normalized scanner output — every adapter translates into this shape. */
 export interface NormalizedFinding {

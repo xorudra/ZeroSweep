@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { isExpired, type AnalyticsRetentionPolicyInput } from "@dsrclone/security-sdk";
+import { isExpired, type AnalyticsRetentionPolicyInput } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { IndexingService } from "../search/indexing.service";
 import { IngestionService } from "../ingestion/ingestion.service";

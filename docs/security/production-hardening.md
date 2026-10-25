@@ -8,7 +8,7 @@
   and scheduler boot).
 - Secrets are references in manifests and values in the secret manager
   only. The platform's own credential model (secret references, never
-  values in the database) extends to deployment: `dsrclone-secrets` is
+  values in the database) extends to deployment: `zerosweep-secrets` is
   created out-of-band.
 - Rotation tolerance: JWT secret — restart API (old tokens expire ≤ JWT
   TTL); database password — rolling restart after secret update; Redis

@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
-  labels: { app: api, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: api, app.kubernetes.io/part-of: zerosweep }
 spec:
   replicas: 2
   strategy:
@@ -15,13 +15,13 @@ spec:
   selector: { matchLabels: { app: api } }
   template:
     metadata:
-      labels: { app: api, app.kubernetes.io/part-of: dsrclone }
+      labels: { app: api, app.kubernetes.io/part-of: zerosweep }
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/api/v1/metrics"
         prometheus.io/port: "4000"
     spec:
-      serviceAccountName: dsrclone-api
+      serviceAccountName: zerosweep-api
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -35,12 +35,12 @@ spec:
           labelSelector: { matchLabels: { app: api } }
       containers:
         - name: api
-          image: ghcr.io/xorudra/dsrclone-api:25.0.0
+          image: ghcr.io/xorudra/zerosweep-api:25.0.0
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 4000, name: http }]
           envFrom:
-            - configMapRef: { name: dsrclone-config }
-            - secretRef: { name: dsrclone-secrets }
+            - configMapRef: { name: zerosweep-config }
+            - secretRef: { name: zerosweep-secrets }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -70,7 +70,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: api
-  labels: { app: api, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: api, app.kubernetes.io/part-of: zerosweep }
 spec:
   type: ClusterIP
   selector: { app: api }

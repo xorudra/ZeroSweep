@@ -5,7 +5,7 @@ import {
   githubPushPayload,
   gitlabMergeRequestPayload,
   type IntegrationTransport,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { AuditService } from "../audit/audit.service";
 import { KeysService } from "../identity/keys/keys.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
@@ -699,7 +699,7 @@ describe("event bus + outbox delivery (§75–§80, §128–§132)", () => {
     );
   }
 
-  async function seedSubscription(stack: Stack, endpoint = "https://hooks.example.com/dsrclone") {
+  async function seedSubscription(stack: Stack, endpoint = "https://hooks.example.com/zerosweep") {
     await seedBase(stack);
     await stack.prisma.webhookSubscription.create({
       data: {
@@ -723,7 +723,7 @@ describe("event bus + outbox delivery (§75–§80, §128–§132)", () => {
     const first = await processor.processDue(new Date());
     expect(first.delivered).toBe(1);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.headers["x-dsrclone-signature"]).toBe(
+    expect(calls[0]!.headers["x-zerosweep-signature"]).toBe(
       `sha256=${createHmac("sha256", GH_SECRET).update(calls[0]!.body).digest("hex")}`,
     );
     expect(JSON.parse(calls[0]!.body).eventId).toBe(envelope.eventId);
@@ -764,7 +764,7 @@ describe("event bus + outbox delivery (§75–§80, §128–§132)", () => {
     });
     const summary = await processor.processDue(new Date());
     expect(summary.deadLettered).toBe(1);
-    expect(urls).toEqual(["https://hooks.example.com/dsrclone"]);
+    expect(urls).toEqual(["https://hooks.example.com/zerosweep"]);
   });
 
   it("a SIEM outage never blocks the producing flow; the event retries then dead-letters (§130)", async () => {

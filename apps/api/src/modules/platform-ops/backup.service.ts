@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import {
   RESTORE_CONFIRMATION, evaluateRestoreTarget, retentionExpiry, sha256Hex,
   verifyBackupIntegrity, type RestoreValidationChecks,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { AuditService } from "../audit/audit.service";
@@ -48,7 +48,7 @@ export class BackupService {
   }
 
   private backupDir(): string {
-    return process.env.PLATFORM_BACKUP_DIR ?? "/var/backups/dsrclone";
+    return process.env.PLATFORM_BACKUP_DIR ?? "/var/backups/zerosweep";
   }
 
   /** Fail-closed backup preconditions: encryption passphrase configured
@@ -123,7 +123,7 @@ export class BackupService {
   private async executeBackup(id: string, startedAt: Date) {
     const dir = this.backupDir();
     const stamp = startedAt.toISOString().replace(/[:.]/g, "-");
-    let artifact = join(dir, `dsrclone-pg-${stamp}-${id}.dump`);
+    let artifact = join(dir, `zerosweep-pg-${stamp}-${id}.dump`);
     let encrypted = false;
     try {
       // Fail closed BEFORE any dump is written: encryption + private dir.

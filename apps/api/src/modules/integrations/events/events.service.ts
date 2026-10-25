@@ -3,7 +3,7 @@ import {
   WEBHOOK_EVENT_TYPES,
   createEventEnvelope,
   type SecurityEventEnvelope,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 
 type Row = Record<string, unknown>;

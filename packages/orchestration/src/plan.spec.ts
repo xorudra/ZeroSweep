@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockSecurityAdapter, ToolRegistry, LocalEchoAdapter } from "@dsrclone/security-sdk";
+import { MockSecurityAdapter, ToolRegistry, LocalEchoAdapter } from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 import { evaluateAuthorizationGate } from "./policy-gate";
 

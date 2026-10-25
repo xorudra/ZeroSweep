@@ -44,7 +44,7 @@ not a pod-security exception.
 ## Node strategy (§100/§101)
 
 - General pools on general nodes; the network/scanner pool on
-  scanner-labelled + tainted nodes (`dsrclone.io/scanner=true`), so scan
+  scanner-labelled + tainted nodes (`zerosweep.io/scanner=true`), so scan
   egress and any future elevated network needs stay off shared nodes.
 - PriorityClasses: platform critical (API/scheduler) above scan work;
   scan work never preempts.

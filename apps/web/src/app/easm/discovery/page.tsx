@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 
 /**
  * EASM programs & discovery (Prompt 29 §101): programs, root assets
@@ -94,7 +94,7 @@ export default function Page() {
             </tbody>
           </table>
         )}
-        <p>Publish the challenge as a DNS TXT record (<code>dsrclone-verify=…</code>) and verify from the API — ownership and active testing are separate decisions.</p>
+        <p>Publish the challenge as a DNS TXT record (<code>zerosweep-verify=…</code>) and verify from the API — ownership and active testing are separate decisions.</p>
       </Card>
       <Card title="Discovery runs">
         {runs.length === 0 ? <EmptyState title="No discovery runs yet." body="" /> : (

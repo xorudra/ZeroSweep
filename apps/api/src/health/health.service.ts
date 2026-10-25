@@ -1,9 +1,9 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { createConnection } from "node:net";
 import IORedis from "ioredis";
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 import { PRISMA, type PrismaClientLike } from "../prisma/prisma.module";
-import type { HealthCheck } from "@dsrclone/types";
+import type { HealthCheck } from "@zerosweep/types";
 
 function tcpCheck(host: string, port: number, timeoutMs = 800): Promise<boolean> {
   return new Promise((resolve) => {

@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
-import { paginationSchema } from "@dsrclone/validation";
+import { paginationSchema } from "@zerosweep/validation";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { AuditService } from "./audit.service";

@@ -1,19 +1,19 @@
 # Non-secret configuration ONLY (Prompt 25 §28). Secrets live in the
-# dsrclone-secrets Secret, populated by the operator's secret manager
+# zerosweep-secrets Secret, populated by the operator's secret manager
 # (External Secrets / sealed secrets / cloud KMS) — never in git.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dsrclone-config
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-config
+  labels: { app.kubernetes.io/part-of: zerosweep }
 data:
   NODE_ENV: "production"
   API_PORT: "4000"
   DATABASE_CONNECTION_LIMIT: "10"
   DATABASE_REQUIRE_TLS: "true"
   REDIS_REQUIRE_TLS: "true"
-  MINIO_ENDPOINT: "https://objects.dsrclone.internal:9000"
-  MINIO_BUCKET: "dsrclone-artifacts"
+  MINIO_ENDPOINT: "https://objects.zerosweep.internal:9000"
+  MINIO_BUCKET: "zerosweep-artifacts"
   AI_SERVICE_URL: "http://ai:8000"
   API_CORS_ORIGIN: "https://app.example.com"
   SCHEDULER_TICK_MS: "15000"
@@ -27,12 +27,12 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: dsrclone-secrets-template
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-secrets-template
+  labels: { app.kubernetes.io/part-of: zerosweep }
   annotations:
-    dsrclone.example/template-only: "true — do not apply; create dsrclone-secrets from your secret manager"
+    zerosweep.example/template-only: "true — do not apply; create zerosweep-secrets from your secret manager"
 type: Opaque
 stringData:
-  DATABASE_URL: "postgresql://USER:PASSWORD@HOST:5432/dsrclone?schema=public&sslmode=require"
+  DATABASE_URL: "postgresql://USER:PASSWORD@HOST:5432/zerosweep?schema=public&sslmode=require"
   REDIS_URL: "rediss://:PASSWORD@HOST:6379"
   JWT_SECRET: "REPLACE-WITH-AT-LEAST-32-RANDOM-CHARS"

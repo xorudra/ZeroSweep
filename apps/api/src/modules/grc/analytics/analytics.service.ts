@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { GRC_DISCLAIMER, coverageMetrics, evidenceFreshness } from "@dsrclone/security-sdk";
+import { GRC_DISCLAIMER, coverageMetrics, evidenceFreshness } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireGrcPermission } from "../permissions";

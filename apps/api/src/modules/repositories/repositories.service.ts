@@ -1,10 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   buildCycloneDxSbom, buildSpdxSbom, normalizeRepoPath, validateRepositoryUrl,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type {
   CreateRepositoryInput, CreateSourceExclusionInput, StartRepositoryScanInput,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

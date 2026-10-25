@@ -7,6 +7,6 @@
   in the config gate); MinIO/S3 endpoints should be https in
   distributed deployments.
 - Certificates: automate issuance + renewal; the
-  `DsrcloneCertificateExpiringSoon` alert fires at <14 days (§121).
+  `ZerosweepCertificateExpiringSoon` alert fires at <14 days (§121).
   HSTS and TLS ≥1.2 are ingress settings — the readiness checklist
   (§240) requires confirming them at go-live.

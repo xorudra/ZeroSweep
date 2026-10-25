@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface ProviderHealth { provider: string; type: string; status: string; latencyMs: number | null }

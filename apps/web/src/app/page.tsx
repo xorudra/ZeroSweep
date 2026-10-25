@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 import { FindingsOverview } from "@/components/FindingsOverview";
 
 /**

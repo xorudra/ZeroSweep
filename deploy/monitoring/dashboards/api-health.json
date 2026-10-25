@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-api-health",
+  "uid": "zerosweep-api-health",
   "title": "ZeroSweep \u2014 API Health",
-  "description": "Prompt 38 \u00a799 HTTP metrics by method/status class/route template. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a799 HTTP metrics by method/status class/route template. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (status_class) (rate(dsrclone_http_requests_total[5m]))",
+          "expr": "sum by (status_class) (rate(zerosweep_http_requests_total[5m]))",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(dsrclone_http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(zerosweep_http_request_duration_seconds_bucket[5m])))",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_process_memory_bytes",
+          "expr": "zerosweep_process_memory_bytes",
           "refId": "A"
         }
       ],

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   createNetworkAdapters, networkFixtureResponses, networkHealthBySlug, FixtureToolRunner,
-} from "@dsrclone/security-sdk";
-import type { ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import type { ScopeRules } from "@zerosweep/validation";
 import { DagRunner } from "./consumers/dag-runner";
 import { EXECUTABLE_SLUGS, StageExecutor } from "./executors/stage-executor";
 import { FakeStore } from "./testing/fake-store";

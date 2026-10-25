@@ -20,7 +20,7 @@ budgets and result processing treat connectors exactly like other tools.
 
 - **Instances, not URLs.** A `ScannerInstance` stores an opaque
   `endpointReference` name. Server configuration
-  (`DSRCLONE_SCANNER_ENDPOINTS`) maps names to real endpoints; scan
+  (`ZEROSWEEP_SCANNER_ENDPOINTS`) maps names to real endpoints; scan
   requests and API clients can never supply a scanner destination
   (§16/§17). Every outbound call passes `assertScannerEndpointAllowed`:
   loopback/link-local/metadata always blocked, private ranges only when

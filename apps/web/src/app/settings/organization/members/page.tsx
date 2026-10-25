@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Badge, Card } from "@dsrclone/ui";
+import { Badge, Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface MemberRow { userId: string; email: string; displayName: string; organizationRole: string; membershipStatus: string; mfaEnrolled: boolean; passkeyCount: number; workspaceIds: string[]; lastActive: string | null }

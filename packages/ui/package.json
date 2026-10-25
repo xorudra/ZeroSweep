@@ -1,5 +1,5 @@
 {
-  "name": "@dsrclone/ui",
+  "name": "@zerosweep/ui",
   "version": "1.0.0-rc.1",
   "private": true,
   "main": "dist/index.js",

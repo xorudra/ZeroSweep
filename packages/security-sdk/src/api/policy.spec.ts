@@ -115,7 +115,7 @@ describe("JwtInspector (§22–§25, §70)", () => {
   it("checks issuer/audience consistency only when policy configures them", () => {
     const r = inspectJwt(FIXTURE_JWT_GOOD, { source: "test", policy: { expectedIssuer: "https://other.example.com", expectedAudience: "other-api" } });
     expect(r.findings.filter((f) => f.vulnClass === "JWT_ISSUER_AUDIENCE_MISMATCH")).toHaveLength(2);
-    const ok = inspectJwt(FIXTURE_JWT_GOOD, { source: "test", policy: { expectedIssuer: "https://auth.example.com", expectedAudience: "dsrclone-test-api" } });
+    const ok = inspectJwt(FIXTURE_JWT_GOOD, { source: "test", policy: { expectedIssuer: "https://auth.example.com", expectedAudience: "zerosweep-test-api" } });
     expect(ok.findings).toEqual([]);
   });
 

@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import {
   evaluateResponsePolicy, getResponseActionDefinition, responseExecutionId,
   RESPONSE_ACTION_CATALOG,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
@@ -132,26 +132,26 @@ export class ResponseService {
   private async performAction(user: RequestUser, workspaceId: string, row: Row): Promise<{ ok: boolean; detail: Row; notConfigured?: boolean }> {
     const target = row.targetReference as string;
     switch (row.actionKey) {
-      case "DISABLE_DSRCLONE_API_KEY": {
+      case "DISABLE_ZEROSWEEP_API_KEY": {
         const key = await this.prisma.apiKey.findFirst({ where: { id: target, organizationId: user.organizationId } });
         if (!key) return { ok: false, detail: { error: "API key not found in this organization" } };
         if ((key as Row).revokedAt) return { ok: true, detail: { alreadyRevoked: true } };
         await this.prisma.apiKey.update({ where: { id: target }, data: { revokedAt: new Date() } as never });
         return { ok: true, detail: { revokedAt: new Date().toISOString(), rollback: "re-enable via credential administration (audited)" } };
       }
-      case "REVOKE_DSRCLONE_SESSION": {
+      case "REVOKE_ZEROSWEEP_SESSION": {
         const session = await this.prisma.userSession.findFirst({ where: { id: target, organizationId: user.organizationId } });
         if (!session) return { ok: false, detail: { error: "Session not found in this organization" } };
         await this.prisma.userSession.update({ where: { id: target }, data: { revokedAt: new Date() } as never });
         return { ok: true, detail: { sessionRevoked: target } };
       }
-      case "DISABLE_DSRCLONE_SERVICE_ACCOUNT": {
+      case "DISABLE_ZEROSWEEP_SERVICE_ACCOUNT": {
         const account = await this.prisma.serviceAccount.findFirst({ where: { id: target, organizationId: user.organizationId } });
         if (!account) return { ok: false, detail: { error: "Service account not found in this organization" } };
         await this.prisma.serviceAccount.update({ where: { id: target }, data: { status: "DISABLED" } as never });
         return { ok: true, detail: { disabled: target } };
       }
-      case "PAUSE_DSRCLONE_INTEGRATION": {
+      case "PAUSE_ZEROSWEEP_INTEGRATION": {
         const integration = await this.prisma.integration.findFirst({ where: { id: target, workspaceId } });
         if (!integration) return { ok: false, detail: { error: "Integration not found in this workspace" } };
         await this.prisma.integration.update({ where: { id: target }, data: { enabled: false } as never });

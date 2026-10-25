@@ -1,7 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { assertSessionLive } from "../../common/session-liveness";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

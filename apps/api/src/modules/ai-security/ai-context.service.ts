@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import {
   buildFindingContext, estimateTokens,
   type AiBuiltContext, type AiContextRecord, type AiFindingContextInput, type AiTaskType,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 
 /**

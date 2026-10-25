@@ -7,7 +7,7 @@ import {
   FixtureToolRunner, KubernetesConnector, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   cloudNativeHealthBySlug, createCloudNativeAdapters, createCodeAdapters, codeHealthBySlug,
   type FixtureResponse, type KubernetesConnectorDeps,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { FakeStore, TEST_SCOPE } from "./testing/fake-store";

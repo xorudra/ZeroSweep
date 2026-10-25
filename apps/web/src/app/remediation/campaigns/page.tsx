@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Card, EmptyState } from "@dsrclone/ui";
+import { Card, EmptyState } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface Progress { total: number; assigned: number; inProgress: number; fixClaimed: number; verificationPending: number; verified: number; closed: number; overdue: number; exceptions: number; pctVerified: number }

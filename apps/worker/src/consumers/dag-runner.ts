@@ -2,7 +2,7 @@ import {
   buildDag, dependentOutcomeOnFailure, evaluateAuthorizationGate, finalScanStatus,
   makeEvent, monotonicProgress, progressForPlan, readyStages, type GateInput,
   type ScanPlan, type ScanEventRecord,
-} from "@dsrclone/orchestration";
+} from "@zerosweep/orchestration";
 import type { StageExecutor, StageJobData, ExecutionStore, StageExecutionOutcome } from "../executors/stage-executor";
 
 /**

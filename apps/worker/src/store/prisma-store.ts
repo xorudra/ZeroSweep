@@ -1,9 +1,9 @@
-import { prisma } from "@dsrclone/database";
-import { scopeRulesSchema } from "@dsrclone/validation";
-import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@dsrclone/orchestration";
+import { prisma } from "@zerosweep/database";
+import { scopeRulesSchema } from "@zerosweep/validation";
+import { idempotencyKey, type ScanEventRecord, type ScanPlan } from "@zerosweep/orchestration";
 import {
   CidrPolicyService, DEFAULT_QUALITY_GATE_POLICY, EnvSecretResolver, InMemoryIntelligenceDataset, JwtToolAdapter, PROXY_SLUGS, VULN_SCANNER_SLUGS, analyzeDatabases, analyzeEncryption, analyzeIam, analyzeLogging, analyzeNetwork, analyzeStorage, auditLoggingEnabled, buildCloudRiskPaths, buildCycloneDxSbom, classifyBaseline, clampDiscoveryBudget, computeDueAt, computeRiskV2, confidenceUpdateForOutcome, detectRepository, enrichDependencyFindings, enrichFinding, evaluateCloudSecurityGate, evaluateContainerQualityGate, evaluateQualityGate, expandCidrTargets, DEFAULT_SLA_POLICY, matchComponentsAgainstIntel, parseImageReference, parseManifests, planCloudNativeRetest, planCloudRetest, planRetest, summarizeForQualityGate, analyzeDirectoryPosture, analyzeLdapPosture, buildIdentityGraph, diffDirectorySnapshots, findAttackPaths, planAdRetest, privilegedPrincipals, resolveNestedGroups, analyzeMobilePosture, extractMobileArtifacts, buildSpdxSbom, emptyMobileData, evaluateMobileSecurityGate, mergeMobileData, planMobileRetest, summarizeMobileForGate, analyzeBinaryPlatform, binaryFindingFingerprint, evaluateBinaryDebugPolicy, extractBinaryStrings, parseBinaryHeaders, planBinaryRetest, analyzeWirelessPosture, detectWirelessDrift, evaluateWirelessGate, type ApprovedWirelessProfileShape, type CvssRecord, type KillSwitchRecord, type NormalizedBinaryData, type NormalizedCloudIdentity, type NormalizedCloudResource, type NormalizedDirectoryData, type NormalizedMobileData, type NormalizedWirelessAccessPoint, type NormalizedWirelessData,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { createHash } from "node:crypto";
 import type { ExecutionContextRecord } from "../executors/stage-executor";
 import type { ScanRunRecord, ScanRunStore } from "../consumers/dag-runner";
@@ -3723,7 +3723,7 @@ export class PrismaWorkerStore implements ScanRunStore {
     const asset = finding.assetId ? await prisma.asset.findUnique({ where: { id: finding.assetId } }) : null;
     const policyRow = await prisma.validationPolicy.findUnique({ where: { workspaceId: request.workspaceId } });
     const snapshot = (request.authorizationSnapshot ?? {}) as { authorizationExpiresAt?: string };
-    const plan = request.plan as unknown as import("@dsrclone/security-sdk").ValidationPlan;
+    const plan = request.plan as unknown as import("@zerosweep/security-sdk").ValidationPlan;
     const session = await prisma.validationSession.create({
       data: {
         requestId, workspaceId: request.workspaceId, workerId, validatorSlug: request.validatorSlug,
@@ -3783,14 +3783,14 @@ export class PrismaWorkerStore implements ScanRunStore {
     };
   }
 
-  async activeKillSwitches(_ctx: import("@dsrclone/security-sdk").KillSwitchContext) {
+  async activeKillSwitches(_ctx: import("@zerosweep/security-sdk").KillSwitchContext) {
     const rows = await prisma.validationKillSwitch.findMany({ where: { active: true } });
     return rows.map((r) => ({
       level: r.level, organizationId: r.organizationId, workspaceId: r.workspaceId, scopeRef: r.scopeRef, active: r.active,
     }));
   }
 
-  async recordValidationEvidence(sessionId: string, evidence: import("@dsrclone/security-sdk").SanitizedEvidence[]): Promise<void> {
+  async recordValidationEvidence(sessionId: string, evidence: import("@zerosweep/security-sdk").SanitizedEvidence[]): Promise<void> {
     const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: true } });
     if (!session) return;
     for (const e of evidence) {
@@ -3804,7 +3804,7 @@ export class PrismaWorkerStore implements ScanRunStore {
     }
   }
 
-  async completeValidation(sessionId: string, outcome: import("@dsrclone/security-sdk").ValidationOutcome, detail: string, consumption: import("@dsrclone/security-sdk").BudgetConsumption): Promise<void> {
+  async completeValidation(sessionId: string, outcome: import("@zerosweep/security-sdk").ValidationOutcome, detail: string, consumption: import("@zerosweep/security-sdk").BudgetConsumption): Promise<void> {
     const session = await prisma.validationSession.findUnique({ where: { id: sessionId }, include: { request: { include: { finding: true } } } });
     if (!session) return;
     const requestStatus = outcome === "REPRODUCED" || outcome === "FIXED" ? "SUCCEEDED" : outcome === "VALIDATION_BLOCKED" ? "BLOCKED" : "INCONCLUSIVE";

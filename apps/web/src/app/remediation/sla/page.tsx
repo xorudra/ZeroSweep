@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 import { apiFetch } from "@/lib/api-client";
 
 interface SlaDash { byState: Record<string, number>; byTeam: Record<string, { total: number; breached: number }>; total: number }

@@ -6,9 +6,9 @@ describe("MetricsService (Prompt 25 §102)", () => {
     const prismaMock = { $queryRaw: async () => { throw new Error("no db in unit test"); } };
     const metrics = new MetricsService(new HealthService(prismaMock as never));
     const out = await metrics.render();
-    expect(out).toContain("# TYPE dsrclone_http_requests_total counter");
-    expect(out).toContain("dsrclone_process_uptime_seconds");
-    expect(out).toContain('dsrclone_dependency_up{dependency="postgres"} 0');
+    expect(out).toContain("# TYPE zerosweep_http_requests_total counter");
+    expect(out).toContain("zerosweep_process_uptime_seconds");
+    expect(out).toContain('zerosweep_dependency_up{dependency="postgres"} 0');
     // Cardinality discipline: no per-URL or per-tenant labels anywhere.
     expect(out).not.toMatch(/path=|url=|tenant|organization/);
   });
@@ -23,6 +23,6 @@ describe("MetricsService (Prompt 25 §102)", () => {
     mw(req, res, () => undefined);
     handlers.finish?.();
     const out = await metrics.render();
-    expect(out).toContain('dsrclone_http_requests_total{method="GET",status_class="2xx"} 1');
+    expect(out).toContain('zerosweep_http_requests_total{method="GET",status_class="2xx"} 1');
   });
 });

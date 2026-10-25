@@ -106,7 +106,7 @@ export const api = {
     // (the form states "By signing up you agree to the Terms of Service
     // and Privacy Policy"); the version accepted is sent explicitly so
     // the API can persist exactly what was agreed to. Keep in sync with
-    // CURRENT_TERMS_VERSION in @dsrclone/validation.
+    // CURRENT_TERMS_VERSION in @zerosweep/validation.
     apiFetch<{ accessToken: string }>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password, organizationName, termsAccepted: true, termsVersion: "2026-10-10" }) }),
   targets: () => apiFetch("/targets"),
   assessments: () => apiFetch("/assessments"),

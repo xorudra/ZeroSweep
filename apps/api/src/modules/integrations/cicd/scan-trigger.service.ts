@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { revalidateScope, type HostResolver } from "@dsrclone/security-sdk";
-import { scopeRulesSchema } from "@dsrclone/validation";
-import type { Role } from "@dsrclone/types";
+import { revalidateScope, type HostResolver } from "@zerosweep/security-sdk";
+import { scopeRulesSchema } from "@zerosweep/validation";
+import type { Role } from "@zerosweep/types";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { OrchestrationService } from "../../orchestration/orchestration.service";
@@ -55,7 +55,7 @@ export class ScanTriggerService {
       : null;
     return {
       id: userId,
-      email: user?.email ?? "integration@dsrclone",
+      email: user?.email ?? "integration@zerosweep",
       organizationId: workspace?.organizationId ?? "",
       role: ((membership?.role as Role | undefined) ?? "VIEWER"),
     };

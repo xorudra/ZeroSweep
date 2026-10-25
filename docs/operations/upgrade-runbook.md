@@ -4,7 +4,7 @@
 2. Take a backup and complete a restore test (§175) — no upgrade
    starts on an unproven backup.
 3. Deploy to staging with the exact release digests; run smoke +
-   migration state check (`dsrclone_db_migration_current`).
+   migration state check (`zerosweep_db_migration_current`).
 4. Promote the same digests to production (CI `deploy-production`
    job is manually approved, §148). Migrations run via the migrate
    job only.

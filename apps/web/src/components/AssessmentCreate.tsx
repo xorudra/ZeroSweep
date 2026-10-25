@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 import { apiFetch, ApiError } from "@/lib/api-client";
 
 /**

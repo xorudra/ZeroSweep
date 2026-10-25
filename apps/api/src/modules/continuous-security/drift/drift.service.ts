@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   computeRiskV3, diffAssetSnapshots, diffFindingSnapshots, diffIntelSnapshots,
   type AssetSnapshotEntry, type FindingSnapshotEntry, type IntelView,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";

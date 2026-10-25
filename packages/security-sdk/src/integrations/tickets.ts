@@ -43,7 +43,7 @@ export function buildJiraIssuePayload(
     ? `${finding.filePath}${finding.startLine ? `:${finding.startLine}` : ""}`
     : (finding.assetReference ?? "n/a");
   const description = [
-    `Security finding from ZeroSweep: ${finding.dsrcloneReference}`,
+    `Security finding from ZeroSweep: ${finding.zerosweepReference}`,
     `Severity: ${finding.severity}${finding.priority ? ` · Priority: ${finding.priority}` : ""}`,
     `Status: ${finding.lifecycleStatus} · Verification: ${finding.verificationStatus}${finding.kevListed ? " · KEV-listed" : ""}`,
     `Affected asset: ${location}`,
@@ -58,7 +58,7 @@ export function buildJiraIssuePayload(
         issuetype: { name: mapping.issueType },
         summary,
         description,
-        labels: ["dsrclone", "security", `severity-${finding.severity.toLowerCase()}`],
+        labels: ["zerosweep", "security", `severity-${finding.severity.toLowerCase()}`],
       },
     },
     redactions,

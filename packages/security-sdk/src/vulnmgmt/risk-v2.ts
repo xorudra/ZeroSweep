@@ -1,4 +1,4 @@
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 import { computeRisk, riskBandForScore, type RiskBand } from "../vuln/analysis";
 import type { FindingEnrichment } from "./enrichment";
 

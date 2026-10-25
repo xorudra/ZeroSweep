@@ -1,4 +1,4 @@
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 import type { NormalizedService } from "../findings/finding.types";
 import { canonicalizeHostname } from "../recon/normalize";
 import { parseJsonLines, str, strArr } from "../recon/parsers-common";

@@ -32,7 +32,7 @@ if [ -f .env ]; then
   exit 1
 fi
 
-DATABASE_URL="${DATABASE_URL:-postgresql://dsrclone@127.0.0.1:5432/dsrclone}"
+DATABASE_URL="${DATABASE_URL:-postgresql://zerosweep@127.0.0.1:5432/zerosweep}"
 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}"
 
 gen_secret() { openssl rand -hex 32; }
@@ -67,11 +67,11 @@ echo "Installing dependencies (pinned pnpm 9.15.0)…"
 $PNPM install --frozen-lockfile
 
 echo "Generating Prisma client + applying migrations…"
-$PNPM --filter @dsrclone/database exec prisma generate
-$PNPM --filter @dsrclone/database exec prisma migrate deploy
+$PNPM --filter @zerosweep/database exec prisma generate
+$PNPM --filter @zerosweep/database exec prisma migrate deploy
 
 echo "Seeding catalog + example product plans…"
-$PNPM --filter @dsrclone/database exec prisma db seed || $PNPM --filter @dsrclone/database seed
+$PNPM --filter @zerosweep/database exec prisma db seed || $PNPM --filter @zerosweep/database seed
 
 echo "Building…"
 $PNPM build
@@ -82,9 +82,9 @@ node scripts/product/health-check.mjs || echo "Health check reported issues — 
 cat <<'NEXT'
 
 Install complete. Next steps:
-  1. Start the API:      pnpm --filter @dsrclone/api start
-  2. Start the worker:    pnpm --filter @dsrclone/worker start
-  3. Start the web app:   pnpm --filter @dsrclone/web start
+  1. Start the API:      pnpm --filter @zerosweep/api start
+  2. Start the worker:    pnpm --filter @zerosweep/worker start
+  3. Start the web app:   pnpm --filter @zerosweep/web start
   4. Create the first account via the web UI or POST /api/v1/product/signup.
      Platform administrators are bootstrapped ONLY from the
      PRODUCT_PLATFORM_ADMIN_EMAILS deployment variable (§96).

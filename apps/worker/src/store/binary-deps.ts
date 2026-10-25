@@ -10,8 +10,8 @@
  * licensed installation is a deployment step (build-side), exactly
  * like the P14 provider and P15 directory transports.
  */
-import { prisma } from "@dsrclone/database";
-import type { BinaryArtifactRecord, BinaryConnectorDeps } from "@dsrclone/security-sdk";
+import { prisma } from "@zerosweep/database";
+import type { BinaryArtifactRecord, BinaryConnectorDeps } from "@zerosweep/security-sdk";
 
 function toArtifactRecord(row: {
   id: string; workspaceId: string; name: string; source: string;

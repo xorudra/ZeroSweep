@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-redis",
+  "uid": "zerosweep-redis",
   "title": "ZeroSweep \u2014 Redis",
-  "description": "Prompt 38 \u00a7105 connections, latency, memory. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a7105 connections, latency, memory. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_redis_connected_clients",
+          "expr": "zerosweep_redis_connected_clients",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_redis_memory_bytes",
+          "expr": "zerosweep_redis_memory_bytes",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dsrclone_redis_command_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(zerosweep_redis_command_duration_seconds_bucket[5m])))",
           "refId": "A"
         }
       ],

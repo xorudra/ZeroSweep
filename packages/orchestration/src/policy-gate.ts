@@ -1,6 +1,6 @@
-import { evaluateToolPolicy, ScopeMatcher, type AuthorizationContext, type PolicyDecision } from "@dsrclone/security-sdk";
-import type { ToolMetadata } from "@dsrclone/security-sdk";
-import type { ScopeRules } from "@dsrclone/validation";
+import { evaluateToolPolicy, ScopeMatcher, type AuthorizationContext, type PolicyDecision } from "@zerosweep/security-sdk";
+import type { ToolMetadata } from "@zerosweep/security-sdk";
+import type { ScopeRules } from "@zerosweep/validation";
 import type { PlannedStage } from "./plan";
 
 /**

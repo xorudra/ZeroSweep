@@ -194,8 +194,8 @@ pnpm test         # TypeScript suites
 pnpm test:ai      # Python tests for apps/ai
 ```
 
-Run one app: `pnpm --filter @dsrclone/web dev` (port 3000),
-`pnpm --filter @dsrclone/api dev` (port 4000), `pnpm --filter @dsrclone/worker dev`,
+Run one app: `pnpm --filter @zerosweep/web dev` (port 3000),
+`pnpm --filter @zerosweep/api dev` (port 4000), `pnpm --filter @zerosweep/worker dev`,
 `cd apps/ai && uvicorn app.main:app --port 8000`.
 
 Health checks: API `GET /api/v1/health` (api / postgres / redis / minio / ai),

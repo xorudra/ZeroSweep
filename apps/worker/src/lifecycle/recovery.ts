@@ -1,8 +1,8 @@
-import { prisma } from "@dsrclone/database";
-import { reconcileStaleExecution } from "@dsrclone/orchestration";
-import { createLogger } from "@dsrclone/logger";
+import { prisma } from "@zerosweep/database";
+import { reconcileStaleExecution } from "@zerosweep/orchestration";
+import { createLogger } from "@zerosweep/logger";
 
-const logger = createLogger("dsrclone-worker");
+const logger = createLogger("zerosweep-worker");
 
 /**
  * Restart recovery (Prompt 4 §51): on startup, reconcile executions left

@@ -22,8 +22,8 @@ function apiConnectOrigin() {
 // connect-src too, derived from the same public env vars with the
 // reference deployment as the default.
 function peerConnectOrigins() {
-  const ai = process.env.NEXT_PUBLIC_AI_URL ?? "https://dsrclone-ai.onrender.com";
-  const worker = process.env.NEXT_PUBLIC_WORKER_URL ?? "https://dsrclone-worker.onrender.com";
+  const ai = process.env.NEXT_PUBLIC_AI_URL ?? "https://zerosweep-ai.onrender.com";
+  const worker = process.env.NEXT_PUBLIC_WORKER_URL ?? "https://zerosweep-worker.onrender.com";
   const origins = [];
   for (const u of [ai, worker]) {
     try { origins.push(new URL(u).origin); } catch { /* ignore malformed */ }
@@ -53,7 +53,7 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
-  transpilePackages: ["@dsrclone/ui", "@dsrclone/types"],
+  transpilePackages: ["@zerosweep/ui", "@zerosweep/types"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

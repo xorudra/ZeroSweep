@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
-  labels: { app: web, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: web, app.kubernetes.io/part-of: zerosweep }
 spec:
   replicas: 2
   strategy:
@@ -12,9 +12,9 @@ spec:
   selector: { matchLabels: { app: web } }
   template:
     metadata:
-      labels: { app: web, app.kubernetes.io/part-of: dsrclone }
+      labels: { app: web, app.kubernetes.io/part-of: zerosweep }
     spec:
-      serviceAccountName: dsrclone-web
+      serviceAccountName: zerosweep-web
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -23,7 +23,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: web
-          image: ghcr.io/xorudra/dsrclone-web:25.0.0
+          image: ghcr.io/xorudra/zerosweep-web:25.0.0
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 3000, name: http }]
           securityContext:
@@ -55,7 +55,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: web
-  labels: { app: web, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: web, app.kubernetes.io/part-of: zerosweep }
 spec:
   type: ClusterIP
   selector: { app: web }

@@ -1,5 +1,5 @@
 import IORedis from "ioredis";
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 
 /** Shared Redis connection for BullMQ (requires maxRetriesPerRequest: null). */
 export function createRedisConnection(): IORedis {

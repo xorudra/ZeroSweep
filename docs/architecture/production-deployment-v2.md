@@ -4,7 +4,7 @@ The production deployment model deepens Prompt 25; nothing here
 replaces it. Deployment styles (§3–§6): single-node Compose
 (`deploy/compose/docker-compose.production.yml`), Docker Swarm,
 Kubernetes via Kustomize (`deploy/kubernetes`) or Helm
-(`deploy/helm/dsrclone`, now with `values.schema.json`, HPA, PDB and
+(`deploy/helm/zerosweep`, now with `values.schema.json`, HPA, PDB and
 NetworkPolicy templates), external managed services, and air-gapped
 installations using imported signed artifacts. Examples live in
 `deploy/examples/`.

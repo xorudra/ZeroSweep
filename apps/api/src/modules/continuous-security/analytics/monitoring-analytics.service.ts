@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { rollupPostureSnapshots } from "@dsrclone/security-sdk";
+import { rollupPostureSnapshots } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireContinuousPermission } from "../permissions";

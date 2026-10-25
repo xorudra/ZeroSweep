@@ -1,15 +1,15 @@
-import { prisma } from "@dsrclone/database";
+import { prisma } from "@zerosweep/database";
 import {
   EnvEndpointResolver, EnvSecretResolver, HttpScannerTransport,
   type ConnectorDeps, type ScannerInstanceProvider, type ScannerInstanceRecord,
   type ScannerProduct, type SessionProfileProvider, type SessionProfileRecord,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 
 /**
  * Prisma-backed connector dependencies for the production worker
  * (Prompt 8 §15–§17): scanner instances are read from the ScannerInstance
  * table (admin-registered metadata only), endpoints resolve from server
- * configuration (DSRCLONE_SCANNER_ENDPOINTS), and secrets resolve from the
+ * configuration (ZEROSWEEP_SCANNER_ENDPOINTS), and secrets resolve from the
  * worker's environment by reference name. No secret value is ever loaded
  * into a record, a log line or a queue payload.
  */

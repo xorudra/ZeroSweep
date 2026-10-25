@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Severity } from "@dsrclone/types";
+import type { Severity } from "@zerosweep/types";
 
 /**
  * Fingerprinting, confidence and risk (Prompt 7 §19/§22/§23/§34/§35).

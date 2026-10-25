@@ -6,8 +6,8 @@ import {
   buildContainerCoverage, evaluateBaselineDeviations, evaluateImagePolicy,
   hashBaselineRules, planContainerVerification,
   type CloudV2BaselineRule, type CloudV2PipelineStage, type ImagePolicyDefinition,
-} from "@dsrclone/security-sdk";
-import type { StartContainerScanInput } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import type { StartContainerScanInput } from "@zerosweep/validation";
 import { AuditService } from "../audit/audit.service";
 import { CloudNativeService } from "../cloud-native/cloud-native.service";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";

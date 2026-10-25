@@ -1,4 +1,4 @@
-import { judgeRetest, type RetestPlan } from "@dsrclone/security-sdk";
+import { judgeRetest, type RetestPlan } from "@zerosweep/security-sdk";
 import type { StageExecutor } from "./stage-executor";
 
 /**

@@ -4,7 +4,7 @@ import {
   deriveScanStatus, evaluateAuthorizationMatrix, evaluateModuleGate, evaluatePreflight, profileDefinition,
   requestClassOf, sha256Hex, toolCapability, toolHealthView, validateBusinessLogicScenario, validateMatrixRows,
   type AuthorizationMatrixRow, type ScanRequestBudget, type SkippedTest, type TargetEnvironment, type WebVaptProfileKey,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import { resolveWorkspace } from "../../common/tenant";

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Card } from "@dsrclone/ui";
+import { Card } from "@zerosweep/ui";
 
 /**
  * Manifest / plist view (Prompt 17 §96): the extracted analysis

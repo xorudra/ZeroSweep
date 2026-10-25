@@ -18,14 +18,14 @@
 #   how this instance is run.
 
 envVarGroups:
-  - name: dsrclone-shared
+  - name: zerosweep-shared
     envVars:
       - key: JWT_SECRET
         generateValue: true
 
 services:
   - type: keyvalue
-    name: dsrclone-redis
+    name: zerosweep-redis
     plan: free
     region: oregon
     ipAllowList:
@@ -33,11 +33,11 @@ services:
         description: everywhere (access still requires the generated connection string)
 
   - type: web
-    name: dsrclone-api
+    name: zerosweep-api
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @dsrclone/database exec prisma generate && corepack pnpm --filter @dsrclone/api... build
+    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @zerosweep/database exec prisma generate && corepack pnpm --filter @zerosweep/api... build
     startCommand: bash scripts/render/api-start.sh
     healthCheckPath: /api/v1/health/live
     envVars:
@@ -56,17 +56,17 @@ services:
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: dsrclone-redis
+          name: zerosweep-redis
           property: connectionString
-      - fromGroup: dsrclone-shared
+      - fromGroup: zerosweep-shared
       - key: API_CORS_ORIGIN
-        value: https://dsrclone-web.onrender.com
+        value: https://zerosweep-web.onrender.com
       - key: AI_SERVICE_URL
-        value: https://dsrclone-ai.onrender.com
+        value: https://zerosweep-ai.onrender.com
       - key: WORKER_SERVICE_URL
-        value: https://dsrclone-worker.onrender.com
+        value: https://zerosweep-worker.onrender.com
       - key: WEB_APP_URL
-        value: https://dsrclone-web.onrender.com
+        value: https://zerosweep-web.onrender.com
       - key: PRODUCT_MODE
         value: SELF_HOSTED
       # Invite-only deployment (owner decision 2026-10-10): public
@@ -81,11 +81,11 @@ services:
         sync: false
 
   - type: web
-    name: dsrclone-worker
+    name: zerosweep-worker
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @dsrclone/database exec prisma generate && corepack pnpm --filter @dsrclone/worker... build
+    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @zerosweep/database exec prisma generate && corepack pnpm --filter @zerosweep/worker... build
     startCommand: bash scripts/render/worker-start.sh
     envVars:
       - key: NODE_VERSION
@@ -97,12 +97,12 @@ services:
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: dsrclone-redis
+          name: zerosweep-redis
           property: connectionString
-      - fromGroup: dsrclone-shared
+      - fromGroup: zerosweep-shared
 
   - type: web
-    name: dsrclone-ai
+    name: zerosweep-ai
     runtime: python
     plan: free
     region: oregon
@@ -115,11 +115,11 @@ services:
         sync: false
 
   - type: web
-    name: dsrclone-web
+    name: zerosweep-web
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @dsrclone/web... build
+    buildCommand: corepack prepare pnpm@9.15.0 --activate && NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @zerosweep/web... build
     startCommand: cd apps/web && ./node_modules/.bin/next start -p $PORT
     envVars:
       - key: NODE_VERSION
@@ -127,8 +127,8 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_BASE_URL
-        value: https://dsrclone-api.onrender.com/api/v1
+        value: https://zerosweep-api.onrender.com/api/v1
       - key: NEXT_PUBLIC_AI_URL
-        value: https://dsrclone-ai.onrender.com
+        value: https://zerosweep-ai.onrender.com
       - key: NEXT_PUBLIC_WORKER_URL
-        value: https://dsrclone-worker.onrender.com
+        value: https://zerosweep-worker.onrender.com

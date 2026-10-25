@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { z } from "zod";
-import { registerAdDomainSchema, startAdScanSchema } from "@dsrclone/validation";
+import { registerAdDomainSchema, startAdScanSchema } from "@zerosweep/validation";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { ActiveDirectoryService } from "./active-directory.service";

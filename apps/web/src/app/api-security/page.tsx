@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Badge, Card, EmptyState, StatCard } from "@zerosweep/ui";
 
 /**
  * API Security dashboard (Prompt 9 §54/§60): the API inventory at a

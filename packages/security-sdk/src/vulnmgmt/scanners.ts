@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { Severity } from "@dsrclone/types";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { Severity } from "@zerosweep/types";
+import type { ScopeRules } from "@zerosweep/validation";
 import { ImportValidationError, assertImportSize, assertXmlSafe } from "../proxy/import-security";
 import { assertScannerEndpointAllowed, type ScannerTransport } from "../proxy/connector";
 import type { EndpointResolver, ScannerHealth, ScannerInstanceRecord, SecretResolver } from "../proxy/types";

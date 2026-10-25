@@ -4,7 +4,7 @@ import {
   generatePkcePair as generateIdentityPkcePair,
   validateOAuthState,
   validateRedirectUri,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { randomBytes } from "node:crypto";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireIntegrationPermission } from "../permissions";

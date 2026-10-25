@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Badge, Card, EmptyState } from "@dsrclone/ui";
+import { Badge, Card, EmptyState } from "@zerosweep/ui";
 import { DeleteButton } from "@/components/DeleteButton";
 import { apiFetch, ApiError } from "@/lib/api-client";
 

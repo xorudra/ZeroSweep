@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Inject, NotFoundException, Param, Post } from "@nestjs/common";
-import { createCredentialSchema } from "@dsrclone/validation";
+import { createCredentialSchema } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";

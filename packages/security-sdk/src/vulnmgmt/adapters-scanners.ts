@@ -108,7 +108,7 @@ export class VulnScannerAdapter extends BaseSecurityToolAdapter {
       throw new AdapterUnavailableError(`${this.metadata.slug}: scope produced no scanner targets — nothing to scan`);
     }
     const logicalProfile = typeof config.logicalProfile === "string" ? config.logicalProfile : "BASELINE";
-    const scanName = `dsrclone-${typeof config.scanId === "string" ? config.scanId : "scan"}`;
+    const scanName = `zerosweep-${typeof config.scanId === "string" ? config.scanId : "scan"}`;
     const { scannerTaskId } = await this.connector.createScan(instance, { logicalProfile, targets, name: scanName });
     const sleep = this.poll.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
     const maxPolls = this.poll.maxPolls ?? 120;

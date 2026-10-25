@@ -1,5 +1,5 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { parseSecurityQueryDsl } from "@dsrclone/security-sdk";
+import { parseSecurityQueryDsl } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireAnalyticsPermission } from "../permissions";

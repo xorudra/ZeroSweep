@@ -23,7 +23,7 @@ import {
   cancelSubscriptionSchema, changePlanSchema, completeStepSchema, deletionRequestSchema,
   installLicenseSchema, signupSchema, verifyEmailSchema,
 } from "./dto/product.dto";
-import { QUOTA_DIMENSIONS } from "@dsrclone/security-sdk";
+import { QUOTA_DIMENSIONS } from "@zerosweep/security-sdk";
 
 /**
  * Tenant-facing product API (Prompt 40). Every route is scoped to the

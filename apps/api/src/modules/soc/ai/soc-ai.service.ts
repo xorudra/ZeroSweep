@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   answerAttributionQuestion, composeIncidentSummary, translateSocNaturalQuery,
   type SocIncidentFacts,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { requireSocPermission } from "../permissions";
@@ -115,7 +115,7 @@ export class SocAiService {
     // §95/§96: recommend — never execute — predefined playbooks/actions.
     if (facts.alerts.some((a) => /credential|session|api.?key/i.test(a.title))) {
       answer.recommendedPlaybookKey = "suspected-credential-compromise";
-      answer.recommendedActions = [{ actionKey: "REVOKE_DSRCLONE_SESSION", note: "Recommendation only — execution requires the response engine's approval policy (§96)." }];
+      answer.recommendedActions = [{ actionKey: "REVOKE_ZEROSWEEP_SESSION", note: "Recommendation only — execution requires the response engine's approval policy (§96)." }];
     } else if (facts.indicators.length > 0) {
       answer.recommendedPlaybookKey = "malicious-indicator-match";
     }

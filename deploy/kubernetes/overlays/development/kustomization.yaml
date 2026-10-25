@@ -1,7 +1,7 @@
 # Development overlay: single replicas, dev namespace, relaxed quotas.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: dsrclone
+namespace: zerosweep
 resources:
   - ../../base
 patches:
@@ -26,15 +26,15 @@ patches:
         path: /spec/maxReplicas
         value: 2
 images:
-  - name: ghcr.io/xorudra/dsrclone-api
+  - name: ghcr.io/xorudra/zerosweep-api
     newTag: "dev"
-  - name: ghcr.io/xorudra/dsrclone-web
+  - name: ghcr.io/xorudra/zerosweep-web
     newTag: "dev"
-  - name: ghcr.io/xorudra/dsrclone-ai
+  - name: ghcr.io/xorudra/zerosweep-ai
     newTag: "dev"
-  - name: ghcr.io/xorudra/dsrclone-worker
+  - name: ghcr.io/xorudra/zerosweep-worker
     newTag: "dev"
-  - name: ghcr.io/xorudra/dsrclone-scheduler
+  - name: ghcr.io/xorudra/zerosweep-scheduler
     newTag: "dev"
-  - name: ghcr.io/xorudra/dsrclone-migrate
+  - name: ghcr.io/xorudra/zerosweep-migrate
     newTag: "dev"

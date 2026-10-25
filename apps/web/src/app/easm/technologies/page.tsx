@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { EmptyState } from "@dsrclone/ui";
+import { EmptyState } from "@zerosweep/ui";
 
 /**
  * Technology intelligence (Prompt 29 §103). Confidence comes from

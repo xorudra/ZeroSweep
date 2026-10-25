@@ -16,11 +16,11 @@ COPY --from=deps /repo/node_modules ./node_modules
 ARG NEXT_PUBLIC_API_BASE_URL=/api/v1
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} NEXT_TELEMETRY_DISABLED=1
 RUN pnpm install --frozen-lockfile --ignore-scripts \
- && pnpm --filter @dsrclone/web... build \
- && pnpm --filter @dsrclone/web deploy --prod /out
+ && pnpm --filter @zerosweep/web... build \
+ && pnpm --filter @zerosweep/web deploy --prod /out
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
-LABEL org.opencontainers.image.title="dsrclone-web" \
+LABEL org.opencontainers.image.title="zerosweep-web" \
       org.opencontainers.image.description="ZeroSweep web console" \
       org.opencontainers.image.source="https://github.com/xorudra/zerosweep" \
       org.opencontainers.image.licenses="UNLICENSED"

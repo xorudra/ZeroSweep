@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 import { AuditModule } from "../audit/audit.module";
 import { AuthModule } from "../auth/auth.module";
 import { AuthFlowService } from "./auth-flow.service";

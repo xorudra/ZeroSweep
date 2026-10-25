@@ -2,7 +2,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import {
   FIXTURE_GRAPHQL_INTROSPECTION, FIXTURE_HOSTILE_OPENAPI_JSON, FIXTURE_JWT_BAD,
   FIXTURE_OPENAPI_JSON, FIXTURE_POSTMAN_COLLECTION, FIXTURE_POSTMAN_ENVIRONMENT,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { ApiSecurityService } from "./api-security.service";
 
 /**

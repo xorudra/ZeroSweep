@@ -182,7 +182,7 @@ export interface DiagnosticBundleInput {
 }
 
 export interface DiagnosticBundle {
-  kind: "DSRCLONE_SUPPORT_DIAGNOSTICS";
+  kind: "ZEROSWEEP_SUPPORT_DIAGNOSTICS";
   releaseVersion: string;
   productMode: string;
   generatedAt: string;
@@ -199,7 +199,7 @@ export interface DiagnosticBundle {
  *  automatically and contain no customer content. */
 export function buildDiagnosticBundle(input: DiagnosticBundleInput): DiagnosticBundle {
   return {
-    kind: "DSRCLONE_SUPPORT_DIAGNOSTICS",
+    kind: "ZEROSWEEP_SUPPORT_DIAGNOSTICS",
     releaseVersion: input.releaseVersion,
     productMode: input.productMode,
     generatedAt: input.generatedAt.toISOString(),

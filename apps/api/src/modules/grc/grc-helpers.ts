@@ -1,6 +1,6 @@
-import { redactEvidenceText } from "@dsrclone/security-sdk";
+import { redactEvidenceText } from "@zerosweep/security-sdk";
 
-export { buildPackageManifest, verifyPackage, hashEvidence, GRC_DISCLAIMER } from "@dsrclone/security-sdk";
+export { buildPackageManifest, verifyPackage, hashEvidence, GRC_DISCLAIMER } from "@zerosweep/security-sdk";
 
 /**
  * §73 + Prompt 20 redaction discipline: every string that enters an

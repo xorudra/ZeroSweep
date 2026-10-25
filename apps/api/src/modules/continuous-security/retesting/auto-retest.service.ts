@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { evaluateAutoRetestEligibility, type RetestTrigger } from "@dsrclone/security-sdk";
+import { evaluateAutoRetestEligibility, type RetestTrigger } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";
@@ -98,8 +98,8 @@ export class AutoRetestService {
       return { requested: false, reason: `auto-retest daily cap reached (${policy.maxPerDay}) — bounded automation (§51)` };
     }
     const requester: RequestUser = actor
-      ? { id: actor.userId, email: actor.email ?? "scheduler@dsrclone", organizationId: actor.organizationId, role: actor.role }
-      : { id: "scheduler", email: "scheduler@dsrclone", organizationId: "", role: "SECURITY_ENGINEER" };
+      ? { id: actor.userId, email: actor.email ?? "scheduler@zerosweep", organizationId: actor.organizationId, role: actor.role }
+      : { id: "scheduler", email: "scheduler@zerosweep", organizationId: "", role: "SECURITY_ENGINEER" };
     let created: { id: string };
     try {
       created = await this.retests.requestRetest(requester, workspaceId, findingId, `auto-retest (${trigger}): ${evaluation.reason}`);

@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
-import { normalizeDomain, normalizeIp } from "@dsrclone/security-sdk";
+import { normalizeDomain, normalizeIp } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
@@ -93,7 +93,7 @@ export class EasmProgramsService {
       // PENDING like everything else; WHOIS is never consulted here.
       if (!/^[0-9a-fA-F:./]+$/.test(value) || !value.includes("/")) throw new BadRequestException("Invalid CIDR notation");
     }
-    const challenge = `dsrclone-verify=${randomBytes(12).toString("hex")}`;
+    const challenge = `zerosweep-verify=${randomBytes(12).toString("hex")}`;
     const root = await this.prisma.easmRootAsset.create({
       data: {
         programId: program.id as string, workspaceId, type: input.type, value, unicodeValue,

@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { BURP_ISSUES_XML, HAR_EXPORT, ZAP_ALERTS, hashScopeSnapshot } from "@dsrclone/security-sdk";
+import { BURP_ISSUES_XML, HAR_EXPORT, ZAP_ALERTS, hashScopeSnapshot } from "@zerosweep/security-sdk";
 import { ScanHttpHistoryController, ScannersController } from "./scanners.controller";
 import { ScannersService } from "./scanners.service";
 import { ROLES_KEY } from "../../common/decorators/auth.decorators";

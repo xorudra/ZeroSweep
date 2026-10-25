@@ -23,7 +23,7 @@ const CRYPTO_RE = /\b(?:MD5|SHA-?1|SHA-?256|SHA-?512|AES|DES|3DES|RC4|ECB|CBC|PK
 const ERROR_RE = /\b(?:error|failed|exception|invalid|denied|warning|fatal|assert)\b/i;
 
 function secretFingerprint(value: string): string {
-  return createHmac("sha256", "dsrclone-binary-secret-fingerprint").update(value).digest("hex").slice(0, 24);
+  return createHmac("sha256", "zerosweep-binary-secret-fingerprint").update(value).digest("hex").slice(0, 24);
 }
 
 function classify(value: string): { category: BinaryStringCategory; secretType?: string } {

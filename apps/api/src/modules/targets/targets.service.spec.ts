@@ -45,7 +45,7 @@ describe("TargetsService tenant isolation", () => {
  * resolution can never steer the fetch into private space.
  */
 describe("TargetsService HTTP_FILE verification fetch guard (A5)", () => {
-  const challenge = "dsrclone-verify=abc123";
+  const challenge = "zerosweep-verify=abc123";
   const pinnedFetchMock = jest.fn();
 
   function makeSvc(targetValue: string) {
@@ -106,7 +106,7 @@ describe("TargetsService HTTP_FILE verification fetch guard (A5)", () => {
     expect(res.status).toBe("VERIFIED");
     expect(lookupMock).toHaveBeenCalledTimes(1);
     expect(pinnedFetchMock).toHaveBeenCalledWith(
-      "https://example.com/.well-known/dsrclone-verification.txt", "93.184.216.34", 4,
+      "https://example.com/.well-known/zerosweep-verification.txt", "93.184.216.34", 4,
     );
   });
 

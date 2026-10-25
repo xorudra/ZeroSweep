@@ -17,12 +17,12 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY . .
 COPY --from=deps /repo/node_modules ./node_modules
 RUN pnpm install --frozen-lockfile --ignore-scripts \
- && pnpm --filter @dsrclone/api... build \
- && pnpm --filter @dsrclone/api deploy --prod /out \
+ && pnpm --filter @zerosweep/api... build \
+ && pnpm --filter @zerosweep/api deploy --prod /out \
  && cp -r apps/api/dist /out/dist
 
 FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runtime
-LABEL org.opencontainers.image.title="dsrclone-scheduler" \
+LABEL org.opencontainers.image.title="zerosweep-scheduler" \
       org.opencontainers.image.description="ZeroSweep standalone scheduler (Prompt 22 lease)" \
       org.opencontainers.image.source="https://github.com/xorudra/zerosweep" \
       org.opencontainers.image.licenses="UNLICENSED"

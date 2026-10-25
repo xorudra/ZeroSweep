@@ -241,7 +241,7 @@ describe("RepositoriesService (Prompt 12 §97–§109)", () => {
     expect(state.verifications).toHaveLength(0);
     expect(state.targets[0]?.verified).toBe(false);
     // A completed DNS_TXT challenge is real proof — no manual row minted.
-    state.verifications.push({ targetId: "t-1", method: "DNS_TXT", challenge: "dsrclone-verify=x", status: "VERIFIED" });
+    state.verifications.push({ targetId: "t-1", method: "DNS_TXT", challenge: "zerosweep-verify=x", status: "VERIFIED" });
     const out = await service.verifyRepository(engineer, "repo-1");
     expect(out.verified).toBe(true);
     expect(state.verifications).toHaveLength(1);

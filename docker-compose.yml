@@ -3,10 +3,10 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: dsrclone-postgres
+    container_name: zerosweep-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-dsrclone}
-      POSTGRES_USER: ${POSTGRES_USER:-dsrclone}
+      POSTGRES_DB: ${POSTGRES_DB:-zerosweep}
+      POSTGRES_USER: ${POSTGRES_USER:-zerosweep}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -14,14 +14,14 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dsrclone} -d ${POSTGRES_DB:-dsrclone}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zerosweep} -d ${POSTGRES_DB:-zerosweep}"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: dsrclone-redis
+    container_name: zerosweep-redis
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -35,10 +35,10 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: dsrclone-minio
+    container_name: zerosweep-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dsrclone-local}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-zerosweep-local}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-local-only}
     ports:
       - "${MINIO_PORT:-9000}:9000"
@@ -57,9 +57,9 @@ services:
       minio:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dsrclone-local}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-zerosweep-local}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-local-only}
-      MINIO_BUCKET: ${MINIO_BUCKET:-dsrclone-artifacts}
+      MINIO_BUCKET: ${MINIO_BUCKET:-zerosweep-artifacts}
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
@@ -123,8 +123,8 @@ services:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
       MINIO_ENDPOINT: http://minio:9000
-      DSRCLONE_WORKER_TYPE: CONTAINER_ANALYSIS
-      DSRCLONE_WORKER_CAPABILITIES: CONTAINER_ANALYSIS
+      ZEROSWEEP_WORKER_TYPE: CONTAINER_ANALYSIS
+      ZEROSWEEP_WORKER_CAPABILITIES: CONTAINER_ANALYSIS
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -144,8 +144,8 @@ services:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
       MINIO_ENDPOINT: http://minio:9000
-      DSRCLONE_WORKER_TYPE: CLOUD_ANALYSIS
-      DSRCLONE_WORKER_CAPABILITIES: CLOUD_ANALYSIS
+      ZEROSWEEP_WORKER_TYPE: CLOUD_ANALYSIS
+      ZEROSWEEP_WORKER_CAPABILITIES: CLOUD_ANALYSIS
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -165,8 +165,8 @@ services:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
       MINIO_ENDPOINT: http://minio:9000
-      DSRCLONE_WORKER_TYPE: DIRECTORY_ANALYSIS
-      DSRCLONE_WORKER_CAPABILITIES: DIRECTORY_ANALYSIS
+      ZEROSWEEP_WORKER_TYPE: DIRECTORY_ANALYSIS
+      ZEROSWEEP_WORKER_CAPABILITIES: DIRECTORY_ANALYSIS
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -185,8 +185,8 @@ services:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
       MINIO_ENDPOINT: http://minio:9000
-      DSRCLONE_WORKER_TYPE: PRIVILEGED_HOST
-      DSRCLONE_WORKER_CAPABILITIES: PRIVILEGED_HOST_ASSESSMENT
+      ZEROSWEEP_WORKER_TYPE: PRIVILEGED_HOST
+      ZEROSWEEP_WORKER_CAPABILITIES: PRIVILEGED_HOST_ASSESSMENT
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

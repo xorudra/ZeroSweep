@@ -5,7 +5,7 @@ import {
   KISMET_FIXTURE_JSON, TSHARK_WIRELESS_FIXTURE, FixtureToolRunner, LocalEchoAdapter,
   MockSecurityAdapter, ToolRegistry, createWirelessAdapters, wirelessHealthBySlug,
   type FixtureResponse,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { StageExecutor, EXECUTABLE_SLUGS } from "./executors/stage-executor";
 import { DagRunner } from "./consumers/dag-runner";
 import { FakeStore } from "./testing/fake-store";

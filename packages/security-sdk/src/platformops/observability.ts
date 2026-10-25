@@ -19,9 +19,9 @@ export function metricLabelViolations(labels: Record<string, string>): string[] 
   return Object.keys(labels).filter((k) => FORBIDDEN_METRIC_LABELS.has(k));
 }
 
-/** §98: every platform metric carries the dsrclone_ prefix. */
+/** §98: every platform metric carries the zerosweep_ prefix. */
 export function metricNameValid(name: string): boolean {
-  return /^dsrclone_[a-z0-9_]+$/.test(name);
+  return /^zerosweep_[a-z0-9_]+$/.test(name);
 }
 
 const SENSITIVE_ATTRIBUTE = /(authorization|cookie|password|passwd|secret|token|api[-_]?key|private[-_]?key|credential|session)/i;

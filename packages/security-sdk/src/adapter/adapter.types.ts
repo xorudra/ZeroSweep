@@ -1,4 +1,4 @@
-import type { TargetType } from "@dsrclone/types";
+import type { TargetType } from "@zerosweep/types";
 
 export const TOOL_CATEGORIES = [
   "RECON", "WEB", "NETWORK", "API", "ACTIVE_DIRECTORY", "PASSWORD_AUDIT",

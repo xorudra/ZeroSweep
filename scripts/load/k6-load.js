@@ -21,7 +21,7 @@ import { check, sleep } from "k6";
 import { Rate } from "k6/metrics";
 
 const BASE_URL = (__ENV.BASE_URL || "http://localhost:4000").replace(/\/$/, "");
-const PRODUCTION_HOSTS = ["dsrclone-api.onrender.com", "dsrclone-web.onrender.com"];
+const PRODUCTION_HOSTS = ["zerosweep-api.onrender.com", "zerosweep-web.onrender.com"];
 
 if (PRODUCTION_HOSTS.some((h) => BASE_URL.includes(h))) {
   throw new Error(

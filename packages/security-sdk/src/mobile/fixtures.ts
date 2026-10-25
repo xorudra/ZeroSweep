@@ -17,7 +17,7 @@ import type { MobileApplicationRecord, MobileBuildRecord, MobileConnectorDeps } 
 export const FIXTURE_SECRET_VALUE = "FAKE_EXAMPLE_TOKEN_0123456789abcdef";
 
 export const FIXTURE_PACKAGE_NAME = "com.example.app";
-export const FIXTURE_BUILD_HASH = sha256Hex(new TextEncoder().encode("dsrclone-fixture-apk-bytes-com.example.app-1.2"));
+export const FIXTURE_BUILD_HASH = sha256Hex(new TextEncoder().encode("zerosweep-fixture-apk-bytes-com.example.app-1.2"));
 
 export const FIXTURE_ANDROID_MANIFEST_XML = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"

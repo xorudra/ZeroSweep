@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import {
   correlateFindings, fingerprintOfFinding, parseGreenboneReport, parseNessusReport,
   type ParsedScannerReport,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

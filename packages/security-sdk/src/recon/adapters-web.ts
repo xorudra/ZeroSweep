@@ -65,7 +65,7 @@ export class HttpxAdapter extends ReconAdapterBase {
 
 export class WhatWebAdapter extends ReconAdapterBase {
   readonly executable = "whatweb";
-  readonly containerImage = "dsrclone/whatweb"; // platform image built from the official release (§3)
+  readonly containerImage = "zerosweep/whatweb"; // platform image built from the official release (§3)
   readonly versionArgs = ["--version"];
   protected readonly parser: ReconParser = new WhatWebParser();
   readonly metadata = meta({
@@ -88,7 +88,7 @@ export class WhatWebAdapter extends ReconAdapterBase {
 
 export class GauAdapter extends ReconAdapterBase {
   readonly executable = "gau";
-  readonly containerImage = "dsrclone/gau"; // platform image built from the official release (§3)
+  readonly containerImage = "zerosweep/gau"; // platform image built from the official release (§3)
   readonly versionArgs: string[] = [];
   protected readonly parser: ReconParser = new GauParser();
   readonly metadata = meta({
@@ -110,7 +110,7 @@ export class GauAdapter extends ReconAdapterBase {
 
 export class WaybackurlsAdapter extends ReconAdapterBase {
   readonly executable = "waybackurls";
-  readonly containerImage = "dsrclone/waybackurls"; // platform image built from the official release (§3)
+  readonly containerImage = "zerosweep/waybackurls"; // platform image built from the official release (§3)
   readonly versionArgs: string[] = [];
   protected readonly parser: ReconParser = new WaybackurlsParser();
   readonly metadata = meta({

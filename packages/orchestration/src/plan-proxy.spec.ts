@@ -5,7 +5,7 @@ import {
   InMemoryScannerInstanceProvider, MapEndpointResolver, MapSecretResolver,
   FIXTURE_INSTANCES, FIXTURE_ENDPOINTS, FIXTURE_SECRETS,
   createFixtureTransport,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 import { PROFILE_TEMPLATES, STAGE_LIBRARY } from "./profiles";
 import { selectAdaptersForStage } from "./tool-selector";

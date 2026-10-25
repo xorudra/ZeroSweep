@@ -11,6 +11,6 @@
 # role needs no DDL rights once migrations have run.
 set -e
 cd "$(dirname "$0")/../.."
-DATABASE_URL="${MIGRATION_DATABASE_URL:-$DATABASE_URL}" pnpm --filter @dsrclone/database exec prisma migrate deploy
-pnpm --filter @dsrclone/database exec tsx prisma/seed.ts
+DATABASE_URL="${MIGRATION_DATABASE_URL:-$DATABASE_URL}" pnpm --filter @zerosweep/database exec prisma migrate deploy
+pnpm --filter @zerosweep/database exec tsx prisma/seed.ts
 exec node apps/api/dist/main.js

@@ -6,8 +6,8 @@ import {
   assertImportSize, correlateFindings, createProxyConnectors, evaluateApproval,
   extractParameterNames, hashScopeSnapshot, parseImportJson, validateEndpointReference,
   type ParsedProxy, type ScannerInstanceRecord, type ScannerProduct,
-} from "@dsrclone/security-sdk";
-import { scopeRulesSchema, type ScopeRules } from "@dsrclone/validation";
+} from "@zerosweep/security-sdk";
+import { scopeRulesSchema, type ScopeRules } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { z } from "zod";
 import {
   createMobileDynamicSessionSchema, uploadMobileBuildSchema,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { MobileBinaryV2Service } from "./mobile-binary-v2.service";

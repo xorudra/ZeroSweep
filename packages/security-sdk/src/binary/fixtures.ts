@@ -15,7 +15,7 @@ import { sha1Of, sha256Of } from "./intake";
  *  P12 detectors fire): exists ONLY to prove fingerprint-only
  *  persistence — it must appear in NO persisted record. */
 export const FAKE_BINARY_TOKEN = "AKIAFAKEBINARYFIXTUR";
-export const EXECUTION_MARKER_PATH = "/tmp/DSRCLONE_BINARY_EXECUTED_MARKER";
+export const EXECUTION_MARKER_PATH = "/tmp/ZEROSWEEP_BINARY_EXECUTED_MARKER";
 export const FIXTURE_EMBEDDED_URL = "https://example.invalid/api";
 
 // ── ELF builder ─────────────────────────────────────────────────────

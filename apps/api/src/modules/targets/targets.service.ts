@@ -2,8 +2,8 @@ import { randomBytes } from "node:crypto";
 import { promises as dns } from "node:dns";
 import { request as httpsRequest } from "node:https";
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { createTargetSchema, paginationSchema } from "@dsrclone/validation";
-import { blockedTargetReason, cloudEndpointVerdict } from "@dsrclone/security-sdk";
+import { createTargetSchema, paginationSchema } from "@zerosweep/validation";
+import { blockedTargetReason, cloudEndpointVerdict } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { parseOrThrow } from "../../common/parse";
 import { assertTargetInOrg, resolveWorkspace } from "../../common/tenant";
@@ -134,7 +134,7 @@ export class TargetsService {
    *  until a real check passes — no fake verification. */
   async startVerification(user: RequestUser, targetId: string, method: "DNS_TXT" | "HTTP_FILE" | "MANUAL_APPROVAL") {
     const target = await assertTargetInOrg(this.prisma, user, targetId);
-    const challenge = `dsrclone-verify=${randomBytes(16).toString("hex")}`;
+    const challenge = `zerosweep-verify=${randomBytes(16).toString("hex")}`;
     const verification = await this.prisma.targetVerification.create({
       data: {
         targetId: target.id, method, requestedBy: user.id,
@@ -147,7 +147,7 @@ export class TargetsService {
       method === "DNS_TXT"
         ? `Add a TXT record to ${host}: ${challenge}`
         : method === "HTTP_FILE"
-          ? `Serve the challenge text at https://${host}/.well-known/dsrclone-verification.txt`
+          ? `Serve the challenge text at https://${host}/.well-known/zerosweep-verification.txt`
           : "An administrator will review ownership evidence and approve manually.";
     return { verification, instructions };
   }
@@ -202,7 +202,7 @@ export class TargetsService {
       // (pinnedHttpsFetch): the hostname is never re-resolved at fetch
       // time, closing the DNS-rebinding TOCTOU between check and fetch.
       // Redirects are never followed: a redirect is a failed check.
-      const url = `https://${host}/.well-known/dsrclone-verification.txt`;
+      const url = `https://${host}/.well-known/zerosweep-verification.txt`;
       const verdict = cloudEndpointVerdict(url);
       if (!verdict.allowed) {
         verified = false;

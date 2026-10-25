@@ -1,7 +1,7 @@
-import { prisma } from "@dsrclone/database";
+import { prisma } from "@zerosweep/database";
 import {
   AdapterUnavailableError, type KubernetesConnectorDeps,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 
 /**
  * Prisma-backed Kubernetes connector dependencies for the production

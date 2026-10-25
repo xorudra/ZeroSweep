@@ -5,7 +5,7 @@ Two equivalent paths over the same security semantics:
 - **Kustomize (canonical):** `kubectl apply -k deploy/kubernetes/overlays/production`
   (base carries Deployments, Services, ConfigMap, HPA, PDB,
   NetworkPolicies, quotas).
-- **Helm:** `helm install dsrclone deploy/helm/dsrclone -f values.yaml`
+- **Helm:** `helm install zerosweep deploy/helm/zerosweep -f values.yaml`
   — values are schema-validated (`values.schema.json`); the chart
   consumes an EXISTING Secret (`existingSecret`) and never renders
   secret values.

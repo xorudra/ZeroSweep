@@ -26,7 +26,7 @@ spec:
   policyTypes: [Egress]
   egress:
     - to:
-        - podSelector: { matchLabels: { app.kubernetes.io/part-of: dsrclone } }
+        - podSelector: { matchLabels: { app.kubernetes.io/part-of: zerosweep } }
       ports: [{ port: 5432 }, { port: 6379 }, { port: 8000 }, { port: 9000 }]
     - to:
         - namespaceSelector: { matchLabels: { name: kube-system } }

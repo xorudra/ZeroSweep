@@ -327,8 +327,8 @@ export function Shell({ children }: { children: ReactNode }) {
     // idle; these fire-and-forget pings start them booting in the
     // background (the API is woken by the /auth/me call above). The
     // replies don't matter — the requests themselves do the waking.
-    const ai = process.env.NEXT_PUBLIC_AI_URL ?? "https://dsrclone-ai.onrender.com";
-    const worker = process.env.NEXT_PUBLIC_WORKER_URL ?? "https://dsrclone-worker.onrender.com";
+    const ai = process.env.NEXT_PUBLIC_AI_URL ?? "https://zerosweep-ai.onrender.com";
+    const worker = process.env.NEXT_PUBLIC_WORKER_URL ?? "https://zerosweep-worker.onrender.com";
     for (const url of [`${ai}/health`, worker]) {
       fetch(url, { mode: "no-cors", cache: "no-store" }).catch(() => undefined);
     }

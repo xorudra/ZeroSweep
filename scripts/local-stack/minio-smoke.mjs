@@ -14,7 +14,7 @@ import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
-const stackEnv = resolve(here, "../../../dsrclone-local-stack/smoke.env");
+const stackEnv = resolve(here, "../../../zerosweep-local-stack/smoke.env");
 if (existsSync(stackEnv)) {
   for (const line of readFileSync(stackEnv, "utf8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);

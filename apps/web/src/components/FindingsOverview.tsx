@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Badge, Card, EmptyState, StatCard } from "@dsrclone/ui";
+import { Badge, Card, EmptyState, StatCard } from "@zerosweep/ui";
 import { api } from "@/lib/api-client";
 
 interface Summary {

@@ -6,7 +6,7 @@
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: dsrclone-baseline
+  name: zerosweep-baseline
   annotations:
     policies.kyverno.io/title: "ZeroSweep production baseline"
 spec:
@@ -18,7 +18,7 @@ spec:
         any:
           - resources:
               kinds: ["Pod"]
-              namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
+              namespaces: ["zerosweep", "zerosweep-staging", "zerosweep-production"]
       validate:
         message: "Privileged containers, host namespaces and hostPath are forbidden in ZeroSweep namespaces."
         pattern:
@@ -39,7 +39,7 @@ spec:
         any:
           - resources:
               kinds: ["Pod"]
-              namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
+              namespaces: ["zerosweep", "zerosweep-staging", "zerosweep-production"]
       validate:
         message: "Containers must set CPU/memory/ephemeral-storage limits and use non-latest images from the approved registry."
         pattern:
@@ -62,7 +62,7 @@ spec:
         any:
           - resources:
               kinds: ["Pod"]
-              namespaces: ["dsrclone", "dsrclone-staging", "dsrclone-production"]
+              namespaces: ["zerosweep", "zerosweep-staging", "zerosweep-production"]
       validate:
         message: "Mounting the container runtime socket is forbidden."
         deny:
@@ -77,7 +77,7 @@ spec:
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: dsrclone-verify-images
+  name: zerosweep-verify-images
 spec:
   validationFailureAction: Enforce
   background: false
@@ -87,9 +87,9 @@ spec:
         any:
           - resources:
               kinds: ["Pod"]
-              namespaces: ["dsrclone-production"]
+              namespaces: ["zerosweep-production"]
       verifyImages:
-        - imageReferences: ["ghcr.io/xorudra/dsrclone-*"]
+        - imageReferences: ["ghcr.io/xorudra/zerosweep-*"]
           attestors:
             - count: 1
               entries:

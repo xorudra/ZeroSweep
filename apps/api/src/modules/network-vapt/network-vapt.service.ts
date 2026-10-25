@@ -10,7 +10,7 @@ import {
   normalizeNetworkTarget, parseCidr, planNetworkVerification, resolvePortSet,
   scannerLogicalProfile, selectNseScriptsV2, workloadClassOf,
   type NetworkAuthorizationFacts, type NetworkVaptProfileKey,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { AuditService } from "../audit/audit.service";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { resolveWorkspace } from "../../common/tenant";

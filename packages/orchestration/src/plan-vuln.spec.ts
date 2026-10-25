@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters } from "@dsrclone/security-sdk";
+import { FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry, createReconAdapters, createVulnAdapters, createWebDiscoveryAdapters } from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 const SCOPE: ScopeRules = { includeHosts: ["example.com", "*.example.com"], excludeHosts: [], includeCidrs: [], allowedPorts: [80, 443], allowedPaths: [], excludedPaths: [] };
 

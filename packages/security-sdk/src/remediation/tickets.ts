@@ -29,7 +29,7 @@ export interface TicketPayload {
   priority: string | null;
   dueAt: string | null;
   labels: string[];
-  dsrcloneRef: string;
+  zerosweepRef: string;
   redactions: string[];
 }
 
@@ -60,8 +60,8 @@ export function buildTicketPayload(input: {
     severity: finding.severity,
     priority: finding.priority ?? null,
     dueAt: input.dueAt ? input.dueAt.toISOString() : null,
-    labels: ["dsrclone", "security-remediation", ...(finding.cve ? ["kev-watch"] : [])],
-    dsrcloneRef: input.caseId,
+    labels: ["zerosweep", "security-remediation", ...(finding.cve ? ["kev-watch"] : [])],
+    zerosweepRef: input.caseId,
     redactions: [...title.redactions, ...body.redactions],
   };
 }

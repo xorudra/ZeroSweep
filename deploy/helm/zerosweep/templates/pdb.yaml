@@ -5,7 +5,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ $name }}
-  labels: { app: {{ $name }}, app.kubernetes.io/part-of: dsrclone }
+  labels: { app: {{ $name }}, app.kubernetes.io/part-of: zerosweep }
 spec:
   minAvailable: {{ $.Values.podDisruptionBudget.minAvailable }}
   selector:

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
-import { PRODUCT_FEATURE_REGISTRY } from "@dsrclone/security-sdk";
+import { PRODUCT_FEATURE_REGISTRY } from "@zerosweep/security-sdk";
 import { ProductPermissionService } from "../product/permissions";
 import { PlansService } from "../product/plans/plans.service";
 import { SubscriptionService } from "../product/subscriptions/subscription.service";

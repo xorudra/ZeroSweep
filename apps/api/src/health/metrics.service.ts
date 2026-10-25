@@ -23,7 +23,7 @@ export class MetricsService {
     return (req: Request, res: Response, next: NextFunction): void => {
       const startedAt = process.hrtime.bigint();
       res.on("finish", () => {
-        const key = `dsrclone_http_requests_total{method="${req.method}",status_class="${Math.floor(res.statusCode / 100)}xx"}`;
+        const key = `zerosweep_http_requests_total{method="${req.method}",status_class="${Math.floor(res.statusCode / 100)}xx"}`;
         this.counters.set(key, (this.counters.get(key) ?? 0) + 1);
         // Prompt 38 §99: latency histogram by ROUTE TEMPLATE (the
         // Express route pattern, e.g. /api/v1/scans/:id) — never the
@@ -32,13 +32,13 @@ export class MetricsService {
         const seconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
         for (const le of MetricsService.LATENCY_BUCKETS) {
           if (seconds <= le) {
-            const k = `dsrclone_http_request_duration_seconds_bucket{route="${route}",le="${le}"}`;
+            const k = `zerosweep_http_request_duration_seconds_bucket{route="${route}",le="${le}"}`;
             this.histogram.set(k, (this.histogram.get(k) ?? 0) + 1);
           }
         }
-        const inf = `dsrclone_http_request_duration_seconds_bucket{route="${route}",le="+Inf"}`;
+        const inf = `zerosweep_http_request_duration_seconds_bucket{route="${route}",le="+Inf"}`;
         this.histogram.set(inf, (this.histogram.get(inf) ?? 0) + 1);
-        const count = `dsrclone_http_request_duration_seconds_count{route="${route}"}`;
+        const count = `zerosweep_http_request_duration_seconds_count{route="${route}"}`;
         this.histogram.set(count, (this.histogram.get(count) ?? 0) + 1);
       });
       next();
@@ -49,7 +49,7 @@ export class MetricsService {
     if (this.cachedDeps && Date.now() - this.cachedDeps.at < 15_000) return this.cachedDeps.lines;
     const { checks } = await this.health.check();
     const lines = Object.entries(checks).map(
-      ([name, c]) => `dsrclone_dependency_up{dependency="${name}"} ${c.status === "ok" ? 1 : 0}`,
+      ([name, c]) => `zerosweep_dependency_up{dependency="${name}"} ${c.status === "ok" ? 1 : 0}`,
     );
     this.cachedDeps = { at: Date.now(), lines };
     return lines;
@@ -58,21 +58,21 @@ export class MetricsService {
   async render(): Promise<string> {
     const mem = process.memoryUsage();
     const lines: string[] = [
-      "# HELP dsrclone_http_requests_total HTTP requests by method and status class.",
-      "# TYPE dsrclone_http_requests_total counter",
+      "# HELP zerosweep_http_requests_total HTTP requests by method and status class.",
+      "# TYPE zerosweep_http_requests_total counter",
       ...[...this.counters.entries()].map(([k, v]) => `${k} ${v}`),
-      "# HELP dsrclone_process_uptime_seconds Process uptime in seconds.",
-      "# TYPE dsrclone_process_uptime_seconds gauge",
-      `dsrclone_process_uptime_seconds ${Math.floor(process.uptime())}`,
-      "# HELP dsrclone_process_memory_bytes Process memory usage by kind.",
-      "# TYPE dsrclone_process_memory_bytes gauge",
-      `dsrclone_process_memory_bytes{kind="rss"} ${mem.rss}`,
-      `dsrclone_process_memory_bytes{kind="heap_used"} ${mem.heapUsed}`,
-      "# HELP dsrclone_http_request_duration_seconds HTTP request latency by route template.",
-      "# TYPE dsrclone_http_request_duration_seconds histogram",
+      "# HELP zerosweep_process_uptime_seconds Process uptime in seconds.",
+      "# TYPE zerosweep_process_uptime_seconds gauge",
+      `zerosweep_process_uptime_seconds ${Math.floor(process.uptime())}`,
+      "# HELP zerosweep_process_memory_bytes Process memory usage by kind.",
+      "# TYPE zerosweep_process_memory_bytes gauge",
+      `zerosweep_process_memory_bytes{kind="rss"} ${mem.rss}`,
+      `zerosweep_process_memory_bytes{kind="heap_used"} ${mem.heapUsed}`,
+      "# HELP zerosweep_http_request_duration_seconds HTTP request latency by route template.",
+      "# TYPE zerosweep_http_request_duration_seconds histogram",
       ...[...this.histogram.entries()].map(([k, v]) => `${k} ${v}`),
-      "# HELP dsrclone_dependency_up 1 when a checked dependency is reachable.",
-      "# TYPE dsrclone_dependency_up gauge",
+      "# HELP zerosweep_dependency_up 1 when a checked dependency is reachable.",
+      "# TYPE zerosweep_dependency_up gauge",
       ...(await this.dependencyLines()),
     ];
     return lines.join("\n") + "\n";

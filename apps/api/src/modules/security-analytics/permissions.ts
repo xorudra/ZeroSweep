@@ -1,5 +1,5 @@
 import { ForbiddenException } from "@nestjs/common";
-import type { Role } from "@dsrclone/types";
+import type { Role } from "@zerosweep/types";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 
 /**

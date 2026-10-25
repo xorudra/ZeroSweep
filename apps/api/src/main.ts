@@ -4,14 +4,14 @@ import { RequestMethod } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
-import { loadEnv, assertProductionConfig, API_PREFIX } from "@dsrclone/config";
-import { createLogger } from "@dsrclone/logger";
+import { loadEnv, assertProductionConfig, API_PREFIX } from "@zerosweep/config";
+import { createLogger } from "@zerosweep/logger";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { MetricsService } from "./health/metrics.service";
 import { rateLimitMiddleware, requestIdMiddleware, setTrustProxyEnabled } from "./common/middleware/request-id.middleware";
 
-const logger = createLogger("dsrclone-api");
+const logger = createLogger("zerosweep-api");
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv();

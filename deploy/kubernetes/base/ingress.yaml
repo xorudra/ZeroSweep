@@ -5,8 +5,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: dsrclone
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep
+  labels: { app.kubernetes.io/part-of: zerosweep }
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
@@ -25,7 +25,7 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts: ["app.example.com"]
-      secretName: dsrclone-tls
+      secretName: zerosweep-tls
   rules:
     - host: app.example.com
       http:

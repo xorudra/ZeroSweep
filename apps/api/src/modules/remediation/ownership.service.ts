@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { resolveRemediationOwnership as resolveOwnership, type OwnershipInputs } from "@dsrclone/security-sdk";
+import { resolveRemediationOwnership as resolveOwnership, type OwnershipInputs } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { CaseStateService, type FindingRow } from "./case-state.service";

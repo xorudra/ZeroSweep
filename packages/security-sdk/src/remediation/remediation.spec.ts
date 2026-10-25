@@ -190,7 +190,7 @@ describe("ticket payload + redaction (§43–§46)", () => {
     });
     expect(payload.title).not.toContain("AKIAIOSFODNN7EXAMPLE");
     expect(payload.body).toContain("CVE-2026-0001");
-    expect(payload.dsrcloneRef).toBe("case-1");
+    expect(payload.zerosweepRef).toBe("case-1");
     expect(payload.redactions.length).toBeGreaterThan(0);
   });
 

@@ -6,7 +6,7 @@ import {
   sanitizeUntrustedText,
   verifyBitbucketSignature, verifyGitHubSignature, verifyGitLabToken,
   type NormalizedSourceEvent,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { IntegrationSecretResolver } from "../core/transport";

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   FixtureToolRunner, LocalEchoAdapter, MockSecurityAdapter, ToolRegistry,
   createWirelessAdapters, WIRELESS_SLUGS,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 
 function plan(profile: string) {

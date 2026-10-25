@@ -21,7 +21,7 @@ API; the API is **never** exposed to ZeroSweep users (§5).
    (never expose the ZAP API to users or the internet).
 2. Server configuration maps the instance's `endpointReference` to the
    daemon URL and approval flag:
-   `DSRCLONE_SCANNER_ENDPOINTS={"ZAP_DAEMON_PROD":{"baseUrl":"http://10.0.0.5:8080","approvedInternal":true}}`
+   `ZEROSWEEP_SCANNER_ENDPOINTS={"ZAP_DAEMON_PROD":{"baseUrl":"http://10.0.0.5:8080","approvedInternal":true}}`
    (private addresses require `approvedInternal`; loopback, link-local and
    cloud-metadata addresses are always blocked).
 3. Put the ZAP API key in the worker environment under the instance's
@@ -33,7 +33,7 @@ API; the API is **never** exposed to ZeroSweep users (§5).
 
 ## Behaviour
 
-- One ZAP **context per assessment** (`dsrclone-<assessmentId>`), created
+- One ZAP **context per assessment** (`zerosweep-<assessmentId>`), created
   at run start and removed in cleanup, always (§6). Contexts are never
   shared across tenants.
 - Scope include/exclude regexes are derived from the approved scope

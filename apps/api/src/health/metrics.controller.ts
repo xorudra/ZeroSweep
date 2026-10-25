@@ -1,6 +1,6 @@
 import { Controller, Get, Header, Headers, NotFoundException } from "@nestjs/common";
 import { timingSafeEqual } from "node:crypto";
-import { loadEnv } from "@dsrclone/config";
+import { loadEnv } from "@zerosweep/config";
 import { Public } from "../common/decorators/auth.decorators";
 import { MetricsService } from "./metrics.service";
 

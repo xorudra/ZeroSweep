@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/Shell";
 import { ResourceList, Row } from "@/components/ResourceList";
-import { Badge } from "@dsrclone/ui";
+import { Badge } from "@zerosweep/ui";
 
 const SEVERITIES = ["", "CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 const STATUSES = ["", "OPEN", "CONFIRMED", "FALSE_POSITIVE", "ACCEPTED_RISK", "RESOLVED"];

@@ -3,11 +3,11 @@ import {
   BINARY_TOOL_DESCRIPTORS, activeKillSwitch, binaryHealthBySlug, diffBinaryArtifacts,
   evaluateBinaryDebugPolicy, parseBinaryHeaders, sanitizeMobileText, validateBinaryArtifactUpload,
   validateDebugOperations, type NormalizedBinaryData,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type {
   ApproveBinaryDebugSessionInput, CreateBinaryDebugSessionInput, CreateBinaryDiffInput,
   RegisterBinaryArtifactInput, StartBinaryScanInput,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

@@ -6,7 +6,7 @@ metadata:
   name: {{ $name }}
   labels:
     app: {{ $name }}
-    app.kubernetes.io/part-of: dsrclone
+    app.kubernetes.io/part-of: zerosweep
 spec:
   replicas: {{ $svc.replicas }}
   selector:
@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: {{ $name }}
-        app.kubernetes.io/part-of: dsrclone
+        app.kubernetes.io/part-of: zerosweep
     spec:
       serviceAccountName: {{ $svc.serviceAccount }}
       automountServiceAccountToken: false
@@ -33,7 +33,7 @@ spec:
           {{- end }}
           command: {{ toJson $svc.command }}
           envFrom:
-            - configMapRef: { name: dsrclone-config }
+            - configMapRef: { name: zerosweep-config }
             - secretRef: { name: {{ $.Values.existingSecret }} }
           {{- with $svc.env }}
           env:
@@ -70,7 +70,7 @@ metadata:
   name: {{ $name }}
   labels:
     app: {{ $name }}
-    app.kubernetes.io/part-of: dsrclone
+    app.kubernetes.io/part-of: zerosweep
 spec:
   type: ClusterIP
   selector: { app: {{ $name }} }

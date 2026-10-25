@@ -49,7 +49,7 @@ const finding = (over: Partial<SanitizedFindingView> = {}): SanitizedFindingView
   id: "f-1", title: "SQL injection in login", severity: "HIGH", status: "OPEN",
   lifecycleStatus: "NEW", verificationStatus: "UNVERIFIED", kevListed: false,
   isSecretFinding: false, filePath: "src/auth/login.ts", startLine: 42,
-  remediation: "Use parameterized queries", dsrcloneReference: "finding:f-1",
+  remediation: "Use parameterized queries", zerosweepReference: "finding:f-1",
   ...over,
 });
 

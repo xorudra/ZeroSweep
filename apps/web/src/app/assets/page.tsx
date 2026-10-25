@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/Shell";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { Badge, EmptyState } from "@dsrclone/ui";
+import { Badge, EmptyState } from "@zerosweep/ui";
 
 /**
  * Asset inventory (Prompt 5 §43). Assets are discovered ONLY by authorized

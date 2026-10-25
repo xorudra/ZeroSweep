@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import * as bcrypt from "bcryptjs";
 import {
   evaluateScimFilter, normalizeEmail, parseScimFilter, randomToken, sha256Hex, verifyTokenHash, ScimFilterError,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 

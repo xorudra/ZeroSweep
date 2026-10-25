@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { isValidCredentialReference, looksLikeSecretValue } from "@dsrclone/security-sdk";
-import type { RegisterCloudAccountInput, StartCloudScanInput } from "@dsrclone/validation";
+import { isValidCredentialReference, looksLikeSecretValue } from "@zerosweep/security-sdk";
+import type { RegisterCloudAccountInput, StartCloudScanInput } from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

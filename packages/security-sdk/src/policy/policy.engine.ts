@@ -1,7 +1,7 @@
 import { RISK_ORDER, type ToolMetadata } from "../adapter/adapter.types";
 import type { AuthorizationContext } from "../execution/execution.types";
 import { blockedTargetReason, ScopeMatcher } from "../scope/scope.matcher";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 
 export type PolicyDecisionType = "ALLOW" | "DENY" | "REQUIRE_APPROVAL";
 export type PolicyReasonCode =

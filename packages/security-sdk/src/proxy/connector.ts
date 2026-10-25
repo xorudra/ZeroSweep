@@ -1,7 +1,7 @@
 import { AdapterConfigurationError, AdapterUnavailableError } from "../adapter/adapter.errors";
 import { blockedTargetReason } from "../scope/scope.matcher";
 import { ScopeMatcher } from "../scope/scope.matcher";
-import type { ScopeRules } from "@dsrclone/validation";
+import type { ScopeRules } from "@zerosweep/validation";
 import type { Capability } from "../adapter/adapter.types";
 import type { NormalizedEndpoint, NormalizedHttpTransaction, NormalizedWebSocket } from "../findings/finding.types";
 import type { NormalizedVulnFinding } from "../vuln/types";
@@ -120,10 +120,10 @@ export function assertScannerEndpointAllowed(baseUrl: string, approvedInternal?:
   if (blocked && !approvedInternal) {
     throw new AdapterConfigurationError(`Scanner endpoint rejected: ${blocked} — internal scanner endpoints require an explicitly approved internal deployment in server configuration (§71)`);
   }
-  if (blocked && approvedInternal && u.protocol !== "https:" && process.env.DSRCLONE_ALLOW_HTTP_SCANNER !== "true") {
+  if (blocked && approvedInternal && u.protocol !== "https:" && process.env.ZEROSWEEP_ALLOW_HTTP_SCANNER !== "true") {
     // Approved internal deployments may use http only when the operator
     // explicitly opts in server-side; default stays https-or-nothing.
-    throw new AdapterConfigurationError("Scanner endpoint rejected: http is allowed for approved internal deployments only with DSRCLONE_ALLOW_HTTP_SCANNER=true in server configuration");
+    throw new AdapterConfigurationError("Scanner endpoint rejected: http is allowed for approved internal deployments only with ZEROSWEEP_ALLOW_HTTP_SCANNER=true in server configuration");
   }
   return u.toString().replace(/\/$/, "");
 }
@@ -337,7 +337,7 @@ export abstract class BaseScannerConnector implements InteractiveScannerConnecto
       workspaceId: input.workspaceId,
       assessmentId: input.assessmentId,
       ...(input.scanId ? { scanId: input.scanId } : {}),
-      vendorContextName: `dsrclone-${input.assessmentId.slice(0, 8)}-${id}`,
+      vendorContextName: `zerosweep-${input.assessmentId.slice(0, 8)}-${id}`,
       includedTargets: [...input.targetBaseUrls],
       excludedTargets: [...input.scopeRules.excludeHosts],
       ...(input.sessionProfile ? { sessionProfileId: input.sessionProfile.id } : {}),

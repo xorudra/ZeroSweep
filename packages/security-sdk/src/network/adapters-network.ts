@@ -77,7 +77,7 @@ export const NETWORK_RATE_FIELD: AdapterInputField = { name: "rateLimit", type: 
 
 export class NmapAdapter extends NetworkAdapterBase {
   readonly executable = "nmap";
-  readonly containerImage = "dsrclone/nmap"; // platform image built from the official release
+  readonly containerImage = "zerosweep/nmap"; // platform image built from the official release
   readonly versionArgs = ["--version"];
   protected readonly parser: NetworkParser = new NmapParser();
   readonly metadata = meta({
@@ -240,7 +240,7 @@ export class RustScanAdapter extends NetworkAdapterBase {
 
 export class MasscanAdapter extends NetworkAdapterBase {
   readonly executable = "masscan";
-  readonly containerImage = "dsrclone/masscan"; // platform image built from the official release
+  readonly containerImage = "zerosweep/masscan"; // platform image built from the official release
   readonly versionArgs = ["--version"];
   protected readonly parser: NetworkParser = new MasscanParser();
   protected readonly acceptableExitCodes = [0, 1] as const;
@@ -309,7 +309,7 @@ function localRangeFor(target: AdapterTarget, config: Record<string, unknown>): 
 
 export class NetdiscoverAdapter extends NetworkAdapterBase {
   readonly executable = "netdiscover";
-  readonly containerImage = "dsrclone/netdiscover";
+  readonly containerImage = "zerosweep/netdiscover";
   readonly versionArgs: string[] = [];
   protected readonly parser: NetworkParser = new NetdiscoverParser();
   readonly metadata = meta({
@@ -335,7 +335,7 @@ export class NetdiscoverAdapter extends NetworkAdapterBase {
 
 export class ArpScanAdapter extends NetworkAdapterBase {
   readonly executable = "arp-scan";
-  readonly containerImage = "dsrclone/arp-scan";
+  readonly containerImage = "zerosweep/arp-scan";
   readonly versionArgs = ["--version"];
   protected readonly parser: NetworkParser = new ArpScanParser();
   readonly metadata = meta({
@@ -365,7 +365,7 @@ export class ArpScanAdapter extends NetworkAdapterBase {
 
 export class TcpdumpCaptureAdapter extends NetworkAdapterBase {
   readonly executable = "tcpdump";
-  readonly containerImage = "dsrclone/tcpdump";
+  readonly containerImage = "zerosweep/tcpdump";
   readonly versionArgs = ["--version"];
   protected readonly parser: NetworkParser = {
     tool: "tcpdump",
@@ -433,7 +433,7 @@ export class TcpdumpCaptureAdapter extends NetworkAdapterBase {
 
 export class TsharkAnalysisAdapter extends NetworkAdapterBase {
   readonly executable = "tshark";
-  readonly containerImage = "dsrclone/tshark";
+  readonly containerImage = "zerosweep/tshark";
   readonly versionArgs = ["--version"];
   protected readonly parser: NetworkParser = new TsharkParser();
   readonly metadata = meta({

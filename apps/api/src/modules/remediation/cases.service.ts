@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { ACTIVE_REMEDIATION_STATUSES, type RemediationStatus } from "@dsrclone/security-sdk";
+import { ACTIVE_REMEDIATION_STATUSES, type RemediationStatus } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { CaseStateService, type CaseRow } from "./case-state.service";

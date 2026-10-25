@@ -4,7 +4,7 @@ import {
   citationsFromAnswer, computeAiConfidence, evaluateAiBudget, evaluateAiTaskPolicy, groundAnswer,
   isExecutionShapedRequest, redactForAi, ruleBasedAnswer, sanitizeAiMarkdown, scanForInjection,
   type AIProvider, type AiBuiltContext, type AiTaskType, type GroundedResponse,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { AuditService } from "../audit/audit.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

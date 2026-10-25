@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { GRC_DISCLAIMER, evidenceFreshness, requirementResult, type MappedControlOutcome } from "@dsrclone/security-sdk";
+import { GRC_DISCLAIMER, evidenceFreshness, requirementResult, type MappedControlOutcome } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
 import { AuditService } from "../../audit/audit.service";

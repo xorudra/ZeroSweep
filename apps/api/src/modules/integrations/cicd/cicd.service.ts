@@ -4,7 +4,7 @@ import {
   sanitizeBranchName,
   sanitizeUntrustedText,
   type SanitizedFindingView,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import type { RequestUser } from "../../../common/decorators/auth.decorators";
@@ -252,7 +252,7 @@ export class CicdService {
       riskExplanation: typeof f.riskExplanation === "string"
         ? (f.riskExplanation as string)
         : (((f.riskExplanation as Row | null)?.summary as string) ?? undefined),
-      dsrcloneReference: `finding:${f.id}`,
+      zerosweepReference: `finding:${f.id}`,
     };
   }
 

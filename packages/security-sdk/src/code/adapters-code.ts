@@ -127,7 +127,7 @@ export class CodeqlAdapter extends CodeAdapterBase {
     }
     const primary = resolved.languages[0];
     const sourcePath = this.sourcePath(target, config);
-    const dbPath = typeof config.codeqlDatabasePath === "string" ? config.codeqlDatabasePath : `${sourcePath}/.dsrclone/codeql-db-${primary.language}`;
+    const dbPath = typeof config.codeqlDatabasePath === "string" ? config.codeqlDatabasePath : `${sourcePath}/.zerosweep/codeql-db-${primary.language}`;
     return {
       args: ["database", "analyze", dbPath, primary.suite, "--format=sarif-latest", "--output=codeql-results.sarif"],
       outputFiles: ["codeql-results.sarif"],

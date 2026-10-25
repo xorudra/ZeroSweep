@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { FIXTURE_AP_WPA2, FIXTURE_PCAP_BYTES, FIXTURE_PCAP_SHA256 } from "@dsrclone/security-sdk";
+import { FIXTURE_AP_WPA2, FIXTURE_PCAP_BYTES, FIXTURE_PCAP_SHA256 } from "@zerosweep/security-sdk";
 import { WirelessSecurityService } from "./wireless-security.service";
 
 /**

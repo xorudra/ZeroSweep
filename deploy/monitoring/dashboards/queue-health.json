@@ -1,7 +1,7 @@
 {
-  "uid": "dsrclone-queue-health",
+  "uid": "zerosweep-queue-health",
   "title": "ZeroSweep \u2014 Queue Health",
-  "description": "Prompt 38 \u00a7100 queue depth, retries, oldest job age. Reference dashboard: panels query the dsrclone_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
+  "description": "Prompt 38 \u00a7100 queue depth, retries, oldest job age. Reference dashboard: panels query the zerosweep_* contract; a series that no exporter emits yet renders as No data \u2014 never as a fabricated value.",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -19,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_queue_waiting_jobs",
+          "expr": "zerosweep_queue_waiting_jobs",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_queue_active_jobs",
+          "expr": "zerosweep_queue_active_jobs",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dsrclone_queue_failed_jobs_total[5m]))",
+          "expr": "sum(rate(zerosweep_queue_failed_jobs_total[5m]))",
           "refId": "A"
         }
       ],
@@ -94,7 +94,7 @@
       },
       "targets": [
         {
-          "expr": "dsrclone_queue_oldest_job_age_seconds",
+          "expr": "zerosweep_queue_oldest_job_age_seconds",
           "refId": "A"
         }
       ],

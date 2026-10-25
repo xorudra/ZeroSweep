@@ -1,5 +1,5 @@
 import { createHmac, generateKeyPairSync } from "node:crypto";
-import { signLicense, type LicensePayload } from "@dsrclone/security-sdk";
+import { signLicense, type LicensePayload } from "@zerosweep/security-sdk";
 import { AuditService } from "../audit/audit.service";
 import { ProductConfigService } from "./product-config.service";
 import { ProductPermissionService } from "./permissions";

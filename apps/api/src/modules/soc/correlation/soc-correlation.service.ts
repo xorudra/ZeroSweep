@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { socAlertFingerprint } from "@dsrclone/security-sdk";
+import { socAlertFingerprint } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AlertService } from "../alerts/alert.service";
 import type { Row } from "../helpers";

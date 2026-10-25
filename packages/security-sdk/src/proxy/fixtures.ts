@@ -202,9 +202,9 @@ export function proxyFixtureRoutes(overrides: FixtureRoute[] = []): FixtureRoute
     { method: "GET", match: "/JSON/core/view/messages/", respond: () => ({ body: ZAP_MESSAGES.map((x) => ({ id: x.id })) }) },
     // Burp bridge (ZeroSweep's documented admin-provided bridge contract:
     // a Montoya extension / scheduled export in the licensed environment)
-    { method: "GET", match: "/dsrclone/health", respond: () => ({ body: { version: "2024.1", licenseState: "Professional — licensed (fixture)" } }) },
-    { method: "GET", match: "/dsrclone/issues-export", respond: () => ({ body: BURP_ISSUES_XML }) },
-    { method: "GET", match: "/dsrclone/site-map", respond: () => ({ body: BURP_SITE_MAP }) },
+    { method: "GET", match: "/zerosweep/health", respond: () => ({ body: { version: "2024.1", licenseState: "Professional — licensed (fixture)" } }) },
+    { method: "GET", match: "/zerosweep/issues-export", respond: () => ({ body: BURP_ISSUES_XML }) },
+    { method: "GET", match: "/zerosweep/site-map", respond: () => ({ body: BURP_SITE_MAP }) },
     // Caido GraphQL-style surface (tolerant parser — §13)
     {
       method: "POST", match: "/graphql", respond: (req) => {

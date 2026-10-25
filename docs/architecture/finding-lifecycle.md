@@ -2,7 +2,7 @@
 
 There is exactly one finding lifecycle. Prompt 11's `VmLifecycleStatus`
 is the stored state; Prompt 37 §7's vocabulary is a **projection**
-(`@dsrclone/security-sdk` `reporting2/lifecycle-view.ts`):
+(`@zerosweep/security-sdk` `reporting2/lifecycle-view.ts`):
 
 - NEW → NEW, TRIAGED → TRIAGED, CONFIRMED → CONFIRMED,
   FALSE_POSITIVE → FALSE_POSITIVE, ACCEPTED_RISK → ACCEPTED_RISK.

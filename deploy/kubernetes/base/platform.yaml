@@ -4,7 +4,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: api
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   minAvailable: 1
   selector: { matchLabels: { app: api } }
@@ -13,19 +13,19 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: web
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   minAvailable: 1
   selector: { matchLabels: { app: web } }
 ---
 # HPAs are BOUNDED: min/max are deliberate capacity decisions, and scanner
 # pools scale on queue depth (KEDA-style external metric
-# dsrclone_queue_waiting) rather than CPU alone (§97/§98).
+# zerosweep_queue_waiting) rather than CPU alone (§97/§98).
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: api
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api }
   minReplicas: 2
@@ -40,7 +40,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: worker-general
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: worker-general }
   minReplicas: 1
@@ -54,8 +54,8 @@ spec:
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: dsrclone-quota
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-quota
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   hard:
     requests.cpu: "8"
@@ -69,8 +69,8 @@ spec:
 apiVersion: v1
 kind: LimitRange
 metadata:
-  name: dsrclone-defaults
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-defaults
+  labels: { app.kubernetes.io/part-of: zerosweep }
 spec:
   limits:
     - type: Container
@@ -81,8 +81,8 @@ spec:
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: dsrclone-critical
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-critical
+  labels: { app.kubernetes.io/part-of: zerosweep }
 value: 1000
 globalDefault: false
 description: "API + scheduler: user-facing and control-plane workloads."
@@ -90,8 +90,8 @@ description: "API + scheduler: user-facing and control-plane workloads."
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: dsrclone-scan
-  labels: { app.kubernetes.io/part-of: dsrclone }
+  name: zerosweep-scan
+  labels: { app.kubernetes.io/part-of: zerosweep }
 value: 100
 globalDefault: false
 preemptionPolicy: Never

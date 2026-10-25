@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from "@ne
 import {
   evaluateVerification, isHighRiskRemediation, isVerificationMethodAllowed,
   verificationPolicyFor, type VerificationMethod,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { CaseStateService, type CaseRow } from "./case-state.service";

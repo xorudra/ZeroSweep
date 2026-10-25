@@ -18,7 +18,7 @@ Tooling: `deploy/backup/`. Architecture & retention: `deploy/backup/README.md`.
 `restore-verify.sh` run passed against the newest artifact:
 checksum → restore into an isolated database → migration-head check →
 core-table reads → **tenant isolation check** (§172). The
-`DsrcloneBackupStale` and `DsrcloneRestoreVerificationFailed` alerts fire
+`ZerosweepBackupStale` and `ZerosweepRestoreVerificationFailed` alerts fire
 otherwise.
 
 ## Routine restore (drill or real)

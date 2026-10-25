@@ -13,7 +13,7 @@ Assessment → Authorization Gate → Scope Gate → ScanPlan (DAG) → Queue
 
 ## ScanPlan
 
-Built by `buildScanPlan` (`@dsrclone/orchestration`) and persisted immutably
+Built by `buildScanPlan` (`@zerosweep/orchestration`) and persisted immutably
 on `ScanPlan` (plan JSON + policy snapshot). It records: scan/assessment/
 target ids, profile, target type, scope rules, stages with dependencies,
 selected adapters (with simulation flags), policy snapshot and plan version.
@@ -33,7 +33,7 @@ COMPLETED/PARTIAL/SKIPPED.
 
 ## State machines
 
-- **Scan** (`@dsrclone/types`): CREATED → QUEUED → PREPARING → RUNNING →
+- **Scan** (`@zerosweep/types`): CREATED → QUEUED → PREPARING → RUNNING →
   COMPLETED/PARTIAL/FAILED, with PAUSING → PAUSED (resume re-enters the
   queue) and CANCELLING → CANCELLED. Terminal states never leave.
 - **Stage**: PENDING → BLOCKED → READY → QUEUED → RUNNING →
@@ -79,7 +79,7 @@ SCOPE_VIOLATION) and a durable event; the adapter never runs.
 
 BullMQ queues: `scan-orchestration`, `stage-execution`, `tool-execution`,
 `result-processing`, `normalization`, `correlation`, `risk-analysis`,
-`report-generation` (names in `@dsrclone/config`). Jobs carry **IDs only**
+`report-generation` (names in `@zerosweep/config`). Jobs carry **IDs only**
 (scanId, stageId, toolExecutionId, attempt) — never credentials, tokens or
 scanner output. BullMQ job ids are the deterministic idempotency key
 `scanId:stageId:attempt`, and `ToolExecution.idempotencyKey` is unique in the

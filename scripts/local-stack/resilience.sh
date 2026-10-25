@@ -13,7 +13,7 @@
 #                                   placeholder secret (§30/§33)
 # Requires the stack from start.sh. Prints PASS/FAIL per item.
 set -u
-STACK="$HOME/workspace/dsrclone-local-stack"
+STACK="$HOME/workspace/zerosweep-local-stack"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 B="http://127.0.0.1:4000/api/v1"
 PASS=0; FAIL=0
@@ -55,7 +55,7 @@ ok $? "R3 standby scheduler never acquires the lease while the primary lives"
 
 echo "== R4: production config gate refuses placeholder secrets"
 WEAK_SECRET=$(python3 -c "print('change-me-' + 'x' * 30)")
-OUT=$(env NODE_ENV=production JWT_SECRET="$WEAK_SECRET" DATABASE_URL="postgresql://dsrclone:placeholder-pw@127.0.0.1:54329/dsrclone" REDIS_URL="redis://127.0.0.1:6379" timeout 10 node "$REPO/apps/api/dist/main.js" 2>&1 || true)
+OUT=$(env NODE_ENV=production JWT_SECRET="$WEAK_SECRET" DATABASE_URL="postgresql://zerosweep:placeholder-pw@127.0.0.1:54329/zerosweep" REDIS_URL="redis://127.0.0.1:6379" timeout 10 node "$REPO/apps/api/dist/main.js" 2>&1 || true)
 echo "$OUT" | grep -q "Refusing to start in production mode"
 ok $? "R4 API refuses to boot in production mode with placeholder secret"
 

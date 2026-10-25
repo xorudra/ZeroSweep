@@ -3,11 +3,11 @@ import {
   DEFAULT_MOBILE_BUDGET, MOBILE_TOOL_DESCRIPTORS, activeKillSwitch, evaluateInstrumentationPolicy,
   redactMobileSecretValues, sanitizeMobileText, validateMobileArtifactUpload,
   type InstrumentationModuleRecord,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import type {
   CreateMobileDynamicSessionInput, RegisterMobileAppInput, RegisterMobileDeviceInput,
   StartMobileScanInput, UploadMobileBuildInput,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import type { RequestUser } from "../../common/decorators/auth.decorators";
 import { resolveWorkspace } from "../../common/tenant";

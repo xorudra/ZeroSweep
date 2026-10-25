@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { renderReport, type ReportSnapshotDocument, type ReportFormat } from "@dsrclone/security-sdk";
+import { renderReport, type ReportSnapshotDocument, type ReportFormat } from "@zerosweep/security-sdk";
 import type { ObjectStore } from "../artifacts/object-store";
 
 /**

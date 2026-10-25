@@ -2,7 +2,7 @@ import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
 import { z } from "zod";
 import {
   NSE_SCRIPT_CATALOG, NSE_POLICY_SNAPSHOT, createNetworkAdapters, type SecurityToolAdapter,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { CurrentUser, Roles, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { AuditService } from "../audit/audit.service";

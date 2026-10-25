@@ -1,5 +1,5 @@
-import type { AssessmentProfile } from "@dsrclone/types";
-import type { Capability } from "@dsrclone/security-sdk";
+import type { AssessmentProfile } from "@zerosweep/types";
+import type { Capability } from "@zerosweep/security-sdk";
 import type { FailureStrategy } from "./state-machines";
 
 /**

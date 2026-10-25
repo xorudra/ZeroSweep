@@ -223,7 +223,7 @@ export class GhidraAdapter extends MobileAdapterBase {
     // §35: the ONLY script is the platform's approved, versioned
     // inventory script. There is no config field that could name a
     // different one (assertMobileConfig refuses script keys).
-    return { args: ["MobileSandbox", "MobileInventory", "-import", artifact, "-scriptPath", "/opt/dsrclone/ghidra-scripts", "-postScript", "MobileHardeningInventory.py", "-deleteProject"] };
+    return { args: ["MobileSandbox", "MobileInventory", "-import", artifact, "-scriptPath", "/opt/zerosweep/ghidra-scripts", "-postScript", "MobileHardeningInventory.py", "-deleteProject"] };
   }
 
   protected parseMobile(text: string, ctx: MobileAdapterParserContext): ParsedMobile {

@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { findPaymentDataViolations, verifyBillingWebhookSignature } from "@dsrclone/security-sdk";
+import { findPaymentDataViolations, verifyBillingWebhookSignature } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../../prisma/prisma.module";
 import { AuditService } from "../../audit/audit.service";
 import { ProductConfigService } from "../product-config.service";

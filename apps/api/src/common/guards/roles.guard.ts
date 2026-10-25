@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, type CanActivate, type ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { ROLES_KEY, type RequestUser } from "../decorators/auth.decorators";
-import type { Role } from "@dsrclone/types";
+import type { Role } from "@zerosweep/types";
 
 /** RBAC is enforced on the backend — frontend checks are never trusted. */
 @Injectable()

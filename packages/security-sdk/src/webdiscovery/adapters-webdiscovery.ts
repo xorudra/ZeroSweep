@@ -218,7 +218,7 @@ export class FeroxbusterAdapter extends WebDiscoveryAdapterBase {
 
 export class GobusterAdapter extends WebDiscoveryAdapterBase {
   readonly executable = "gobuster";
-  readonly containerImage = "dsrclone/gobuster"; // platform image built from the official release
+  readonly containerImage = "zerosweep/gobuster"; // platform image built from the official release
   readonly versionArgs = ["version"];
   protected readonly parser: ReconParser = new GobusterParser();
   protected readonly wordlistCategory: WordlistCategory = "COMMON_DIRECTORIES";
@@ -263,7 +263,7 @@ export class GobusterAdapter extends WebDiscoveryAdapterBase {
 
 export class WfuzzAdapter extends WebDiscoveryAdapterBase {
   readonly executable = "wfuzz";
-  readonly containerImage = "dsrclone/wfuzz"; // platform image built from the official release
+  readonly containerImage = "zerosweep/wfuzz"; // platform image built from the official release
   readonly versionArgs = ["--version"];
   protected readonly parser: ReconParser = new WfuzzParser();
   protected readonly wordlistCategory: WordlistCategory = "COMMON_DIRECTORIES";
@@ -299,7 +299,7 @@ export class WfuzzAdapter extends WebDiscoveryAdapterBase {
           "--hc", "404,400",
           "-t", String(threads),
           "-f", "/dev/stdout,json",
-          `${base}${separator}FUZZ=dsrclone`,
+          `${base}${separator}FUZZ=zerosweep`,
         ],
       };
     }
@@ -318,7 +318,7 @@ export class WfuzzAdapter extends WebDiscoveryAdapterBase {
 
 export class ArjunAdapter extends WebDiscoveryAdapterBase {
   readonly executable = "arjun";
-  readonly containerImage = "dsrclone/arjun"; // platform image built from the official release
+  readonly containerImage = "zerosweep/arjun"; // platform image built from the official release
   readonly versionArgs: string[] = [];
   protected readonly parser: ReconParser = new ArjunParser();
   protected readonly wordlistCategory: WordlistCategory = "PARAMETER_NAMES";

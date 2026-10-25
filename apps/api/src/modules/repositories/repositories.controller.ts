@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common
 import { z } from "zod";
 import {
   createRepositorySchema, createSourceExclusionSchema, startRepositoryScanSchema,
-} from "@dsrclone/validation";
+} from "@zerosweep/validation";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
 import { RepositoriesService } from "./repositories.service";

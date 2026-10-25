@@ -328,8 +328,8 @@ export function buildCycloneDxSbom(components: Component[], meta: SbomMetadata):
       scope: c.dependencyScope === "DEVELOPMENT" || c.dependencyScope === "TEST" ? "optional" : "required",
       ...(c.licenses.length > 0 ? { licenses: c.licenses.map((id) => ({ license: { id } })) } : {}),
       properties: [
-        { name: "dsrclone:source-manifest", value: c.sourceManifest },
-        { name: "dsrclone:directness", value: c.scope },
+        { name: "zerosweep:source-manifest", value: c.sourceManifest },
+        { name: "zerosweep:directness", value: c.scope },
       ],
     })),
   };
@@ -350,7 +350,7 @@ export function buildSpdxSbom(components: Component[], meta: SbomMetadata): { do
     "SPDXVersion: SPDX-2.3",
     "DataLicense: CC0-1.0",
     `DocumentName: ${meta.repositoryName}-sbom`,
-    `DocumentNamespace: https://dsrclone.local/sbom/${meta.snapshotHash}`,
+    `DocumentNamespace: https://zerosweep.local/sbom/${meta.snapshotHash}`,
     "Creator: Tool: ZeroSweep-1.0.0",
     `Created: ${meta.timestamp.replace(/\.\d+Z$/, "Z")}`,
     "",

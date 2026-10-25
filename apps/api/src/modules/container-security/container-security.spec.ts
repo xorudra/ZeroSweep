@@ -1,5 +1,5 @@
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
-import type { Role } from "@dsrclone/types";
+import type { Role } from "@zerosweep/types";
 import { ContainerSecurityService } from "./container-security.service";
 import { AuditService } from "../audit/audit.service";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

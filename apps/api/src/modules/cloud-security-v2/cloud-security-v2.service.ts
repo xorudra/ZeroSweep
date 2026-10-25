@@ -11,7 +11,7 @@ import {
   planCloudVerification, screenCloudAiRequest,
   type CloudConnectionProbeFacts, type CloudV2BaselineRule,
   type CloudV2PipelineStage, type NormalizedCloudIdentity, type NormalizedCloudResource,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { AuditService } from "../audit/audit.service";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { resolveWorkspace } from "../../common/tenant";

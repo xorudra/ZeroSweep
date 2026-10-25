@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assertExecutionTransition, assertStageTransition, dependentOutcomeOnFailure } from "./state-machines";
 import { finalScanStatus, monotonicProgress, progressForPlan } from "./progress";
 import { buildScanPlan } from "./plan";
-import { MockSecurityAdapter, ToolRegistry } from "@dsrclone/security-sdk";
+import { MockSecurityAdapter, ToolRegistry } from "@zerosweep/security-sdk";
 import { classifyError, idempotencyKey, retryDecision, stageJobId } from "./idempotency";
 import { ConcurrencyLimiter, clampLimit } from "./concurrency";
 import { reconcileStaleExecution, workerCanRun, workerStatusFromHeartbeat } from "./recovery";

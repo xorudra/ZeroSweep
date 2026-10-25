@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { REMEDIATION_TRIAGE_DECISIONS as TRIAGE_DECISIONS, type RemediationTriageDecision as TriageDecision } from "@dsrclone/security-sdk";
+import { REMEDIATION_TRIAGE_DECISIONS as TRIAGE_DECISIONS, type RemediationTriageDecision as TriageDecision } from "@zerosweep/security-sdk";
 import { PRISMA, type PrismaClientLike } from "../../prisma/prisma.module";
 import { Inject } from "@nestjs/common";
 import type { RequestUser } from "../../common/decorators/auth.decorators";

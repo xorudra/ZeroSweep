@@ -16,14 +16,14 @@ import {
   type IntegrationTransport,
   type SanitizedFindingView,
   type SecurityEventEnvelope,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 
 /**
  * Integration outbox runner (Prompt 24 §79). The API's transactional
  * outbox (§78) records every integration delivery as an
  * IntegrationDelivery row; this worker runner claims due PENDING
  * deliveries and performs them with the SAME policy functions the
- * API-side processor uses (shared via @dsrclone/security-sdk):
+ * API-side processor uses (shared via @zerosweep/security-sdk):
  *
  * - webhook destinations are re-validated with fresh DNS before
  *   every hop, redirects are followed at most 3 times and every hop
@@ -150,9 +150,9 @@ export class OutboxRunner {
     const body = JSON.stringify(envelope);
     const headers: Record<string, string> = {
       "content-type": "application/json",
-      "x-dsrclone-event": envelope.eventType,
-      "x-dsrclone-delivery": delivery.id,
-      "x-dsrclone-event-id": envelope.eventId,
+      "x-zerosweep-event": envelope.eventType,
+      "x-zerosweep-delivery": delivery.id,
+      "x-zerosweep-event-id": envelope.eventId,
     };
     if (sub.secretReference) {
       const secret = this.deps.resolveSecret(sub.secretReference);
@@ -160,7 +160,7 @@ export class OutboxRunner {
         await this.finish(delivery, "NOT_CONFIGURED", { category: "SIGNING_SECRET_UNRESOLVED" }, now);
         return "SKIPPED";
       }
-      headers["x-dsrclone-signature"] = signOutboundPayload(secret, body);
+      headers["x-zerosweep-signature"] = signOutboundPayload(secret, body);
     }
     let url = sub.endpoint;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {

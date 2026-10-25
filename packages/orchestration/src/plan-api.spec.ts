@@ -4,7 +4,7 @@ import {
   apiHealthBySlug, buildApiFixtures, createApiAdapterSet, proxyHealthBySlug,
   registerApiAdapters, registerProxyAdapters, registerReconAdapters,
   registerVulnAdapters, registerWebDiscoveryAdapters,
-} from "@dsrclone/security-sdk";
+} from "@zerosweep/security-sdk";
 import { buildScanPlan } from "./plan";
 import { PROFILE_TEMPLATES, STAGE_LIBRARY, resolveTemplate } from "./profiles";
 
