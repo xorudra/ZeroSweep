@@ -1,4 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0f172a"/>
-  <text x="32" y="42" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#ffffff" text-anchor="middle">DS</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#d9d9d9"/>
+      <stop offset="1" stop-color="#8f8f8f"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="#0d0d0d"/>
+  <!-- orbit ring, back part (behind cube) -->
+  <g transform="rotate(-18 200 205)">
+    <ellipse cx="200" cy="205" rx="175" ry="48" fill="none" stroke="url(#metal)" stroke-width="26"/>
+  </g>
+  <!-- cube: faces filled dark, thick metal edges -->
+  <g fill="#0d0d0d" stroke="url(#metal)" stroke-width="20" stroke-linejoin="miter">
+    <polygon points="200,60 320,130 200,200 80,130"/>
+    <polygon points="80,130 200,200 200,330 80,260"/>
+    <polygon points="320,130 200,200 200,330 320,260"/>
+  </g>
+  <!-- inner top diamond -->
+  <polygon points="200,92 272,134 200,176 128,134" fill="none" stroke="url(#metal)" stroke-width="16" stroke-linejoin="miter"/>
+  <!-- inner left chevron -->
+  <polyline points="130,188 130,252 200,292" fill="none" stroke="#b8b8b8" stroke-width="16" stroke-linejoin="miter"/>
+  <!-- inner right sliver -->
+  <polyline points="272,196 272,242 236,262 236,218" fill="none" stroke="#e8e8e8" stroke-width="14" stroke-linejoin="miter"/>
+  <!-- orbit ring, front band (over cube), double stripe -->
+  <path d="M48,229 A175,48 -18 1 0 366,151" fill="none" stroke="url(#metal)" stroke-width="30" stroke-linecap="round"/>
+  <path d="M48,229 A175,48 -18 1 0 366,151" fill="none" stroke="#0d0d0d" stroke-width="8" stroke-linecap="round"/>
 </svg>
