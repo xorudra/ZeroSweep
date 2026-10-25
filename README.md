@@ -42,12 +42,16 @@ retired after Render's free instance hours ran out): web console, API, AI
 copilot service, worker and Redis live in a single container behind one
 address, and sign-up is invite-only.
 
+> Temporary address while the zerosweep domain name is being set up —
+> the links below use the server's IP-based URL and will move to
+> zerosweep.duckdns.org once that name is ready.
+
 | Piece | URL |
 |---|---|
-| Web console | https://zerosweep.dpdns.org |
-| API health | https://zerosweep.dpdns.org/api/v1/health/live |
-| AI copilot service health | https://zerosweep.dpdns.org/ai/health |
-| Worker health | https://zerosweep.dpdns.org/worker-health |
+| Web console | https://130-210-56-74.sslip.io |
+| API health | https://130-210-56-74.sslip.io/api/v1/health/live |
+| AI copilot service health | https://130-210-56-74.sslip.io/ai/health |
+| Worker health | https://130-210-56-74.sslip.io/worker-health |
 | Database / storage | Neon Postgres 16 (free plan) + private Supabase Storage bucket |
 
 Verified live 2026-10-12: API health reports **all checks ok** (api /
