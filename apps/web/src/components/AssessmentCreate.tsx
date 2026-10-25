@@ -29,9 +29,9 @@ const PROFILES: { value: string; label: string }[] = [
   { value: "CUSTOM", label: "Custom" },
 ];
 
-const inputCls = "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-500";
-const labelCls = "block text-xs font-medium uppercase tracking-wider text-slate-400";
-const btnCls = "rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#0F0F0F] transition-colors hover:bg-slate-200 disabled:opacity-50";
+const inputCls = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-slate-500";
+const labelCls = "block text-xs font-medium uppercase tracking-wider text-slate-500";
+const btnCls = "rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700 disabled:opacity-50";
 
 export function CreateAssessment({ onChanged }: { onChanged: () => void }) {
   const [targets, setTargets] = useState<TargetOption[] | null>(null);
@@ -78,11 +78,11 @@ export function CreateAssessment({ onChanged }: { onChanged: () => void }) {
     <div className="mb-6">
       <Card eyebrow="Step 2" title="Create an assessment">
         {targets === null ? (
-          <p className="text-sm text-slate-400">Loading your verified targets…</p>
+          <p className="text-sm text-slate-600">Loading your verified targets…</p>
         ) : targets.length === 0 ? (
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-slate-700">
             No verified target yet, so there is nothing an assessment can scan.{" "}
-            <Link href="/targets" className="text-sky-300 hover:underline">Add a target and verify it first</Link>{" "}
+            <Link href="/targets" className="text-sky-700 hover:underline">Add a target and verify it first</Link>{" "}
             — that is steps 1 and 2 of the road.
           </p>
         ) : (
@@ -106,8 +106,8 @@ export function CreateAssessment({ onChanged }: { onChanged: () => void }) {
             <button type="submit" disabled={busy} className={btnCls}>{busy ? "Creating…" : "Create assessment"}</button>
           </form>
         )}
-        {error ? <p role="alert" className="mt-3 text-sm text-red-300">{error}</p> : null}
-        {done ? <p role="status" className="mt-3 text-sm text-emerald-300">{done}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+        {done ? <p role="status" className="mt-3 text-sm text-emerald-700">{done}</p> : null}
       </Card>
     </div>
   );
@@ -142,11 +142,11 @@ export function PendingApprovals({ refreshKey, onChanged }: { refreshKey: number
   return (
     <div className="mb-6">
       <Card eyebrow="Waiting for you" title="Approve an assessment">
-        <p className="text-sm text-slate-400">Approving means: this check is allowed to run on that target. Nothing scans before this.</p>
+        <p className="text-sm text-slate-600">Approving means: this check is allowed to run on that target. Nothing scans before this.</p>
         <ul className="mt-3 space-y-2">
           {rows.map((a) => (
             <li key={a.id} className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-slate-200">{a.name}</span>
+              <span className="text-sm text-slate-900">{a.name}</span>
               <span className="text-xs text-slate-500">{a.profile}</span>
               <button type="button" disabled={busyId !== null} onClick={() => void approve(a)} className="rounded bg-sky-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
                 {busyId === a.id ? "Approving…" : "Approve"}
@@ -154,7 +154,7 @@ export function PendingApprovals({ refreshKey, onChanged }: { refreshKey: number
             </li>
           ))}
         </ul>
-        {error ? <p role="alert" className="mt-3 text-sm text-red-300">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
       </Card>
     </div>
   );

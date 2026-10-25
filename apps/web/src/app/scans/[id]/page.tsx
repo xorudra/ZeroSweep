@@ -100,12 +100,12 @@ const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 
 function stageTone(status: string): string {
   switch (status) {
-    case "COMPLETED": return "bg-emerald-500/15 text-emerald-300";
-    case "RUNNING": return "bg-sky-500/15 text-sky-300";
-    case "FAILED": return "bg-red-500/15 text-red-300";
-    case "PARTIAL": return "bg-amber-500/15 text-amber-300";
-    case "CANCELLED": case "SKIPPED": return "bg-slate-500/15 text-slate-400";
-    case "READY": case "QUEUED": return "bg-violet-500/15 text-violet-300";
+    case "COMPLETED": return "bg-emerald-500/15 text-emerald-700";
+    case "RUNNING": return "bg-sky-500/15 text-sky-700";
+    case "FAILED": return "bg-red-500/15 text-red-700";
+    case "PARTIAL": return "bg-amber-500/15 text-amber-700";
+    case "CANCELLED": case "SKIPPED": return "bg-slate-500/15 text-slate-600";
+    case "READY": case "QUEUED": return "bg-violet-500/15 text-violet-700";
     default: return "bg-slate-500/10 text-slate-500";
   }
 }
@@ -129,6 +129,7 @@ export default function Page() {
   const [busy, setBusy] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -146,16 +147,28 @@ export default function Page() {
     }
   }, [id]);
 
+  // Elapsed clock ticks every second on its own, independent of network:
+  // the old coupled 2s tick + data load froze whenever a poll was slow
+  // or the tab was throttled, then jumped to the true value.
+  useEffect(() => {
+    timer.current = setInterval(() => { setTick((t) => t + 1); }, 1000);
+    return () => { if (timer.current) clearInterval(timer.current); };
+  }, []);
+
+  // Data polls every 2s while the scan is live. Returning to the tab
+  // resyncs immediately instead of showing stale time.
   useEffect(() => {
     void load();
-    timer.current = setInterval(() => { setTick((t) => t + 1); void load(); }, 2000);
-    return () => { if (timer.current) clearInterval(timer.current); };
+    poll.current = setInterval(() => { void load(); }, 2000);
+    const resync = () => { if (!document.hidden) { setTick((t) => t + 1); void load(); } };
+    document.addEventListener("visibilitychange", resync);
+    return () => { if (poll.current) clearInterval(poll.current); document.removeEventListener("visibilitychange", resync); };
   }, [load]);
 
   useEffect(() => {
-    if (scan && TERMINAL.has(scan.status) && timer.current) {
-      clearInterval(timer.current);
-      timer.current = null;
+    if (scan && TERMINAL.has(scan.status)) {
+      if (timer.current) { clearInterval(timer.current); timer.current = null; }
+      if (poll.current) { clearInterval(poll.current); poll.current = null; }
     }
   }, [scan]);
 
@@ -183,13 +196,13 @@ export default function Page() {
         title={scan?.assessment?.name ?? "Scan"}
         body={scan ? `${scan.assessment?.target?.value ?? ""} · ${scan.assessment?.profile ?? ""}` : "Loading scan…"}
       />
-      {error && <Card><p className="text-sm text-red-300">{error}</p></Card>}
+      {error && <Card><p className="text-sm text-red-700">{error}</p></Card>}
       {!scan && !error && <EmptyState title="Loading scan" body="Fetching live scan state…" />}
       {scan && (
         <div className="space-y-6">
           {simulation && (
             <Card>
-              <p className="text-sm text-amber-300">
+              <p className="text-sm text-amber-700">
                 Simulation / Development Mode — this pipeline is executed by the Mock adapter to validate
                 orchestration. No real security tool has run and no target was contacted.
               </p>
@@ -200,21 +213,21 @@ export default function Page() {
             <div className="flex flex-wrap items-center gap-4">
               <Badge>{scan.status}</Badge>
               <div className="min-w-48 flex-1">
-                <div className="h-2 rounded bg-slate-800">
+                <div className="h-2 rounded bg-slate-200">
                   <div className="h-2 rounded bg-sky-500 transition-all" style={{ width: `${scan.progress}%` }} />
                 </div>
-                <p className="mt-1 text-xs text-slate-400">{scan.progress}% · current stage: {scan.currentStage ?? "—"} · elapsed {elapsed(scan)}</p>
+                <p className="mt-1 text-xs text-slate-600">{scan.progress}% · current stage: {scan.currentStage ?? "—"} · elapsed {elapsed(scan)}</p>
               </div>
               <div className="flex gap-2">
                 {scan.status === "RUNNING" && (
-                  <button disabled={busy !== null} onClick={() => void act("pause")} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-50">Pause</button>
+                  <button disabled={busy !== null} onClick={() => void act("pause")} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">Pause</button>
                 )}
                 {scan.status === "PAUSED" && (
                   <button disabled={busy !== null} onClick={() => void act("resume")} className="rounded bg-sky-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">Resume</button>
                 )}
                 {!TERMINAL.has(scan.status) && (
                   <>
-                    <button disabled={busy !== null} onClick={() => void act("cancel")} className="rounded bg-slate-800 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-50">Cancel</button>
+                    <button disabled={busy !== null} onClick={() => void act("cancel")} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">Cancel</button>
                     <button disabled={busy !== null} onClick={() => void act("stop")} className="rounded bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">Emergency stop</button>
                   </>
                 )}
@@ -226,14 +239,29 @@ export default function Page() {
             {SEVERITIES.map((sev) => (
               <Card key={sev}>
                 <p className="text-xs uppercase tracking-wide text-slate-500">{sev}</p>
-                <p className="mt-1 text-2xl text-slate-100">{scan.findingCounts?.[sev] ?? 0}</p>
+                <p className="mt-1 text-2xl text-slate-900">{scan.findingCounts?.[sev] ?? 0}</p>
               </Card>
             ))}
             <Card>
               <p className="text-xs uppercase tracking-wide text-slate-500">Assets</p>
-              <p className="mt-1 text-2xl text-slate-100">{scan.assetCount ?? 0}</p>
+              <p className="mt-1 text-2xl text-slate-900">{scan.assetCount ?? 0}</p>
             </Card>
           </div>
+
+          {TERMINAL.has(scan.status) && (
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-900">Scan finished</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {scan.status === "PARTIAL" ? "Some stages did not finish — see Pipeline below for the failed steps. " : ""}
+                {simulation
+                  ? "This was a simulation: no real security tool ran and no target was contacted, so zero findings is the expected result — the pipeline itself is what was tested."
+                  : `${Object.values(scan.findingCounts ?? {}).reduce((a, b) => a + b, 0)} findings recorded.`}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Duration {elapsed(scan)} · stages completed {(scan.stages ?? []).filter((s) => s.status === "COMPLETED").length} of {(scan.stages ?? []).length}
+              </p>
+            </Card>
+          )}
 
           {(() => {
             const passive = (scan.stages ?? []).find((s) => s.type === "PASSIVE_SECURITY_ANALYSIS");
@@ -241,35 +269,35 @@ export default function Page() {
             const connectors = (scan.executions ?? []).filter((ex) => ["owasp-zap", "burp-suite-professional", "caido"].includes(ex.tool?.slug ?? ""));
             return (
               <Card>
-                <h3 className="text-sm font-semibold text-slate-200">Passive proxy analysis (Prompt 8)</h3>
-                <p className="mt-1 text-sm text-slate-400">
-                  Stage status: <span className="text-slate-200">{passive.status}</span>
+                <h3 className="text-sm font-semibold text-slate-900">Passive proxy analysis (Prompt 8)</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Stage status: <span className="text-slate-900">{passive.status}</span>
                   {passive.status === "COMPLETED" && connectors.length === 0
                     ? " — no scanner instance was configured, so this stage was honestly skipped (nothing simulated)."
                     : ""}
                 </p>
                 <div className="mt-2 space-y-1">
                   {connectors.map((ex) => (
-                    <p key={ex.id} className="text-xs text-slate-400">
+                    <p key={ex.id} className="text-xs text-slate-600">
                       {ex.tool?.name ?? ex.tool?.slug} — {ex.status}
                       {ex.metrics ? ` · issues imported ${ex.metrics.passiveIssues ?? 0} · transactions ${ex.metrics.transactionsAnalyzed ?? 0} · endpoints ${ex.metrics.endpointsImported ?? 0}${ex.metrics.sessionExpired ? " · authenticated session EXPIRED (scan continues with anonymous coverage)" : ""}` : ""}
                       {ex.error ? ` · ${ex.error}` : ""}
                     </p>
                   ))}
                 </div>
-                <p className="mt-2 text-sm text-slate-400">
-                  Active Scan — <span className="text-slate-200">Not Requested</span>. Active scanning is intrusive,
+                <p className="mt-2 text-sm text-slate-600">
+                  Active Scan — <span className="text-slate-900">Not Requested</span>. Active scanning is intrusive,
                   disabled by default, and runs only under a separate expiring approval (Settings → Scanner Instances).
                 </p>
                 <p className="mt-2 text-sm">
-                  <Link href={`/scans/${scan.id}/http-history`} className="text-sky-300 hover:underline">HTTP history &amp; proxy evidence →</Link>
+                  <Link href={`/scans/${scan.id}/http-history`} className="text-sky-700 hover:underline">HTTP history &amp; proxy evidence →</Link>
                 </p>
               </Card>
             );
           })()}
 
           <Card>
-            <h3 className="text-sm font-semibold text-slate-200">Pipeline (DAG)</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Pipeline (DAG)</h3>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {(scan.stages ?? []).map((stage, i) => (
                 <span key={stage.type} className="flex items-center gap-2">
@@ -282,7 +310,7 @@ export default function Page() {
             </div>
             <div className="mt-4 space-y-1">
               {(scan.executions ?? []).map((ex) => (
-                <p key={ex.id} className="text-xs text-slate-400">
+                <p key={ex.id} className="text-xs text-slate-600 break-words">
                   {ex.tool ? `${ex.tool.name} (${ex.tool.slug})` : `tool execution ${ex.id.slice(0, 8)}…`} — {ex.status}
                   {ex.metrics ? ` · assets ${ex.metrics.assets ?? 0} · services ${ex.metrics.services ?? 0} · endpoints ${ex.metrics.endpoints ?? 0}${ex.metrics.parameters ? ` · parameters ${ex.metrics.parameters}` : ""}` : ""}
                   {ex.error ? ` · ${ex.error}` : ""}
@@ -290,7 +318,7 @@ export default function Page() {
                 </p>
               ))}
               {(scan.workers ?? []).map((w) => (
-                <p key={w.workerId} className="text-xs text-slate-500">
+                <p key={w.workerId} className="text-xs text-slate-500 break-words">
                   worker {w.workerId} — {w.status} · heartbeat {new Date(w.lastHeartbeat).toLocaleTimeString()}
                 </p>
               ))}
@@ -299,7 +327,7 @@ export default function Page() {
 
           {recon && recon.totalAssets + recon.totalEndpoints > 0 && (
             <Card>
-              <h3 className="text-sm font-semibold text-slate-200">Recon Summary</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Recon Summary</h3>
               <p className="mt-1 text-xs text-slate-500">Inventory discovered by this scan — not vulnerability counts.</p>
               <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
@@ -316,12 +344,12 @@ export default function Page() {
                 ].map(([label, value]) => (
                   <div key={label as string}>
                     <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl text-slate-100">{value}</p>
+                    <p className="mt-1 text-xl text-slate-900">{value}</p>
                   </div>
                 ))}
               </div>
               {recon.bySource && Object.keys(recon.bySource).length > 0 && (
-                <p className="mt-3 text-xs text-slate-400">
+                <p className="mt-3 text-xs text-slate-600">
                   Discovered by: {Object.entries(recon.bySource).map(([tool, n]) => `${tool} (${n})`).join(", ")}
                 </p>
               )}
@@ -335,7 +363,7 @@ export default function Page() {
 
           {surface && surface.totalEndpoints > 0 && (
             <Card>
-              <h3 className="text-sm font-semibold text-slate-200">Web Surface</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Web Surface</h3>
               <p className="mt-1 text-xs text-slate-500">Content, route and parameter discovery for this scan (Prompt 6) — inventory metrics, not vulnerability counts.</p>
               <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
@@ -352,17 +380,17 @@ export default function Page() {
                 ].map(([label, value]) => (
                   <div key={label as string}>
                     <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl text-slate-100">{value}</p>
+                    <p className="mt-1 text-xl text-slate-900">{value}</p>
                   </div>
                 ))}
               </div>
               {surface.endpointsBySource && Object.keys(surface.endpointsBySource).length > 0 && (
-                <p className="mt-3 text-xs text-slate-400">
+                <p className="mt-3 text-xs text-slate-600">
                   By source: {Object.entries(surface.endpointsBySource).map(([tool, n]) => `${tool} (${n})`).join(", ")}
                 </p>
               )}
               {surface.endpointsByType && Object.keys(surface.endpointsByType).length > 0 && (
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-600">
                   By type: {Object.entries(surface.endpointsByType).map(([t, n]) => `${t} (${n})`).join(", ")}
                 </p>
               )}
@@ -376,7 +404,7 @@ export default function Page() {
 
           {findingsSummary && findingsSummary.uniqueFindings > 0 && (
             <Card>
-              <h3 className="text-sm font-semibold text-slate-200">Findings</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Findings</h3>
               <p className="mt-1 text-xs text-slate-500">Safe vulnerability detection + TLS assessment for this scan (Prompt 7) — canonical findings after correlation; duplicates merged, never deleted.</p>
               <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
@@ -393,29 +421,29 @@ export default function Page() {
                 ].map(([label, value]) => (
                   <div key={label as string}>
                     <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-                    <p className="mt-1 text-xl text-slate-100">{value}</p>
+                    <p className="mt-1 text-xl text-slate-900">{value}</p>
                   </div>
                 ))}
               </div>
               {findingsSummary.byTool && Object.keys(findingsSummary.byTool).length > 0 && (
-                <p className="mt-3 text-xs text-slate-400">
+                <p className="mt-3 text-xs text-slate-600">
                   Tool contribution: {Object.entries(findingsSummary.byTool).map(([tool, s]) => `${tool} (${s.contributed} canonical of ${s.total} reports)`).join(", ")}
                 </p>
               )}
-              <p className="mt-2 text-xs"><Link href={`/findings?scanId=${id}`} className="text-sky-300 hover:underline">Open this scan&rsquo;s findings →</Link></p>
+              <p className="mt-2 text-xs"><Link href={`/findings?scanId=${id}`} className="text-sky-700 hover:underline">Open this scan&rsquo;s findings →</Link></p>
             </Card>
           )}
 
           <Card>
-            <h3 className="text-sm font-semibold text-slate-200">Timeline</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Timeline</h3>
             {events.length === 0 && <p className="mt-2 text-sm text-slate-500">No events yet.</p>}
             <ul className="mt-3 space-y-2">
               {events.map((event) => (
                 <li key={event.id} className="flex gap-3 text-sm">
                   <span className="shrink-0 text-xs text-slate-500">{new Date(event.createdAt).toLocaleTimeString()}</span>
-                  <span className="text-slate-300">{event.type}</span>
+                  <span className="text-slate-700">{event.type}</span>
                   {event.payload && Object.keys(event.payload).length > 0 && (
-                    <span className="text-xs text-slate-500">{JSON.stringify(event.payload)}</span>
+                    <span className="text-xs text-slate-500 min-w-0 flex-1 break-all">{JSON.stringify(event.payload)}</span>
                   )}
                 </li>
               ))}

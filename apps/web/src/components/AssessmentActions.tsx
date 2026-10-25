@@ -56,7 +56,7 @@ export function AssessmentActions() {
   return (
     <div className="mt-6 space-y-4">
       <Card>
-        <h3 className="text-sm font-semibold text-slate-200">Approved assessments — plan & start</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Approved assessments — plan & start</h3>
         <p className="mt-1 text-xs text-slate-500">
           Starting a scan re-validates target verification, approval and scope on the server, builds the
           stage DAG, and queues it for a worker. In this phase only mock-backed profiles execute —
@@ -65,21 +65,21 @@ export function AssessmentActions() {
         <div className="mt-3 space-y-2">
           {rows.map((a) => (
             <div key={a.id} className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-slate-200">{a.name}</span>
+              <span className="text-sm text-slate-900">{a.name}</span>
               <span className="text-xs text-slate-500">{a.profile}</span>
-              <button disabled={busy !== null} onClick={() => void preview(a.id)} className="rounded bg-slate-800 px-3 py-1 text-xs text-slate-200 disabled:opacity-50">Preview plan</button>
+              <button disabled={busy !== null} onClick={() => void preview(a.id)} className="rounded bg-slate-900 px-3 py-1 text-xs text-white disabled:opacity-50">Preview plan</button>
               <button disabled={busy !== null} onClick={() => void start(a.id)} className="rounded bg-sky-600 px-3 py-1 text-xs text-white disabled:opacity-50">Start scan (simulation)</button>
             </div>
           ))}
         </div>
-        {message && <p className="mt-3 text-sm text-red-300">{message}</p>}
+        {message && <p className="mt-3 text-sm text-red-700">{message}</p>}
       </Card>
       {plan && (
         <Card>
-          <h4 className="text-sm font-semibold text-slate-200">Plan preview {plan.simulation && <span className="text-amber-300">— Simulation / Development Mode</span>}</h4>
+          <h4 className="text-sm font-semibold text-slate-900">Plan preview {plan.simulation && <span className="text-amber-700">— Simulation / Development Mode</span>}</h4>
           <ul className="mt-2 space-y-1">
             {plan.stages.map((s) => (
-              <li key={s.type} className="text-xs text-slate-400">
+              <li key={s.type} className="text-xs text-slate-600">
                 {s.type} · depends on: {s.dependencies.join(", ") || "—"} · adapters: {s.selectedAdapters.map((a) => a.slug).join(", ") || "platform stage"}
               </li>
             ))}
