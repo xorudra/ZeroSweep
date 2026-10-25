@@ -12,8 +12,6 @@ without verified scope and approval.
 
 ## 🧊 3D Architecture
 
-![ZeroSweep architecture in 3D](docs/3d/architecture.gif)
-
 An authorized user comes in through Caddy to the Next.js console. The NestJS API checks scope and approval at the safety gate; only then do isolated Docker workers run the tools — Postgres on Neon holds state, Redis queues the work, Supabase stores the artifacts, and the AI copilot answers through Nexus.
 
 **Interactive:** open [`docs/3d/index.html`](docs/3d/index.html) in a browser — drag to orbit, scroll to zoom.
