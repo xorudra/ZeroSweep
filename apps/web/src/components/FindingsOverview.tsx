@@ -37,7 +37,7 @@ export function FindingsOverview() {
       </Card>
     );
   }
-  if (!summary) return <p className="text-sm text-slate-400">Loading findings overview…</p>;
+  if (!summary) return <p className="text-sm text-[#5d5f60]">Loading findings overview…</p>;
   if (summary.total === 0) {
     return (
       <Card eyebrow="Findings" title="Findings overview">
@@ -56,13 +56,13 @@ export function FindingsOverview() {
         <StatCard label="Informational" value={sev.INFORMATIONAL ?? 0} hint="findings" />
       </div>
       <Card eyebrow="Findings" title="Top vulnerabilities (by deterministic risk score)">
-        <ul className="divide-y divide-slate-800">
+        <ul className="divide-y divide-[#f0f1f2]">
           {summary.topVulnerabilities.map((f) => (
             <li key={f.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
               <Badge tone={f.severity}>{f.severity}</Badge>
-              <Link href={`/findings/${f.id}`} className="text-sky-300 hover:underline">{f.title}</Link>
-              <span className="text-slate-400">{f.host ?? ""}</span>
-              <span className="ml-auto text-slate-400">
+              <Link href={`/findings/${f.id}`} className="text-[#1b6c80] hover:underline">{f.title}</Link>
+              <span className="text-[#5d5f60]">{f.host ?? ""}</span>
+              <span className="ml-auto text-[#5d5f60]">
                 {typeof f.riskScore === "number" ? `Risk ${f.riskScore}/100 · ` : ""}{f.sources.join(", ")} · {f.status}
               </span>
             </li>

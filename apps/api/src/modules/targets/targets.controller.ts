@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Query, Req } from "@nestjs/common";
 import { z } from "zod";
 import { CurrentUser, type RequestUser } from "../../common/decorators/auth.decorators";
 import { parseOrThrow } from "../../common/parse";
@@ -19,6 +19,9 @@ export class TargetsController {
 
   @Get(":id")
   async get(@CurrentUser() user: RequestUser, @Param("id") id: string) { return this.targets.get(user, id); }
+
+  @Delete(":id")
+  async remove(@CurrentUser() user: RequestUser, @Param("id") id: string) { return this.targets.remove(user, id); }
 
   @Get(":id/verifications")
   async listVerifications(@CurrentUser() user: RequestUser, @Param("id") id: string) {

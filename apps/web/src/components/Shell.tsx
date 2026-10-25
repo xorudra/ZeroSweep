@@ -7,17 +7,17 @@ import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api-client";
 
 /**
- * Console shell — sidebar built to the owner-selected design #3 from
- * "8 Free Sidebar Designs" (Raafi G, CC BY 4.0): a flush full-height
- * near-black panel (#0F0F0F), a workspace switcher box at the top, a
- * search field with a ⌘K badge (live-filters the navigation), flat
- * monochrome menu rows whose active state is a neutral dark-grey pill
- * with white text, and the user profile pinned at the bottom. No accent
- * colour anywhere — the set is deliberately black/white/grey. The five
- * steps of the normal road (PRIMARY below) sit flat at the top; our 86
- * destinations sit behind the eight "Advanced tools" group rows, which
- * expand in place and the group holding the current page opens
- * automatically.
+ * Console shell — framed-sheet skin (owner-approved sample, 2026-10-25,
+ * taste-skill app run, style framed-sheet): one blue-grey tinted frame
+ * holds the sidebar and the top bar; the work sits on a white sheet
+ * inset 8px from the window's right and bottom edges, 16px corners, a
+ * 1px edge, no shadow. The five steps of the normal road (PRIMARY
+ * below) sit flat at the top; our 86 destinations sit behind the eight
+ * "Advanced tools" group rows, which expand in place and the group
+ * holding the current page opens automatically. Navigation behaviour
+ * (live ⌘K filter, drawer, user row, admin link) is unchanged — only
+ * the colours, type and frame moved. The Admin page keeps its own
+ * Dashdark look inside this sheet; this file never restyles it.
  */
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -143,9 +143,9 @@ const isActive = (pathname: string, href: string) =>
 interface MeInfo { name?: string; email?: string; role?: string; isPlatformAdmin?: boolean; }
 
 const rowCls = (active: boolean) =>
-  `flex h-[38px] items-center gap-[11px] rounded-lg px-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+  `flex h-[38px] items-center gap-[11px] rounded-lg px-3 text-[13px] transition-colors ${active ? "bg-[#ebedee] font-medium text-[#131416]" : "text-[#5d5f60] hover:bg-[#ebedee] hover:text-[#131416]"}`;
 const subCls = (active: boolean) =>
-  `block rounded-lg py-[7px] pl-10 pr-3 text-[13px] transition-colors ${active ? "bg-[#333333] font-medium text-white" : "text-[#A6A6A6] hover:bg-[#262626] hover:text-white"}`;
+  `block rounded-lg py-[7px] pl-10 pr-3 text-[13px] transition-colors ${active ? "bg-[#ebedee] font-medium text-[#131416]" : "text-[#5d5f60] hover:bg-[#ebedee] hover:text-[#131416]"}`;
 
 interface SidebarContentProps {
   me: MeInfo | null;
@@ -174,31 +174,31 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
   return (
     <>
       <div className="px-4 pb-1 pt-4">
-        <div className={`flex items-center gap-3 rounded-xl bg-[#262626] px-3 py-2.5 ${drawer ? "pr-11" : ""}`}>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
+        <div className={`flex items-center gap-3 rounded-xl border border-[#e8eaec] bg-white px-3 py-2.5 ${drawer ? "pr-11" : ""}`}>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e8eaec] bg-white text-[#1b6c80]">
             <ShieldIcon width="16" height="16" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold leading-tight text-white">DSRclone</span>
-            <span className="block text-[11px] leading-tight text-[#9C9C9C]">VAPT Console</span>
+            <span className="block truncate text-[13px] font-semibold leading-tight text-[#131416]">DSRclone</span>
+            <span className="block text-[11px] leading-tight text-[#5d5f60]">VAPT Console</span>
           </span>
-          {drawer ? null : (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8A8A8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>)}
+          {drawer ? null : (<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#5d5f60" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m8.5 9.5 3.5-3.5 3.5 3.5M8.5 14.5l3.5 3.5 3.5-3.5" /></svg>)}
         </div>
 
         <div className="relative mt-3">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A8A]" width="15" height="15" />
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#5d5f60]" width="15" height="15" />
           <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && results?.[0]) { onSearchEnter?.(results[0].href); go(); } if (e.key === "Escape") setQuery(""); }}
             placeholder="Search" aria-label="Search navigation"
-            className="h-[38px] w-full rounded-lg bg-[#262626] pl-9 pr-12 text-[13px] text-white placeholder-[#8A8A8A] outline-none ring-white/20 transition focus:ring-1" />
-          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-[#3A3A3A] px-1.5 py-0.5 text-[10px] font-medium text-[#C9C9C9]">⌘K</kbd>
+            className="h-[38px] w-full rounded-lg border border-[#e8eaec] bg-white pl-9 pr-12 text-[13px] text-[#131416] placeholder-[#5d5f60] outline-none transition focus:border-[#1b6c80]" />
+          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-[#ebedee] px-1.5 py-0.5 text-[10px] font-medium text-[#5d5f60]">⌘K</kbd>
         </div>
       </div>
 
       <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
         {results ? (
           results.length === 0 ? (
-            <p className="px-3 py-2 text-[12.5px] text-[#8A8A8A]">No pages match your search.</p>
+            <p className="px-3 py-2 text-[12.5px] text-[#5d5f60]">No pages match your search.</p>
           ) : results.map((item) => (
             <Link key={item.href} href={item.href} onClick={go} className={rowCls(isActive(pathname, item.href))}>
               <span className="truncate">{item.label}</span>
@@ -209,7 +209,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
             <Link href="/" onClick={go} className={rowCls(isActive(pathname, "/"))}>
               <GridIcon className="shrink-0" /><span>Overview</span>
             </Link>
-            <p className="px-3 pb-1 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6E6E6E]">Start here — the normal road</p>
+            <p className="px-3 pb-1 pt-4 text-[12px] text-[#5d5f60]">Start here — the normal road</p>
             {PRIMARY.map((item) => {
               const ItemIcon = item.icon;
               return (
@@ -217,12 +217,12 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
                   <ItemIcon className="shrink-0" />
                   <span className="min-w-0">
                     <span className="block truncate leading-tight">{item.label}</span>
-                    <span className="block truncate text-[11px] leading-tight text-[#8A8A8A]">{item.hint}</span>
+                    <span className="block truncate text-[11px] leading-tight text-[#5d5f60]">{item.hint}</span>
                   </span>
                 </Link>
               );
             })}
-            <p className="px-3 pb-1 pt-4 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6E6E6E]">Advanced tools</p>
+            <p className="px-3 pb-1 pt-4 text-[12px] text-[#5d5f60]">Advanced tools</p>
             {GROUPS.map((group) => {
               const GroupIcon = group.icon;
               const expanded = Boolean(open[group.label]);
@@ -233,7 +233,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
                     className={`${rowCls(groupActive)} w-full`}>
                     <GroupIcon className="shrink-0" />
                     <span className="flex-1 text-left">{group.label}</span>
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#8A8A8A] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}><path d="m9.5 5.5 6.5 6.5-6.5 6.5" /></svg>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#5d5f60] transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}><path d="m9.5 5.5 6.5 6.5-6.5 6.5" /></svg>
                   </button>
                   {expanded ? (
                     <div className="space-y-0.5 py-0.5">
@@ -254,17 +254,17 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
         )}
       </nav>
 
-      <div className="border-t border-white/[0.06] p-3">
+      <div className="border-t border-[#e8eaec] p-3">
         <div className="flex items-center gap-1 rounded-lg px-2 py-1.5">
           <Link href="/profile" onClick={go} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg" title="Your profile">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#333333] text-[12px] font-semibold text-white">{initials}</span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ebedee] text-[12px] font-semibold text-[#131416]">{initials}</span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium leading-tight text-white">{me?.name ?? "…"}</span>
-              <span className="block truncate text-[11.5px] leading-tight text-[#8A8A8A]">{me?.email ?? ""}</span>
+              <span className="block truncate text-[13px] font-medium leading-tight text-[#131416]">{me?.name ?? "…"}</span>
+              <span className="block truncate text-[11.5px] leading-tight text-[#5d5f60]">{me?.email ?? ""}</span>
             </span>
           </Link>
           <button type="button" onClick={logout} title="Sign out" aria-label="Sign out"
-            className="shrink-0 rounded-lg p-2 text-[#8A8A8A] transition-colors hover:bg-[#262626] hover:text-white">
+            className="shrink-0 rounded-lg p-2 text-[#5d5f60] transition-colors hover:bg-[#ebedee] hover:text-[#131416]">
             <LogoutIcon width="16" height="16" />
           </button>
         </div>
@@ -394,37 +394,44 @@ export function Shell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-white/[0.06] bg-[#0F0F0F] md:flex">
+    <div className="flex min-h-screen bg-[#eef3f6] text-[#131416]">
+      <aside className="sticky top-0 hidden h-screen w-[228px] shrink-0 flex-col bg-[#eef3f6] md:flex">
         <SidebarContent {...contentProps} searchRef={searchRef} />
       </aside>
 
-      <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/[0.06] bg-[#0F0F0F] px-4 py-3 md:hidden">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 flex items-center gap-3 bg-[#eef3f6] px-4 py-3 md:hidden">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e8eaec] bg-white text-[#1b6c80]">
             <ShieldIcon width="15" height="15" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">DSRclone</span>
-            <span className="block truncate text-[11px] leading-tight text-[#8A8A8A]">{me?.name ?? "VAPT Console"}</span>
+            <span className="block truncate text-[13.5px] font-semibold leading-tight text-[#131416]">DSRclone</span>
+            <span className="block truncate text-[11px] leading-tight text-[#5d5f60]">{me?.name ?? "VAPT Console"}</span>
           </span>
           {canAdmin ? (
-            <Link href="/admin" aria-label="Admin Panel" className="shrink-0 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
+            <Link href="/admin" aria-label="Admin Panel" className="shrink-0 rounded-lg p-2 text-[#5d5f60] transition-colors hover:bg-[#ebedee] hover:text-[#131416]">
               <DiamondIcon width="18" height="18" />
             </Link>
           ) : null}
           <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu"
-            className="shrink-0 rounded-lg p-2 text-white transition-colors hover:bg-[#262626]">
+            className="shrink-0 rounded-lg p-2 text-[#131416] transition-colors hover:bg-[#ebedee]">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
+        </header>
+
+        <header className="hidden h-12 shrink-0 items-center gap-3 px-6 md:flex">
+          <span className="truncate text-[13px] text-[#5d5f60]">{breadcrumb(pathname)}</span>
+          <Link href="/profile" className="ml-auto shrink-0 truncate text-[13px] text-[#5d5f60] transition-colors hover:text-[#131416]">
+            {me?.name ?? "Profile"}
+          </Link>
         </header>
 
         {mobileOpen ? (
           <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
             <button type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} className="absolute inset-0 h-full w-full bg-black/60" />
-            <div className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col bg-[#0F0F0F] shadow-2xl">
+            <div className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col bg-[#eef3f6] shadow-2xl">
               <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close menu"
-                className="absolute right-3 top-3 z-10 rounded-lg p-2 text-[#C9C9C9] transition-colors hover:bg-[#262626] hover:text-white">
+                className="absolute right-3 top-3 z-10 rounded-lg p-2 text-[#5d5f60] transition-colors hover:bg-[#ebedee] hover:text-[#131416]">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
               <SidebarContent {...contentProps} drawer onNavigate={() => setMobileOpen(false)} />
@@ -432,18 +439,35 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         ) : null}
 
-        <main className="mx-auto max-w-7xl p-5 md:p-8">{children}</main>
+        <main className="flex-1 border-[#e8eaec] bg-white p-4 md:mb-2 md:mr-2 md:rounded-bl-2xl md:rounded-br-2xl md:rounded-tr-2xl md:border md:p-6">
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        </main>
       </div>
     </div>
   );
 }
 
+/** Breadcrumb for the desktop top bar: the road step or the group and
+ *  page the current route belongs to. Falls back to "Console" for
+ *  routes outside the sidebar (profile, status, tool pages). */
+function breadcrumb(pathname: string): string {
+  if (pathname === "/") return "Overview";
+  for (const p of PRIMARY) {
+    if (isActive(pathname, p.href)) return p.label.replace(/^\d+ · /, "");
+  }
+  for (const g of GROUPS) {
+    const item = g.items.find((i) => isActive(pathname, i.href));
+    if (item) return `${g.label} / ${item.label}`;
+  }
+  return "Console";
+}
+
 export function PageHeader({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
   return (
     <div className="mb-6">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-cyan-400">{eyebrow}</p>
-      <h1 className="mt-1 text-2xl font-bold text-slate-50">{title}</h1>
-      {body ? <p className="mt-1 max-w-2xl text-sm text-slate-400">{body}</p> : null}
+      <p className="text-[12px] text-[#5d5f60]">{eyebrow}</p>
+      <h1 className="mt-1 text-[22px] font-semibold leading-tight text-[#131416]">{title}</h1>
+      {body ? <p className="mt-1 max-w-2xl text-sm text-[#5d5f60]">{body}</p> : null}
     </div>
   );
 }

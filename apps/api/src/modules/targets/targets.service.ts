@@ -93,6 +93,20 @@ export class TargetsService {
     return assertTargetInOrg(this.prisma, user, id);
   }
 
+  /** Soft-delete a target (owner order 2026-10-25, Rare UI delete button).
+   *  The row stays for history — assessments, scans and findings keep
+   *  their record — but every workspace-scoped list already filters
+   *  deletedAt: null, so it disappears from the console at once.
+   *  Tenancy is enforced by assertTargetInOrg: a target outside the
+   *  caller's organization is a 404, never a 403 that confirms it exists. */
+  async remove(user: RequestUser, id: string) {
+    const target = await assertTargetInOrg(this.prisma, user, id);
+    const now = new Date();
+    await this.prisma.target.update({ where: { id: target.id }, data: { deletedAt: now } });
+    await this.audit.record({ actorId: user.id, organizationId: user.organizationId, workspaceId: target.workspaceId, action: "TARGET_DELETED", resourceType: "Target", resourceId: target.id });
+    return { deleted: true, deletedAt: now };
+  }
+
   /** The guidelines text version shown before the "I have permission"
    *  declaration tick. Bump when the guidelines wording changes so every
    *  stored declaration names exactly what the user read. */

@@ -176,3 +176,30 @@ describe("TargetsService MANUAL_APPROVAL declaration", () => {
     expect((adminRows[0] as Record<string, unknown>).attestationIp).toBe("203.0.113.9");
   });
 });
+
+/** Soft delete (owner order 2026-10-25): the row stays, the console
+ *  stops listing it, and the deletion is audit-logged. Tenancy comes
+ *  from assertTargetInOrg — a foreign target is a 404. */
+describe("TargetsService remove (soft delete)", () => {
+  it("sets deletedAt and records TARGET_DELETED", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    const audits: Array<Record<string, unknown>> = [];
+    const prismaMock = {
+      target: {
+        findFirst: async () => ({ id: "t1", workspaceId: "ws1" }),
+        update: async (args: { data: Record<string, unknown> }) => { updates.push(args.data); return {}; },
+      },
+    };
+    const svc = new TargetsService(prismaMock as never, { record: async (a: Record<string, unknown>) => { audits.push(a); } } as never);
+    const res = await svc.remove(user, "t1");
+    expect(res.deleted).toBe(true);
+    expect(updates[0]?.deletedAt).toBeInstanceOf(Date);
+    expect(audits[0]?.action).toBe("TARGET_DELETED");
+    expect(audits[0]?.resourceId).toBe("t1");
+  });
+  it("refuses a target outside the caller's organization", async () => {
+    const prismaMock = { target: { findFirst: async () => null, update: async () => ({}) } };
+    const svc = new TargetsService(prismaMock as never, { record: async () => undefined } as never);
+    await expect(svc.remove(user, "t1")).rejects.toThrow("Target not found");
+  });
+});

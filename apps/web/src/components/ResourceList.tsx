@@ -34,16 +34,16 @@ export function ResourceList({
     return () => { cancelled = true; };
   }, [path]);
 
-  if (state.kind === "loading") return <p className="text-sm text-slate-400">Loading…</p>;
+  if (state.kind === "loading") return <p className="text-sm text-[#5d5f60]">Loading…</p>;
   if (state.kind === "error") {
     return <EmptyState title="Nothing to show yet" body={`${state.message} When the API is running and data exists, it will appear here — no placeholder data is shown.`} />;
   }
   if (state.items.length === 0) return <EmptyState title={emptyTitle} body={emptyBody} />;
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-800">
+    <div className="overflow-x-auto rounded-lg border border-[#e8eaec]">
       <table className="w-full min-w-[560px] text-left text-sm">
-        <thead className="bg-slate-900/70 text-slate-400">
-          <tr>{columns.map((c) => <th key={c} className="px-4 py-3 font-medium">{c}</th>)}</tr>
+        <thead className="text-[#5d5f60]">
+          <tr>{columns.map((c) => <th key={c} className="px-4 py-3 text-[12px] font-normal">{c}</th>)}</tr>
         </thead>
         <tbody>
           {state.items.map((item, i) => renderRow(item as never, i))}
@@ -55,8 +55,8 @@ export function ResourceList({
 
 export function Row({ cells }: { cells: React.ReactNode[] }) {
   return (
-    <tr className="border-t border-slate-800">
-      {cells.map((c, i) => <td key={i} className="px-4 py-3 text-slate-200">{c}</td>)}
+    <tr className="border-t border-[#f0f1f2]">
+      {cells.map((c, i) => <td key={i} className="px-4 py-3 text-[#131416]">{c}</td>)}
     </tr>
   );
 }

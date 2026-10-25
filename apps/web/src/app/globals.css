@@ -2,18 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Framed-sheet skin (owner-approved sample, 2026-10-25): a blue-grey
+ * tinted frame, white sheet, IBM Plex Sans for text and Plex Mono for
+ * IDs/keys. One ground, one ink, one accent — colour stays on data. */
 body {
-  background-color: #020617;
-  color: #e2e8f0;
+  background-color: #eef3f6;
+  color: #131416;
+  font-family: "IBM Plex Sans", Inter, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Launch Safety D22: keyboard focus must be VISIBLE. On this dark UI
-   the browser-default outline is effectively invisible against slate
-   backgrounds, so keyboard users could not tell where focus was.
-   A high-contrast sky outline on :focus-visible only (mouse/touch
-   interaction is unaffected). */
+.font-mono {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Keyboard focus must stay VISIBLE (Launch Safety D22). Teal on the
+   light UI instead of the old sky-on-dark outline. */
 :focus-visible {
-  outline: 2px solid #38bdf8;
+  outline: 2px solid #1b6c80;
   outline-offset: 2px;
 }
-
