@@ -175,9 +175,7 @@ function SidebarContent({ me, canAdmin, pathname, open, setOpen, query, setQuery
     <>
       <div className="px-4 pb-1 pt-4">
         <div className={`flex items-center gap-3 rounded-xl border border-[#e8eaec] bg-white px-3 py-2.5 ${drawer ? "pr-11" : ""}`}>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e8eaec] bg-white text-[#1b6c80]">
-            <ShieldIcon width="16" height="16" />
-          </span>
+          <img src="/zerosweep-logo.png" alt="ZeroSweep logo" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold leading-tight text-[#131416]">ZeroSweep</span>
             <span className="block text-[11px] leading-tight text-[#5d5f60]">VAPT Console</span>
@@ -358,9 +356,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-slate-950">
         <header className="border-b border-white/[0.06] bg-[#0F0F0F] px-5 py-3">
           <div className="mx-auto flex max-w-5xl items-center gap-3">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#0F0F0F]">
-              <ShieldIcon width="15" height="15" />
-            </span>
+            <img src="/zerosweep-logo.png" alt="ZeroSweep logo" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13.5px] font-semibold leading-tight text-white">ZeroSweep</span>
               <span className="block text-[11px] leading-tight text-[#8A8A8A]">Legal documents</span>
@@ -401,9 +397,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex items-center gap-3 bg-[#eef3f6] px-4 py-3 md:hidden">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e8eaec] bg-white text-[#1b6c80]">
-            <ShieldIcon width="15" height="15" />
-          </span>
+          <img src="/zerosweep-logo.png" alt="ZeroSweep logo" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-semibold leading-tight text-[#131416]">ZeroSweep</span>
             <span className="block truncate text-[11px] leading-tight text-[#5d5f60]">{me?.name ?? "VAPT Console"}</span>

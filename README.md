@@ -1,3 +1,5 @@
+<img src="apps/web/public/zerosweep-logo.png" width="120" alt="ZeroSweep logo">
+
 # ZeroSweep — Authorized Automated VAPT Platform
 
 ZeroSweep is a **GUI-first** automated VAPT (Vulnerability Assessment & Penetration

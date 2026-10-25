@@ -234,23 +234,21 @@ export default function Component() {
   };
 
   const Logo = (
-    <div
+    <img
+      src="/zerosweep-logo.png"
+      alt="ZeroSweep logo"
+      width={44}
+      height={44}
       style={{
-        background: "#111",
         width: 44,
         height: 44,
-        borderRadius: "50%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 700,
-        fontSize: "1.15rem",
+        borderRadius: 12,
+        objectFit: "cover",
         marginBottom: "0.75rem",
         border: "1px solid #333",
+        display: "block",
       }}
-    >
-      DS
-    </div>
+    />
   );
   const Footer = (
     <div style={{ marginTop: "0.85rem", fontSize: "0.75rem", color: "#666", lineHeight: 1.5, textAlign: "center" }}>
