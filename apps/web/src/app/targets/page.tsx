@@ -105,7 +105,7 @@ export default function Page() {
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="order-1 text-[22px] font-semibold leading-tight text-[#131416]">Targets</h1>
-        <a href="#add-target" className="order-2 ml-auto inline-flex h-8 items-center rounded-lg bg-[#131416] px-4 text-sm font-medium text-white transition-colors hover:bg-black">
+        <a href="#add-target" className="order-2 ml-auto inline-flex h-8 items-center rounded-lg bg-[#131416] px-4 text-sm font-medium text-white transition-colors hover:bg-black md:order-3">
           Add a target
         </a>
         {items ? <span className="order-3 w-full text-sm text-[#5d5f60] md:order-2 md:w-auto">{verifiedCount} verified</span> : null}
