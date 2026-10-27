@@ -20,6 +20,8 @@ describe("recon adapter registration (§2, Prompt 3 SDK contract)", () => {
     expect(registry.byCapability("DNS_RESOLUTION").map((a) => a.metadata.slug)).toEqual(["dnsx"]);
     expect(registry.byCapability("HISTORICAL_URL_DISCOVERY").map((a) => a.metadata.slug).sort()).toEqual(["gau", "waybackurls"]);
     expect(registry.query({ targetType: "WEB_APPLICATION" }).map((a) => a.metadata.slug)).toContain("katana");
+    // Subfinder serves web apps too: passive enumeration only needs the host.
+    expect(registry.query({ targetType: "WEB_APPLICATION" }).map((a) => a.metadata.slug)).toContain("subfinder");
     expect(registry.query({ targetType: "DOMAIN" }).map((a) => a.metadata.slug)).not.toContain("katana");
     // No recon adapter requires approval or is RESTRICTED; none declares a
     // raw-command input (registry validation would have thrown already).

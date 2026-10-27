@@ -43,7 +43,12 @@ export class SubfinderAdapter extends ReconAdapterBase {
     homepage: "https://github.com/projectdiscovery/subfinder",
     riskLevel: "LOW", // Prompt 5 §5
     capabilities: ["SUBDOMAIN_DISCOVERY"],
-    supportedTargetTypes: ["DOMAIN"],
+    // WEB_APPLICATION too: passive subdomain enumeration only needs the
+    // target's host (same domain), and never contacts the target itself —
+    // public sources only (INTERNET_READ_ONLY). Without this, web-app
+    // targets can never select a real recon tool and always fall back to
+    // the mock adapter, even with the binary installed.
+    supportedTargetTypes: ["DOMAIN", "WEB_APPLICATION"],
     supportedOutputFormats: ["JSONL"],
   });
   protected override planNetworkPolicy() { return "INTERNET_READ_ONLY" as const; }
