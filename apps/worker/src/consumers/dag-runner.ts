@@ -123,6 +123,19 @@ export type StageDispatcher = (job: StageJobData) => Promise<StageExecutionOutco
 
 const TERMINAL = new Set(["COMPLETED", "PARTIAL", "FAILED", "SKIPPED", "CANCELLED"]);
 
+/**
+ * Finding-pipeline stages that must read SKIPPED (not a vacuous COMPLETED)
+ * when no tool produced any output: NORMALIZATION, CORRELATION and
+ * RISK_ANALYSIS only process what tools found. REPORT_GENERATION is exempt
+ * (it documents the outcome, failures included), as are gate stages.
+ * PARTIAL_DATA counts as output; Continue-PARTIAL (zero tools completed)
+ * does not. Pure-platform scans (no tool stage seen) are unaffected.
+ */
+export const NO_INPUT_SKIP_STAGES = ["NORMALIZATION", "CORRELATION", "RISK_ANALYSIS"] as const;
+export function shouldSkipNoInputStage(stageId: string, toolStagesSeen: number, toolOutput: boolean): boolean {
+  return (NO_INPUT_SKIP_STAGES as readonly string[]).includes(stageId) && toolStagesSeen > 0 && !toolOutput;
+}
+
 export class DagRunner {
   constructor(
     private readonly store: ScanRunStore,
@@ -163,6 +176,16 @@ export class DagRunner {
     await this.store.updateScan(scanId, { status: "RUNNING", startedAt: new Date() });
 
     let lastProgress = run.progress;
+    // Honest pipeline stages (§8): finding-pipeline stages (normalize /
+    // correlate / risk) only mean something when a tool actually produced
+    // output. If every tool stage so far failed outright (Continue-PARTIAL
+    // included — it means zero tools completed), these stages have nothing
+    // to process and must read SKIPPED, never a vacuous COMPLETED.
+    // REPORT_GENERATION is exempt: it documents the outcome, failures
+    // included. Tracked loop-locally: PARTIAL_DATA counts as output
+    // (at least one tool completed); Continue-PARTIAL does not.
+    let toolOutput = false;
+    let toolStagesSeen = 0;
     const maxIterations = plan.stages.length * 4 + 16;
 
     for (let i = 0; i < maxIterations; i++) {
@@ -195,6 +218,15 @@ export class DagRunner {
         await emit("stage.started", { stageId: node.id });
 
         if (planned.selectedAdapters.length === 0) {
+          // No tool produced anything yet, but tool stages already ran and
+          // all failed: the finding pipeline has no input. Skip honestly
+          // instead of completing over zero findings (the "all stages
+          // worked" bug). Gate stages and REPORT_GENERATION are exempt.
+          if (shouldSkipNoInputStage(node.id, toolStagesSeen, toolOutput)) {
+            await this.store.updateStage(scanId, node.id, { status: "SKIPPED", progress: 100, completedAt: new Date() });
+            await emit("stage.skipped", { stageId: node.id, because: "no tool produced output" });
+            continue;
+          }
           const outcome = await this.runPlatformStage(scanId, run, node.id, emit);
           await this.store.updateStage(scanId, node.id, { status: outcome, progress: 100, completedAt: new Date() });
           await emit(outcome === "FAILED" ? "stage.failed" : "stage.completed", { stageId: node.id });
@@ -250,6 +282,14 @@ export class DagRunner {
               : outcomes.some((o) => o.status === "COMPLETED" || o.status === "ALREADY_COMPLETED")
                 ? { status: "PARTIAL_DATA" }
                 : outcomes[0]!;
+
+        // Track tool output for the honest-pipeline rule above. A single
+        // tool stage with zero executions never reaches this branch (it is
+        // a platform stage), so every outcome here came from real tools.
+        toolStagesSeen += 1;
+        if (outcome.status === "COMPLETED" || outcome.status === "ALREADY_COMPLETED" || outcome.status === "PARTIAL_DATA") {
+          toolOutput = true;
+        }
 
         if (outcome.status === "COMPLETED" || outcome.status === "ALREADY_COMPLETED") {
           await this.store.updateStage(scanId, node.id, { status: "COMPLETED", progress: 100, completedAt: new Date() });
