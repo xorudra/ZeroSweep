@@ -46,5 +46,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ ready: true, authenticated: false });
     router.replace("/login");
   };
-  return <AuthContext.Provider value={{ ...state, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ ...state, logout }}>
+      {/* Gate first paint on the auth check: without this, protected
+          pages render once before the effect below redirects to /login,
+          so a logged-out visitor sees the dashboard flash. Public pages
+          (/login, /invite, /legal/*) still paint instantly. */}
+      {state.ready || isPublicPath(pathname) ? (
+        children
+      ) : (
+        <div
+          role="status"
+          aria-label="Loading"
+          className="flex min-h-screen items-center justify-center bg-[#eef3f6]"
+        >
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1b6c80]/25 border-t-[#1b6c80]" />
+        </div>
+      )}
+    </AuthContext.Provider>
+  );
 }
