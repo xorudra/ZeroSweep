@@ -50,9 +50,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{ ...state, logout }}>
       {/* Gate first paint on the auth check: without this, protected
           pages render once before the effect below redirects to /login,
-          so a logged-out visitor sees the dashboard flash. Public pages
-          (/login, /invite, /legal/*) still paint instantly. */}
-      {state.ready || isPublicPath(pathname) ? (
+          so a logged-out visitor sees the dashboard flash. /login is
+          gated as well: a signed-in visitor would otherwise see the
+          sign-in form flash before the redirect home. /invite and
+          /legal/* still paint instantly — no redirect-away applies
+          there. */}
+      {state.ready || (isPublicPath(pathname) && pathname !== "/login") ? (
         children
       ) : (
         <div
