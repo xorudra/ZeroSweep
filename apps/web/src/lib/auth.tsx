@@ -30,6 +30,15 @@ function hasValidatedMarker(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie.split(";").some((c) => c.trim().startsWith(VALIDATED_MARKER + "="));
 }
+
+/** Set by the middleware when it determined there is NO live session for
+ *  this load: the client can paint the signed-out outcome immediately
+ *  instead of spinning on its own refresh round-trip. */
+const ANON_MARKER = "zs_a";
+function hasAnonMarker(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith(ANON_MARKER + "="));
+}
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ ready: boolean; authenticated: boolean }>({ ready: false, authenticated: false });
   const pathname = usePathname();
@@ -39,13 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let live = true;
     (async () => {
       let authenticated: boolean;
-      if (hasValidatedMarker()) {
+      if (getToken()) {
+        authenticated = true;
+      } else if (hasValidatedMarker()) {
         // The middleware already validated the session for this load —
         // trust it and paint now instead of spinning on our own refresh.
         authenticated = true;
+      } else if (hasAnonMarker()) {
+        // The middleware already determined there is no live session —
+        // skip the refresh round-trip and paint the outcome directly.
+        authenticated = false;
       } else {
-        authenticated = Boolean(getToken());
-        if (!authenticated) authenticated = await refreshAccessToken();
+        authenticated = await refreshAccessToken();
       }
       if (!live) return;
       setState({ ready: true, authenticated });
@@ -68,15 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ ...state, logout }}>
       {/* First-paint gate. The middleware already routes full page loads
-          server-side (no cookie -> /login, valid session -> the page, so
+          server-side (no session -> /login, valid session -> the page, so
           the spinner never shows in normal flows). This gate is the
           backstop: it holds protected pages until the auth check
-          completes, and also trusts the middleware's short-lived
-          validation marker so a validated load paints instantly instead
-          of spinning on its own refresh. /invite and /legal/* still
-          paint instantly — no redirect-away applies there. */}
+          completes, and trusts the middleware's short-lived markers so a
+          decided load paints instantly — zs_v (validated) for the page,
+          zs_a (no live session) for the login form. /invite and /legal/*
+          still paint instantly — no redirect-away applies there. */}
       {state.ready ||
-      (pathname !== "/login" && (isPublicPath(pathname) || hasValidatedMarker())) ? (
+      (pathname !== "/login" && (isPublicPath(pathname) || hasValidatedMarker())) ||
+      (pathname === "/login" && hasAnonMarker()) ? (
         children
       ) : (
         <div

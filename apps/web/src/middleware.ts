@@ -20,6 +20,10 @@ import { NextRequest, NextResponse } from "next/server";
  */
 const SESSION_COOKIE = "zerosweep_session";
 const VALIDATED_MARKER = "zs_v";
+// Set when the middleware determined there is NO live session for this load,
+// so the client can paint the signed-out outcome immediately instead of
+// spinning on its own refresh round-trip.
+const ANON_MARKER = "zs_a";
 const API_INTERNAL = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:4000";
 
 function isPublicPath(pathname: string): boolean {
@@ -42,16 +46,25 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   const publicPath = isPublicPath(pathname);
 
   // No session cookie: route on presence alone — instant, no API call.
+  // The anon marker lets the client paint the outcome without its own
+  // refresh round-trip.
   if (!session) {
     const res = publicPath
       ? NextResponse.next()
       : NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete(VALIDATED_MARKER);
+    res.cookies.set(ANON_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
     return res;
   }
 
   // Client-side navigations: the running client owns auth; presence is enough.
-  if (isRsc(req)) return NextResponse.next();
+  // Keep the markers from going stale across tabs.
+  if (isRsc(req)) {
+    const res = NextResponse.next();
+    if (session) res.cookies.delete(ANON_MARKER);
+    else res.cookies.delete(VALIDATED_MARKER);
+    return res;
+  }
 
   // Full page load with a session cookie: validate once (read-only, no
   // rotation, so nothing to forward and no race with the client's refresh).
@@ -74,6 +87,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
       ? NextResponse.next()
       : NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete(VALIDATED_MARKER);
+    res.cookies.set(ANON_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
     return res;
   }
   if (!apiRes.ok) {
@@ -85,6 +99,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     pathname === "/login"
       ? NextResponse.redirect(new URL("/", req.url))
       : NextResponse.next();
+  res.cookies.delete(ANON_MARKER);
   res.cookies.set(VALIDATED_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
   return res;
 }
