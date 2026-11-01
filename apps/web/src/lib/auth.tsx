@@ -19,6 +19,17 @@ export const useAuth = () => useContext(AuthContext);
  *  the session is restored with one silent cookie refresh before
  *  deciding. */
 const isPublicPath = (p: string) => p === "/login" || p === "/invite" || p === "/legal" || p.startsWith("/legal/");
+
+/** Readable marker the middleware sets after it has validated the session
+ *  (and rotated the credential) for this page load. When present, the
+ *  client paints immediately and skips its own refresh — which would 401
+ *  against the rotated credential. The access token fills in lazily via
+ *  apiFetch's 401 -> refresh on the first data call. */
+const VALIDATED_MARKER = "zs_v";
+function hasValidatedMarker(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith(VALIDATED_MARKER + "="));
+}
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ ready: boolean; authenticated: boolean }>({ ready: false, authenticated: false });
   const pathname = usePathname();
@@ -27,8 +38,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let live = true;
     (async () => {
-      let authenticated = Boolean(getToken());
-      if (!authenticated) authenticated = await refreshAccessToken();
+      let authenticated: boolean;
+      if (hasValidatedMarker()) {
+        // The middleware already validated (and rotated) the session for
+        // this load — trust it and paint now. Our own refresh would 401
+        // against the rotated credential.
+        authenticated = true;
+      } else {
+        authenticated = Boolean(getToken());
+        if (!authenticated) authenticated = await refreshAccessToken();
+      }
       if (!live) return;
       setState({ ready: true, authenticated });
       if (!authenticated && !isPublicPath(pathname)) router.replace("/login");
@@ -43,19 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // state clears regardless of the outcome.
     void apiFetch("/auth/logout", { method: "POST", body: JSON.stringify({}) }).catch(() => undefined);
     clearToken();
+    document.cookie = `${VALIDATED_MARKER}=; Path=/; Max-Age=0`;
     setState({ ready: true, authenticated: false });
     router.replace("/login");
   };
   return (
     <AuthContext.Provider value={{ ...state, logout }}>
-      {/* Gate first paint on the auth check: without this, protected
-          pages render once before the effect below redirects to /login,
-          so a logged-out visitor sees the dashboard flash. /login is
-          gated as well: a signed-in visitor would otherwise see the
-          sign-in form flash before the redirect home. /invite and
-          /legal/* still paint instantly — no redirect-away applies
-          there. */}
-      {state.ready || (isPublicPath(pathname) && pathname !== "/login") ? (
+      {/* First-paint gate. The middleware already routes full page loads
+          server-side (no cookie -> /login, valid session -> the page, so
+          the spinner never shows in normal flows). This gate is the
+          backstop: it holds protected pages until the auth check
+          completes, and also trusts the middleware's short-lived
+          validation marker so a validated load paints instantly instead
+          of spinning on its own refresh. /invite and /legal/* still
+          paint instantly — no redirect-away applies there. */}
+      {state.ready ||
+      (pathname !== "/login" && (isPublicPath(pathname) || hasValidatedMarker())) ? (
         children
       ) : (
         <div
