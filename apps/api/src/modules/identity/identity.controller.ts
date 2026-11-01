@@ -149,6 +149,19 @@ export class IdentityAuthController {
     return this.sessions.revokeAllSessions({ id: user.id, email: user.email, organizationId: user.organizationId, role: user.role }, user.id);
   }
 
+  /** Read-only session check for the web middleware's server-side routing:
+   *  validates the HttpOnly session cookie WITHOUT rotating it, so the
+   *  middleware can decide the right page before anything paints. Returns
+   *  200 when the session is live, 401 otherwise. */
+  @Public()
+  @Get("session/check")
+  async checkSession(@Req() req: Request) {
+    const presented = readSessionCookie(req);
+    if (!presented) throw new UnauthorizedException("No session cookie");
+    await this.sessions.validateSessionToken(presented);
+    return { valid: true };
+  }
+
   /** Launch Safety A7 — refresh: exchange the HttpOnly session cookie
    *  for a fresh access JWT. The presented credential is validated under
    *  the standard session rules, then ROTATED: the old cookie token dies

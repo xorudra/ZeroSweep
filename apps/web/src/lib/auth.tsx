@@ -21,10 +21,10 @@ export const useAuth = () => useContext(AuthContext);
 const isPublicPath = (p: string) => p === "/login" || p === "/invite" || p === "/legal" || p.startsWith("/legal/");
 
 /** Readable marker the middleware sets after it has validated the session
- *  (and rotated the credential) for this page load. When present, the
- *  client paints immediately and skips its own refresh — which would 401
- *  against the rotated credential. The access token fills in lazily via
- *  apiFetch's 401 -> refresh on the first data call. */
+ *  for this page load (read-only check, no rotation). When present, the
+ *  client paints immediately and skips its own refresh round-trip. The
+ *  access token fills in lazily via apiFetch's 401 -> refresh on the
+ *  first data call. */
 const VALIDATED_MARKER = "zs_v";
 function hasValidatedMarker(): boolean {
   if (typeof document === "undefined") return false;
@@ -40,9 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       let authenticated: boolean;
       if (hasValidatedMarker()) {
-        // The middleware already validated (and rotated) the session for
-        // this load — trust it and paint now. Our own refresh would 401
-        // against the rotated credential.
+        // The middleware already validated the session for this load —
+        // trust it and paint now instead of spinning on our own refresh.
         authenticated = true;
       } else {
         authenticated = Boolean(getToken());

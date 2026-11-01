@@ -7,13 +7,13 @@ import { NextRequest, NextResponse } from "next/server";
  * - No `zerosweep_session` cookie  -> protected pages redirect to /login,
  *   public pages (/login, /invite, /legal/*) render directly.
  * - Cookie present on a document load -> validated once against the API's
- *   refresh endpoint (same container, 127.0.0.1:4000). Valid: the page
- *   renders directly (/login bounces to /). Invalid (401): treated like
- *   no cookie, so even an expired session lands directly on /login.
- * - The refresh ROTATES the session credential; the rotated Set-Cookie is
- *   forwarded on our response, and a short-lived readable `zs_v` marker
- *   tells the client it can skip its own refresh (which would 401 against
- *   the rotated credential) and paint immediately.
+ *   read-only session check (same container, 127.0.0.1:4000). Valid: the
+ *   page renders directly (/login bounces to /). Invalid (401): treated
+ *   like no cookie, so even an expired session lands directly on /login.
+ * - The check does NOT rotate the credential, so there is no Set-Cookie
+ *   to forward and no race with the client's own refresh. A short-lived
+ *   readable `zs_v` marker tells the client the load was validated, so
+ *   it paints immediately instead of spinning on its own refresh round-trip.
  * - API unreachable -> fail open; the client's own auth check backstops.
  * - RSC / prefetch requests -> presence check only; the running client
  *   owns auth there, no API call, no rotation.
@@ -36,18 +36,6 @@ function isRsc(req: NextRequest): boolean {
   return req.headers.get("rsc") === "1" || req.headers.get("next-router-prefetch") === "1";
 }
 
-function forwardSetCookies(from: Headers, to: Headers): void {
-  const getSetCookie = (from as unknown as { getSetCookie?: () => string[] }).getSetCookie;
-  const cookies: string[] =
-    typeof getSetCookie === "function"
-      ? getSetCookie.call(from)
-      : (() => {
-          const single = from.get("set-cookie");
-          return single ? [single] : [];
-        })();
-  for (const c of cookies) to.append("set-cookie", c);
-}
-
 export async function middleware(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
   const session = req.cookies.get(SESSION_COOKIE)?.value;
@@ -65,11 +53,11 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   // Client-side navigations: the running client owns auth; presence is enough.
   if (isRsc(req)) return NextResponse.next();
 
-  // Full page load with a session cookie: validate once via refresh.
+  // Full page load with a session cookie: validate once (read-only, no
+  // rotation, so nothing to forward and no race with the client's refresh).
   let apiRes: Response;
   try {
-    apiRes = await fetch(`${API_INTERNAL}/api/v1/auth/refresh`, {
-      method: "POST",
+    apiRes = await fetch(`${API_INTERNAL}/api/v1/auth/session/check`, {
       headers: {
         cookie: `${SESSION_COOKIE}=${session}`,
         "x-request-id": crypto.randomUUID(),
@@ -97,7 +85,6 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     pathname === "/login"
       ? NextResponse.redirect(new URL("/", req.url))
       : NextResponse.next();
-  forwardSetCookies(apiRes.headers, res.headers);
   res.cookies.set(VALIDATED_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
   return res;
 }
