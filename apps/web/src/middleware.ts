@@ -40,6 +40,16 @@ function isRsc(req: NextRequest): boolean {
   return req.headers.get("rsc") === "1" || req.headers.get("next-router-prefetch") === "1";
 }
 
+function nextWithAuth(req: NextRequest, auth: "valid" | "anon"): NextResponse {
+  // Tell the page's server render the verdict via a request header, so the
+  // very first paint (SSR) is already the right page — no spinner even
+  // before hydration. The readable cookies below remain as a client-side
+  // fallback.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-zs-auth", auth);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 export async function middleware(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
   const session = req.cookies.get(SESSION_COOKIE)?.value;
@@ -50,7 +60,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   // refresh round-trip.
   if (!session) {
     const res = publicPath
-      ? NextResponse.next()
+      ? nextWithAuth(req, "anon")
       : NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete(VALIDATED_MARKER);
     res.cookies.set(ANON_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
@@ -84,7 +94,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   if (apiRes.status === 401) {
     // Session dead: same routing as no cookie — direct login, no flash.
     const res = publicPath
-      ? NextResponse.next()
+      ? nextWithAuth(req, "anon")
       : NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete(VALIDATED_MARKER);
     res.cookies.set(ANON_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
@@ -98,7 +108,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
   const res =
     pathname === "/login"
       ? NextResponse.redirect(new URL("/", req.url))
-      : NextResponse.next();
+      : nextWithAuth(req, "valid");
   res.cookies.delete(ANON_MARKER);
   res.cookies.set(VALIDATED_MARKER, "1", { path: "/", maxAge: 60, sameSite: "lax" });
   return res;

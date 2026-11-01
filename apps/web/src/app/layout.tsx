@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Shell } from "@/components/Shell";
@@ -6,6 +7,10 @@ import { Shell } from "@/components/Shell";
 export const metadata = { title: "ZeroSweep — Authorized VAPT Platform", description: "GUI-first automated VAPT and security-assessment orchestration platform." };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // The middleware stamps the request with its auth verdict so the very
+  // first server paint is already the right page — no spinner, no flash.
+  const verdict = headers().get("x-zs-auth");
+  const initialAuth = verdict === "valid" || verdict === "anon" ? verdict : null;
   return (
     <html lang="en">
       <head>
@@ -14,7 +19,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
       </head>
       <body>
-        <AuthProvider>
+        <AuthProvider initialAuth={initialAuth}>
           <Shell>{children}</Shell>
         </AuthProvider>
       </body>

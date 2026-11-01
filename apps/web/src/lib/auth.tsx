@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch, clearToken, getToken, refreshAccessToken } from "./api-client";
 
@@ -39,12 +39,23 @@ function hasAnonMarker(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie.split(";").some((c) => c.trim().startsWith(ANON_MARKER + "="));
 }
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ ready: boolean; authenticated: boolean }>({ ready: false, authenticated: false });
+export function AuthProvider({ children, initialAuth }: { children: ReactNode; initialAuth?: "valid" | "anon" | null }) {
+  // The middleware's verdict (via the layout) lets the very first paint —
+  // including the server render — be the right page. It is trusted exactly
+  // once, for this load; later navigations run the normal check below.
+  const serverDecided = useRef(initialAuth === "valid" || initialAuth === "anon");
+  const [state, setState] = useState<{ ready: boolean; authenticated: boolean }>({
+    ready: serverDecided.current,
+    authenticated: initialAuth === "valid",
+  });
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
+    if (serverDecided.current) {
+      serverDecided.current = false;
+      return;
+    }
     let live = true;
     (async () => {
       let authenticated: boolean;
