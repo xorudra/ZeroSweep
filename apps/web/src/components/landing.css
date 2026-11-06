@@ -81,10 +81,17 @@
 .zs-landing .step p { font-size: 12.5px; line-height: 1.5; opacity: 0.65; margin: 0; }
 
 /* FOOTER — black */
-.zs-landing .footer { background: #0b0b0c; color: #ffffff; padding: 24px 20px 30px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.zs-landing .footer { background: #0b0b0c; color: #ffffff; padding: 28px 20px 30px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .zs-landing .footer .logo { font-size: 16px; }
-.zs-landing .footer p { font-size: 12px; opacity: 0.55; margin-top: 8px; line-height: 1.6; }
+.zs-landing .fgrid { display: grid; gap: 28px; }
+.zs-landing .footer p { font-size: 12px; opacity: 0.55; margin-top: 8px; line-height: 1.6; max-width: 320px; }
 .zs-landing .footer .invite { display: inline-block; margin-top: 12px; font-size: 11px; letter-spacing: 1.5px; color: #e8e8e8; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 6px 12px; }
+.zs-landing .fsocial { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.zs-landing .fsocial a { display: inline-block; font-size: 12px; color: #ffffff; text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 999px; padding: 6px 12px; opacity: 0.8; }
+.zs-landing .fcol b { display: block; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.45; margin-bottom: 4px; }
+.zs-landing .fcol a { display: block; font-size: 13px; color: #ffffff; text-decoration: none; opacity: 0.75; margin-top: 10px; }
+.zs-landing .fcol a:hover, .zs-landing .fsocial a:hover { opacity: 1; }
+.zs-landing .fbase { border-top: 1px solid rgba(255, 255, 255, 0.12); margin-top: 28px; padding-top: 16px; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; opacity: 0.45; line-height: 1.6; }
 
 .zs-landing .nav-menu { display: none; }
 @media (min-width: 900px) {
@@ -107,8 +114,9 @@
   .zs-landing .dark { padding: 64px 32px; }
   .zs-landing .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; }
   .zs-landing .step { margin-bottom: 0; }
-  .zs-landing .footer { padding: 36px 32px 44px; }
-  .zs-landing .footer .logo, .zs-landing .footer p, .zs-landing .footer .invite { max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .zs-landing .footer { padding: 44px 32px 36px; }
+  .zs-landing .fgrid { grid-template-columns: 1.4fr 1fr 1fr; gap: 32px; max-width: 1200px; margin: 0 auto; }
   .zs-landing .footer p { margin-top: 10px; }
   .zs-landing .footer .invite { margin-top: 16px; }
+  .zs-landing .fbase { flex-direction: row; justify-content: space-between; max-width: 1200px; margin-left: auto; margin-right: auto; margin-top: 36px; }
 }

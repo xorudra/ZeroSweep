@@ -12,6 +12,8 @@ import "./landing.css";
  * "Run the free check" -> /login for now: no public check page exists
  * yet, checks run inside after sign-in. Pricing / Docs / Changelog
  * keep the preview's placeholder links — those pages do not exist yet.
+ * Footer Legal links are real: /legal/privacy, /legal/terms,
+ * /legal/acceptable-use, /legal/security, /legal/subprocessors.
  */
 export function LandingPage() {
   return (
@@ -100,14 +102,42 @@ export function LandingPage() {
         </div>
       </div>
 
-      <div className="footer">
-        <div className="logo">
-          <img className="logo-img" src="/zerosweep-logo.png" alt="ZeroSweep logo" width={30} height={30} />
-          ZeroSweep
+      <footer className="footer">
+        <div className="fgrid">
+          <div className="fbrand">
+            <div className="logo">
+              <img className="logo-img" src="/zerosweep-logo.png" alt="ZeroSweep logo" width={30} height={30} />
+              ZeroSweep
+            </div>
+            <p>Automated vulnerability assessment, built for owners who want proof — not promises.</p>
+            <span className="invite">INVITE-ONLY</span>
+            <div className="fsocial">
+              <a href="https://github.com/xorudra/ZeroSweep" target="_blank" rel="noreferrer">GitHub ↗</a>
+              <a href="https://www.linkedin.com/in/rudra-pratap-singh-9699a938a/" target="_blank" rel="noreferrer">LinkedIn ↗</a>
+            </div>
+          </div>
+          <div className="fcol">
+            <b>Product</b>
+            <a href="#features">Features</a>
+            <a href="#how">How it works</a>
+            <a href="#scans">Live scans</a>
+            <Link href="/login">Sign in</Link>
+            <Link href="/invite">Request invite</Link>
+          </div>
+          <div className="fcol">
+            <b>Legal</b>
+            <Link href="/legal/privacy">Privacy Policy</Link>
+            <Link href="/legal/terms">Terms of Service</Link>
+            <Link href="/legal/acceptable-use">Acceptable Use</Link>
+            <Link href="/legal/security">Security</Link>
+            <Link href="/legal/subprocessors">Subprocessors</Link>
+          </div>
         </div>
-        <p>Automated vulnerability assessment, built for owners who want proof — not promises.</p>
-        <span className="invite">INVITE-ONLY</span>
-      </div>
+        <div className="fbase">
+          <span>© 2026 ZeroSweep. All rights reserved.</span>
+          <span>Authorized VAPT platform. Scans run only on verified, approved targets.</span>
+        </div>
+      </footer>
     </div>
   );
 }
