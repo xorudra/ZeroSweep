@@ -1,0 +1,126 @@
+/* ZeroSweep public landing — v7 preview (owner-approved 2026-11-06).
+ * Faithful port of ~/workspace/your_files/previews/zerosweep-northline-preview-v7.html:
+ * 60% Midnight Black / 40% Soft Ivory, silver-gradient accent from the cube
+ * logo, frosted-glass dashboard cards. All rules are scoped under
+ * .zs-landing so none of this leaks into the signed-in console, and the
+ * console's Tailwind preflight cannot flatten the landing's own type.
+ * The cards show illustrative sample UI, exactly as in the approved
+ * preview — they are not live data. */
+.zs-landing {
+  background: #0b0b0c;
+  color: #ffffff;
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+.zs-landing * { box-sizing: border-box; }
+.zs-landing .mono { font-family: ui-monospace, monospace; }
+.zs-landing .serif { font-family: Georgia, "Times New Roman", serif; }
+
+/* NAV */
+.zs-landing .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #0b0b0c; }
+.zs-landing .logo { font-weight: 800; font-size: 19px; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+.zs-landing .logo-img { width: 30px; height: 30px; border-radius: 8px; object-fit: cover; display: block; }
+.zs-landing .nav-links { display: flex; gap: 8px; align-items: center; }
+.zs-landing .signin { font-size: 13px; color: #ffffff; text-decoration: none; }
+.zs-landing .cta-small { background: linear-gradient(135deg, #f2f2f2, #c4c4c4 45%, #e9e9e9 70%, #9d9d9d); color: #0b0b0c; border: 1px solid rgba(11, 11, 12, 0.25); border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 700; text-decoration: none; }
+
+/* HERO — midnight black with silver glow */
+.zs-landing .hero { background: #0b0b0c; background-image: radial-gradient(ellipse 90% 55% at 50% 108%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05) 45%, transparent 70%); padding: 40px 20px 96px; text-align: center; }
+.zs-landing h1 { font-family: Georgia, "Times New Roman", serif; font-size: 44px; line-height: 1.12; letter-spacing: -1px; font-weight: 500; margin: 0 0 16px; color: #ffffff; }
+.zs-landing h1 em { font-style: italic; font-weight: 400; background: linear-gradient(120deg, #b8b8b8, #f2f2f2 40%, #c9c9c9 60%, #e8e8e8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.zs-landing .sub { font-size: 14px; line-height: 1.6; opacity: 0.72; max-width: 300px; margin: 0 auto 20px; }
+.zs-landing .ctas { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.zs-landing .cta-fill { background: linear-gradient(135deg, #f2f2f2, #c4c4c4 45%, #e9e9e9 70%, #9d9d9d); color: #0b0b0c; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 999px; padding: 13px 20px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; }
+.zs-landing .cta-ghost { background: transparent; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 999px; padding: 13px 20px; font-size: 14px; text-decoration: none; display: inline-block; }
+.zs-landing .free-note { margin-top: 16px; font-size: 12px; opacity: 0.55; }
+.zs-landing .free-note b { color: #ffffff; font-weight: 700; }
+
+/* STATS */
+.zs-landing .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; padding: 22px 20px 26px; background: #0b0b0c; }
+.zs-landing .stat b { display: block; font-size: 22px; }
+.zs-landing .stat span { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.5; }
+
+/* DASHBOARD CARDS — frosted ivory glass */
+.zs-landing .cards { position: relative; z-index: 2; margin-top: -64px; padding: 6px 20px 30px; background: transparent; }
+.zs-landing .card { background: linear-gradient(135deg, rgba(250, 248, 243, 0.82), rgba(250, 248, 243, 0.62)); color: #0b0b0c; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 22px; padding: 16px; margin-bottom: 12px; -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.75); }
+.zs-landing .card.glow { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 0 60px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+.zs-landing .card .label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.6; margin-bottom: 12px; }
+.zs-landing .card .label i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: linear-gradient(135deg, #e8e8e8, #9a9a9a); margin-right: 6px; }
+.zs-landing .finding { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid rgba(11, 11, 12, 0.08); }
+.zs-landing .finding .f-name { font-size: 13px; }
+.zs-landing .finding .f-name small { display: block; font-size: 11px; opacity: 0.5; margin-top: 2px; }
+.zs-landing .chip { font-size: 10.5px; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.zs-landing .chip.crit { background: #0b0b0c; color: #ffffff; }
+.zs-landing .chip.high { background: rgba(11, 11, 12, 0.08); color: #0b0b0c; border: 1px solid rgba(11, 11, 12, 0.35); }
+.zs-landing .chip.med { background: rgba(11, 11, 12, 0.06); color: rgba(11, 11, 12, 0.75); }
+.zs-landing .score { display: flex; align-items: baseline; gap: 8px; }
+.zs-landing .score b { font-size: 52px; font-weight: 800; letter-spacing: -2px; }
+.zs-landing .score span { font-size: 13px; opacity: 0.55; }
+.zs-landing .score .chip { margin-left: auto; }
+.zs-landing .scan { padding: 10px 0; border-top: 1px solid rgba(11, 11, 12, 0.08); }
+.zs-landing .scan .s-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.zs-landing .scan .f-name { font-size: 13px; }
+.zs-landing .scan .f-name small { display: block; font-size: 11px; opacity: 0.5; margin-top: 2px; }
+.zs-landing .progress { height: 8px; border-radius: 4px; background: rgba(11, 11, 12, 0.1); margin-top: 8px; overflow: hidden; }
+.zs-landing .progress i { display: block; height: 100%; background: linear-gradient(90deg, #6b6b6b, #0b0b0c); border-radius: 4px; }
+
+/* FEATURES — ivory */
+.zs-landing .section { padding: 28px 20px; background: #faf8f3; color: #0b0b0c; }
+.zs-landing .section h2 { font-family: Georgia, "Times New Roman", serif; font-size: 26px; letter-spacing: -0.5px; margin: 0 0 16px; color: #0b0b0c; }
+.zs-landing .feat { background: #ffffff; border: 1px solid rgba(11, 11, 12, 0.12); border-radius: 16px; padding: 16px; margin-bottom: 10px; }
+.zs-landing .feat .mark { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #e8e8e8, #9a9a9a); border: 1px solid #0b0b0c; margin-bottom: 8px; }
+.zs-landing .feat b { display: block; font-size: 15px; margin-bottom: 4px; }
+.zs-landing .feat p { font-size: 13px; line-height: 1.55; opacity: 0.7; margin: 0; }
+
+/* HOW IT WORKS — black */
+.zs-landing .dark { background: #0b0b0c; color: #ffffff; padding: 28px 20px; }
+.zs-landing .dark h2 { font-family: Georgia, "Times New Roman", serif; font-size: 26px; letter-spacing: -0.5px; margin: 0 0 16px; color: #ffffff; }
+.zs-landing .step { display: flex; gap: 12px; margin-bottom: 14px; }
+.zs-landing .step .n { font-family: ui-monospace, monospace; color: #0b0b0c; background: linear-gradient(135deg, #f2f2f2, #c4c4c4 45%, #e9e9e9 70%, #9d9d9d); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.zs-landing .step b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+.zs-landing .step p { font-size: 12.5px; line-height: 1.5; opacity: 0.65; margin: 0; }
+
+/* FOOTER — black */
+.zs-landing .footer { background: #0b0b0c; color: #ffffff; padding: 24px 20px 30px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.zs-landing .footer .logo { font-size: 16px; }
+.zs-landing .footer p { font-size: 12px; opacity: 0.55; margin-top: 8px; line-height: 1.6; }
+.zs-landing .footer .invite { display: inline-block; margin-top: 12px; font-size: 11px; letter-spacing: 1.5px; color: #e8e8e8; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 6px 12px; }
+
+/* SWATCHES */
+.zs-landing .swatches { display: flex; gap: 12px; padding: 26px 20px 34px; background: #0b0b0c; color: #ffffff; }
+.zs-landing .sw { flex: 1; border-radius: 18px; padding: 16px 14px 14px; min-height: 140px; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 8px 24px rgba(11, 11, 12, 0.12); }
+.zs-landing .sw.ink { background: #0b0b0c; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.25); }
+.zs-landing .sw.white { background: #faf8f3; color: #0b0b0c; border: 1px solid rgba(11, 11, 12, 0.14); }
+.zs-landing .sw.lime { background: linear-gradient(135deg, #f2f2f2, #c4c4c4 45%, #e9e9e9 70%, #9d9d9d); color: #0b0b0c; }
+.zs-landing .sw b { font-size: 13px; display: block; margin-bottom: 6px; line-height: 1.25; }
+.zs-landing .sw hr { border: none; border-top: 1px solid currentColor; opacity: 0.3; margin-bottom: 6px; }
+.zs-landing .sw code { font-size: 11px; opacity: 0.75; }
+.zs-landing .tag { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; opacity: 0.55; margin-bottom: 4px; }
+
+.zs-landing .nav-menu { display: none; }
+@media (min-width: 900px) {
+  .zs-landing .nav { max-width: 1200px; margin: 0 auto; padding: 20px 32px; }
+  .zs-landing .nav-menu { display: flex; gap: 28px; }
+  .zs-landing .nav-menu a { color: rgba(255, 255, 255, 0.75); text-decoration: none; font-size: 14px; }
+  .zs-landing .hero { padding: 84px 32px 130px; }
+  .zs-landing h1 { font-size: 76px; }
+  .zs-landing .sub { max-width: 540px; font-size: 17px; }
+  .zs-landing .stats { grid-template-columns: repeat(4, 1fr); max-width: 1200px; margin: 0 auto; padding: 34px 32px 44px; }
+  .zs-landing .cards { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 18px; align-items: stretch; max-width: 1200px; margin: -80px auto 0; padding: 6px 32px 56px; }
+  .zs-landing .cards .card:nth-child(1) { transform: rotate(-1.5deg); }
+  .zs-landing .cards .card:nth-child(2) { transform: translateY(-14px); }
+  .zs-landing .cards .card:nth-child(3) { transform: rotate(1.5deg); }
+  .zs-landing .card { margin-bottom: 0; }
+  .zs-landing .section { padding: 64px 32px; }
+  .zs-landing .section h2, .zs-landing .dark h2 { font-size: 38px; max-width: 1200px; margin: 0 auto 24px; }
+  .zs-landing .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 1200px; margin: 0 auto; }
+  .zs-landing .feat { margin-bottom: 0; }
+  .zs-landing .dark { padding: 64px 32px; }
+  .zs-landing .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; }
+  .zs-landing .step { margin-bottom: 0; }
+  .zs-landing .footer { padding: 36px 32px 44px; }
+  .zs-landing .footer .logo, .zs-landing .footer p, .zs-landing .footer .invite { max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .zs-landing .footer p { margin-top: 10px; }
+  .zs-landing .footer .invite { margin-top: 16px; }
+  .zs-landing .swatches { max-width: 1200px; margin: 0 auto; padding: 40px 32px 56px; }
+}

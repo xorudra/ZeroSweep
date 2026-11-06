@@ -1,6 +1,19 @@
+"use client";
+
 import Link from "next/link";
 import { Card, EmptyState } from "@zerosweep/ui";
 import { FindingsOverview } from "@/components/FindingsOverview";
+import { useAuth } from "@/lib/auth";
+import { LandingPage } from "@/components/LandingPage";
+
+/**
+ * Home — two faces, decided by the middleware's server verdict (via
+ * AuthProvider) so the first paint is already the right page:
+ * signed-in visitors get the Overview below; signed-out visitors get
+ * the public landing (v7 preview, owner-approved 2026-11-06). While
+ * the verdict is still pending (middleware fail-open only), a plain
+ * dark blank — no spinner, no flash of the wrong page.
+ */
 
 /**
  * Overview — the guided home, framed-sheet skin (owner-approved sample,
@@ -45,7 +58,7 @@ const KPIS = [
   { label: "Tool / Worker health", value: "—", hint: "See Tools page" },
 ];
 
-export default function OverviewPage() {
+function Overview() {
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -107,4 +120,11 @@ export default function OverviewPage() {
       </div>
     </>
   );
+}
+
+export default function HomePage() {
+  const { ready, authenticated } = useAuth();
+  if (!ready) return <div aria-hidden className="min-h-screen bg-[#0B0B0C]" />;
+  if (!authenticated) return <LandingPage />;
+  return <Overview />;
 }

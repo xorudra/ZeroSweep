@@ -13,12 +13,15 @@ export const useAuth = () => useContext(AuthContext);
  *  are public — anyone must be able to read the
  *  Terms, Privacy Policy and the other published documents without an
  *  account (they are linked from the sign-in card for exactly that
- *  reason). The backend re-checks the JWT (and its server-side session,
+ *  reason). The home page (/) is public too: signed-out visitors get
+ *  the public landing there, signed-in visitors the Overview — the page
+ *  itself decides from the auth state, so no redirect applies. The
+ *  backend re-checks the JWT (and its server-side session,
  *  A7) on every request — this guard is UX only, never the security
  *  control. Access tokens live in memory only, so on a fresh page load
  *  the session is restored with one silent cookie refresh before
  *  deciding. */
-const isPublicPath = (p: string) => p === "/login" || p === "/invite" || p === "/legal" || p.startsWith("/legal/");
+const isPublicPath = (p: string) => p === "/" || p === "/login" || p === "/invite" || p === "/legal" || p.startsWith("/legal/");
 
 /** Readable marker the middleware sets after it has validated the session
  *  for this page load (read-only check, no rotation). When present, the
@@ -99,7 +102,9 @@ export function AuthProvider({ children, initialAuth }: { children: ReactNode; i
           completes, and trusts the middleware's short-lived markers so a
           decided load paints instantly — zs_v (validated) for the page,
           zs_a (no live session) for the login form. /invite and /legal/*
-          still paint instantly — no redirect-away applies there. */}
+          still paint instantly — no redirect-away applies there. The home
+          page (/) paints instantly too: the page renders the landing for
+          signed-out visitors and the Overview for signed-in ones. */}
       {state.ready ||
       (pathname !== "/login" && (isPublicPath(pathname) || hasValidatedMarker())) ||
       (pathname === "/login" && hasAnonMarker()) ? (

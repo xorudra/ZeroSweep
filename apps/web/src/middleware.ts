@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
  * so there is never a spinner and never a flash of the wrong page.
  *
  * - No `zerosweep_session` cookie  -> protected pages redirect to /login,
- *   public pages (/login, /invite, /legal/*) render directly.
+ *   public pages (/login, /invite, /legal/*) render directly. The home
+ *   page (/) is public too: signed-out visitors get the public landing,
+ *   signed-in visitors get the Overview — the page itself decides from
+ *   the verdict below, so no redirect is needed either way.
  * - Cookie present on a document load -> validated once against the API's
  *   read-only session check (same container, 127.0.0.1:4000). Valid: the
  *   page renders directly (/login bounces to /). Invalid (401): treated
@@ -28,6 +31,7 @@ const API_INTERNAL = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:4000";
 
 function isPublicPath(pathname: string): boolean {
   return (
+    pathname === "/" ||
     pathname === "/login" ||
     pathname === "/invite" ||
     pathname.startsWith("/login/") ||
