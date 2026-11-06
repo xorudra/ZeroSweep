@@ -86,17 +86,6 @@
 .zs-landing .footer p { font-size: 12px; opacity: 0.55; margin-top: 8px; line-height: 1.6; }
 .zs-landing .footer .invite { display: inline-block; margin-top: 12px; font-size: 11px; letter-spacing: 1.5px; color: #e8e8e8; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 6px 12px; }
 
-/* SWATCHES */
-.zs-landing .swatches { display: flex; gap: 12px; padding: 26px 20px 34px; background: #0b0b0c; color: #ffffff; }
-.zs-landing .sw { flex: 1; border-radius: 18px; padding: 16px 14px 14px; min-height: 140px; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 8px 24px rgba(11, 11, 12, 0.12); }
-.zs-landing .sw.ink { background: #0b0b0c; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.25); }
-.zs-landing .sw.white { background: #faf8f3; color: #0b0b0c; border: 1px solid rgba(11, 11, 12, 0.14); }
-.zs-landing .sw.lime { background: linear-gradient(135deg, #f2f2f2, #c4c4c4 45%, #e9e9e9 70%, #9d9d9d); color: #0b0b0c; }
-.zs-landing .sw b { font-size: 13px; display: block; margin-bottom: 6px; line-height: 1.25; }
-.zs-landing .sw hr { border: none; border-top: 1px solid currentColor; opacity: 0.3; margin-bottom: 6px; }
-.zs-landing .sw code { font-size: 11px; opacity: 0.75; }
-.zs-landing .tag { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; opacity: 0.55; margin-bottom: 4px; }
-
 .zs-landing .nav-menu { display: none; }
 @media (min-width: 900px) {
   .zs-landing .nav { max-width: 1200px; margin: 0 auto; padding: 20px 32px; }
@@ -122,5 +111,4 @@
   .zs-landing .footer .logo, .zs-landing .footer p, .zs-landing .footer .invite { max-width: 1200px; margin-left: auto; margin-right: auto; }
   .zs-landing .footer p { margin-top: 10px; }
   .zs-landing .footer .invite { margin-top: 16px; }
-  .zs-landing .swatches { max-width: 1200px; margin: 0 auto; padding: 40px 32px 56px; }
 }

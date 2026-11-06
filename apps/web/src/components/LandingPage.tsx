@@ -108,12 +108,6 @@ export function LandingPage() {
         <p>Automated vulnerability assessment, built for owners who want proof — not promises.</p>
         <span className="invite">INVITE-ONLY</span>
       </div>
-
-      <div className="swatches">
-        <div className="sw ink"><span className="tag">60%</span><b>Midnight<br />Black</b><hr /><code>#0B0B0C</code></div>
-        <div className="sw white"><span className="tag">40%</span><b>Soft<br />Ivory</b><hr /><code>#FAF8F3</code></div>
-        <div className="sw lime"><span className="tag">Accent</span><b>Silver<br />Gradient</b><hr /><code>from the logo</code></div>
-      </div>
     </div>
   );
 }
